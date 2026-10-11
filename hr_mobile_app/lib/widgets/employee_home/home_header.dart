@@ -1,15 +1,31 @@
 import 'package:flutter/material.dart';
-import '../../main.dart'; // Import themeNotifier từ main.dart
 
-class HomeHeader extends StatelessWidget {
+class HomeHeader extends StatefulWidget {
   final String formattedDate;
   final String greeting;
+  final bool isDarkMode;
+  final VoidCallback? onToggleTheme;
 
   const HomeHeader({
     super.key,
     required this.formattedDate,
     required this.greeting,
+    this.isDarkMode = false,
+    this.onToggleTheme,
   });
+
+  @override
+  State<HomeHeader> createState() => _HomeHeaderState();
+}
+
+class _HomeHeaderState extends State<HomeHeader> {
+  late bool _isDark;
+
+  @override
+  void initState() {
+    super.initState();
+    _isDark = widget.isDarkMode;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -32,7 +48,6 @@ class HomeHeader extends StatelessWidget {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              // Ngày tháng
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
                 decoration: BoxDecoration(
@@ -40,7 +55,7 @@ class HomeHeader extends StatelessWidget {
                   borderRadius: BorderRadius.circular(20),
                 ),
                 child: Text(
-                  formattedDate,
+                  widget.formattedDate,
                   style: const TextStyle(
                     color: Colors.white,
                     fontSize: 13,
@@ -48,8 +63,6 @@ class HomeHeader extends StatelessWidget {
                   ),
                 ),
               ),
-
-              // Các nút công cụ trên Header
               Row(
                 children: [
                   _buildIconButton(
@@ -57,19 +70,16 @@ class HomeHeader extends StatelessWidget {
                     onTap: () {},
                   ),
                   const SizedBox(width: 10),
-
-                  // Nút chuyển đổi giao diện Sáng/Tối toàn hệ thống
-                  ValueListenableBuilder<ThemeMode>(
-                    valueListenable: themeNotifier,
-                    builder: (context, currentMode, child) {
-                      final isDark = currentMode == ThemeMode.dark;
-                      return _buildIconButton(
-                        icon: isDark ? Icons.wb_sunny_outlined : Icons.nightlight_round,
-                        onTap: () {
-                          // Đổi trạng thái themeMode
-                          themeNotifier.value = isDark ? ThemeMode.light : ThemeMode.dark;
-                        },
-                      );
+                  // Icon chỉnh Sáng / Tối (thay thế nút chuông)
+                  _buildIconButton(
+                    icon: _isDark ? Icons.wb_sunny_outlined : Icons.nightlight_round,
+                    onTap: () {
+                      setState(() {
+                        _isDark = !_isDark;
+                      });
+                      if (widget.onToggleTheme != null) {
+                        widget.onToggleTheme!();
+                      }
                     },
                   ),
                 ],
@@ -77,8 +87,6 @@ class HomeHeader extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 20),
-
-          // Thông tin Nhân viên
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -121,7 +129,7 @@ class HomeHeader extends StatelessWidget {
                     Row(
                       children: [
                         Text(
-                          greeting,
+                          widget.greeting,
                           style: const TextStyle(
                             color: Colors.white70,
                             fontSize: 14,

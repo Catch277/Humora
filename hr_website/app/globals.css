@@ -1,0 +1,150 @@
+@import "tailwindcss";
+
+/* ── Theme ────────────────────────────────────────────────────────────────────────────────
+   Three choices — Sáng / Tối / Theo hệ thống — are stored in `localStorage.humora-theme` and
+   applied as a `.dark` class on <html> by components/ThemeToggle.tsx (plus the inline script in
+   app/layout.tsx that sets it before first paint, so there is no flash of the wrong theme).
+   `dark:` keys off that class rather than the media query alone, otherwise "system" could not be
+   overridden by the user's explicit choice. */
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* Semantic tokens for the app's own colours. They exist because the screens used literal hexes
+   (`bg-[#F8F9FF]`, `bg-white`); a token can be re-pointed per theme, a hex cannot. `--color-white`
+   itself is deliberately NOT re-pointed: `bg-white` (panels, 123 uses) and `text-white` (on brand
+   buttons, 32 uses) share it, so panels moved to the `surface` token instead. */
+:root {
+  --surface: #ffffff;
+  --surface-muted: #f3f6fc;
+  --app-background: #f8f9ff;
+  --canvas: #fbfcff;
+  --surface-accent: #f1f5ff;
+  --surface-accent-strong: #e8efff;
+  --primary: #0c66e4;
+  --primary-strong: #1d4ed8;
+  --foreground: #172033;
+  color-scheme: light;
+}
+
+@theme inline {
+  --color-surface: var(--surface);
+  --color-surface-muted: var(--surface-muted);
+  --color-app: var(--app-background);
+  --color-canvas: var(--canvas);
+  --color-surface-accent: var(--surface-accent);
+  --color-surface-accent-strong: var(--surface-accent-strong);
+  --color-primary: var(--primary);
+  --color-primary-strong: var(--primary-strong);
+  --color-background: var(--app-background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-be-vietnam-pro);
+}
+
+/* ── Dark palette ─────────────────────────────────────────────────────────────────────────
+   Tailwind v4 compiles every palette utility to a variable reference (`bg-white` →
+   `var(--color-white)`, `border-slate-200/80` → `color-mix(… var(--color-slate-200) …)`), so
+   re-pointing the shades the app actually uses re-themes all screens at once. Only the shades
+   listed by `node .palette-probe.cjs` (bg/text/border/ring/divide/accent families) are covered. */
+.dark {
+  --surface: #131c2e;
+  --surface-muted: #151f33;
+  --app-background: #0b1120;
+  --canvas: #0e1626;
+  --surface-accent: #16233d;
+  --surface-accent-strong: #1d2f52;
+  --primary: #3b82f6;
+  --primary-strong: #60a5fa;
+  --foreground: #eef3fa;
+  color-scheme: dark;
+
+  /* neutrals: surfaces, borders, muted text, headings */
+  --color-slate-50: #0f1728;
+  --color-slate-100: #1b2538;
+  --color-slate-200: #2a3852;
+  --color-slate-300: #3d4d6b;
+  --color-slate-400: #8695b0;
+  --color-slate-500: #9dabc4;
+  --color-slate-600: #b6c1d6;
+  --color-slate-700: #cbd5e6;
+  --color-slate-800: #e2e8f4;
+  --color-slate-900: #f0f4fa;
+
+  /* brand tints and text on them */
+  --color-blue-50: #16233d;
+  --color-blue-100: #1d2f52;
+  --color-blue-200: #27457c;
+  --color-blue-300: #33529b;
+  --color-blue-500: #60a5fa;
+  --color-blue-700: #2563eb;
+  --color-blue-900: #dbeafe;
+
+  /* state tints: success, warning, danger, info */
+  --color-emerald-50: #10251c;
+  --color-emerald-100: #16362a;
+  --color-emerald-200: #1e4a37;
+  --color-emerald-500: #34d399;
+  --color-emerald-600: #34d399;
+  --color-emerald-700: #6ee7b7;
+  --color-emerald-800: #a7f3d0;
+
+  --color-amber-50: #2a2110;
+  --color-amber-100: #3b2f14;
+  --color-amber-200: #57431d;
+  --color-amber-500: #fbbf24;
+  --color-amber-600: #fbbf24;
+  --color-amber-700: #fcd34d;
+  --color-amber-800: #fde68a;
+
+  --color-rose-50: #2a1319;
+  --color-rose-100: #3a1821;
+  --color-rose-200: #5c2634;
+  --color-rose-500: #fb7185;
+  --color-rose-600: #f87171;
+  --color-rose-700: #fda4af;
+
+  --color-indigo-50: #1b1f3d;
+  --color-indigo-600: #a5b4fc;
+
+  --color-sky-50: #0e2333;
+  --color-sky-600: #38bdf8;
+
+  --color-teal-50: #0d2622;
+  --color-teal-600: #2dd4bf;
+  --color-teal-700: #5eead4;
+
+  --color-orange-50: #2b1a0d;
+  --color-orange-700: #fdba74;
+}
+
+body {
+  background: var(--app-background);
+  color: var(--foreground);
+  font-family: var(--font-be-vietnam-pro), sans-serif;
+}
+
+/* The Swagger UI bundle on /api-docs ships its own light stylesheet and is not themed; its
+   containers are told to follow the page background so the page does not look broken in dark. */
+.dark .swagger-ui {
+  background: var(--surface);
+}
+
+/* ── Small screens (below Tailwind's `md`, the breakpoint the shell switches at) ───────────────
+   iOS Safari zooms the whole page whenever a focused field computes below 16px, and every control here
+   is deliberately `text-xs`/`text-sm` (12–14px) for desktop density. One rule keeps the layout from
+   jumping when a phone user taps a field, instead of a breakpoint class on every one of ~40 inputs.
+   It deliberately sits outside every `@layer`: Tailwind v4 puts its utilities in `@layer utilities`, and
+   an unlayered declaration outranks a layered one no matter the specificity — `input` beats `.text-sm`
+   here, whereas the same rule inside `@layer base` would lose. Do not "fix" it with `!important`. */
+@media (max-width: 767px) {
+  input,
+  select,
+  textarea {
+    font-size: 16px;
+  }
+}
+
+html {
+  /* Landscape on iOS inflates body text without this, and the grey tap flash reads as a stuck button. */
+  -webkit-text-size-adjust: 100%;
+  -webkit-tap-highlight-color: transparent;
+}
+

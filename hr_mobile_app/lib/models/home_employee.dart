@@ -8,7 +8,7 @@ import '../widgets/employee_home/checkin_card.dart';
 import '../widgets/employee_home/performance_card.dart';
 import '../widgets/employee_home/hr_services_grid.dart';
 import '../widgets/employee_home/internal_news_card.dart';
-import 'camera_checkin.dart'; // Import màn hình Camera Check-in
+import 'camera_checkin.dart'; // Màn hình Camera Check-in
 
 class HomeEmployeeScreen extends StatefulWidget {
   const HomeEmployeeScreen({super.key});

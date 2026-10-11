@@ -1,0 +1,14 @@
+node_modules/
+.next/
+dist/
+build/
+.dart_tool/
+.idea/
+.gradle/
+*.lock
+package-lock.json
+pubspec.lock
+*.log
+*.map
+*.stamp
+*.dill

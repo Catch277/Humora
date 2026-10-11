@@ -1,0 +1,11 @@
+{
+  "//": "Deno project for the staff-account Edge Function (SCRUM-52). Supabase supplies the imports it injects; this file exists so editors and the Deno CLI treat this folder as Deno rather than as Node/TypeScript-for-Next.js.",
+  "imports": {
+    "@supabase/supabase-js": "jsr:@supabase/supabase-js@2"
+  },
+  "lint": {
+    "rules": {
+      "exclude": ["no-explicit-any"]
+    }
+  }
+}
