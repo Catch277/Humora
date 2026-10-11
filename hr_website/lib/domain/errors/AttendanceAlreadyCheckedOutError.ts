@@ -4,8 +4,9 @@
  * the manager's correction (`PATCH /api/attendance/{id}`), which records who fixed it and why.
  */
 export class AttendanceAlreadyCheckedOutError extends Error {
-  constructor() {
-    super("This shift has already been checked out.");
+  /** The message stays optional so a caller may explain the case; the default is the plain duplicate. */
+  constructor(message = "This shift has already been checked out.") {
+    super(message);
     this.name = "AttendanceAlreadyCheckedOutError";
   }
 }
