@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 class CreateLeaveRequestScreen extends StatefulWidget {
   const CreateLeaveRequestScreen({super.key});
@@ -10,8 +12,14 @@ class CreateLeaveRequestScreen extends StatefulWidget {
 
 class _CreateLeaveRequestScreenState extends State<CreateLeaveRequestScreen> {
   // State quản lý loại nghỉ & ca làm việc
-  int _selectedLeaveType = 0; // 0: Nghỉ phép năm, 1: Nghỉ ốm, 2: Việc riêng, 3: Không lương
+  int _selectedLeaveType =
+      0; // 0: Nghỉ phép năm, 1: Nghỉ ốm, 2: Việc riêng, 3: Không lương
   int _selectedShift = 0; // 0: Cả ngày, 1: Buổi sáng, 2: Buổi chiều
+
+  bool _sending = false;
+  DateTime _fromDate = DateUtils.dateOnly(DateTime.now());
+  DateTime _toDate = DateUtils.dateOnly(DateTime.now());
+  final DateFormat _dmy = DateFormat('dd/MM/yyyy');
 
   final TextEditingController _reasonController = TextEditingController();
 
@@ -28,39 +36,131 @@ class _CreateLeaveRequestScreenState extends State<CreateLeaveRequestScreen> {
     super.dispose();
   }
 
-  // Hàm xử lý khi gửi đơn
-  void _submitRequest() {
+  // Số ngày công: 1 ngày + chọn nửa buổi = 0.5, còn lại tính theo khoảng ngày
+  double get _days {
+    final n = DateUtils.dateOnly(_toDate)
+            .difference(DateUtils.dateOnly(_fromDate))
+            .inDays +
+        1;
+    return (_selectedShift != 0 && n == 1) ? 0.5 : n.toDouble();
+  }
+
+  Future<void> _pickDate({required bool isFrom}) async {
+    final today = DateUtils.dateOnly(DateTime.now());
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: isFrom ? _fromDate : _toDate,
+      firstDate: today,
+      lastDate: today.add(const Duration(days: 365)),
+    );
+    if (picked == null) return;
+    setState(() {
+      if (isFrom) {
+        _fromDate = picked;
+        if (_toDate.isBefore(picked)) _toDate = picked;
+      } else {
+        _toDate = picked;
+      }
+    });
+  }
+
+  // Thông báo nổi cao hơn thanh nút để không bị che
+  void _snack(String text) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).clearSnackBars();
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(text),
+        backgroundColor: Colors.redAccent,
+        behavior: SnackBarBehavior.floating,
+        margin: const EdgeInsets.fromLTRB(16, 0, 16, 90),
+        duration: const Duration(seconds: 5),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+      ),
+    );
+  }
+
+  // Hàm xử lý khi gửi đơn: ghi thẳng vào bảng requests trên Supabase
+  Future<void> _submitRequest() async {
+    debugPrint('SUBMIT 1: bấm nút, _sending=$_sending');
+    if (_sending) return;
+
     final reason = _reasonController.text.trim();
-    if (reason.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: const Text('Vui lòng nhập lý do xin nghỉ!'),
-          backgroundColor: Colors.redAccent,
-          behavior: SnackBarBehavior.floating,
-          shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-        ),
-      );
+    if (reason.length < 10) {
+      _snack('Lý do cần tối thiểu 10 ký tự!');
       return;
     }
 
-    // Tạo Map dữ liệu đơn nghỉ phép mới
-    final newLeaveRequest = {
-      'id': '#NP-2026-${DateTime.now().millisecondsSinceEpoch.toString().substring(7)}',
-      'timeStr': '• Vừa xong',
-      'status': 'Chờ duyệt',
-      'leaveType': _getLeaveTypeName(_selectedLeaveType),
-      'leaveSubtitle': _getLeaveTypeSubtitle(_selectedLeaveType),
-      'daysCount': '2.0 ngày công',
-      'dateRange': '28/10/2026 - 29/10/2026',
-      'shiftType': _selectedShift == 0 ? 'Cả ngày' : (_selectedShift == 1 ? 'Buổi sáng' : 'Buổi chiều'),
-      'reason': reason,
-      'stepIndex': 1,
-      'totalSteps': 3,
-    };
+    final client = Supabase.instance.client;
+    final user = client.auth.currentUser;
+    debugPrint('SUBMIT 2: user=${user?.id}');
+    if (user == null) {
+      _snack('Bạn cần đăng nhập lại.');
+      return;
+    }
 
-    // Quay lại màn hình danh sách và trả về đơn mới
-    Navigator.pop(context, newLeaveRequest);
+    setState(() => _sending = true);
+    try {
+      // Lấy chi nhánh của nhân viên (nếu không đọc được thì để trống)
+      String? branchId;
+      try {
+        final profile = await client
+            .from('users')
+            .select('branch_id')
+            .eq('id', user.id)
+            .maybeSingle()
+            .timeout(const Duration(seconds: 15));
+        branchId = profile?['branch_id']?.toString();
+      } catch (e) {
+        debugPrint('SUBMIT: không đọc được branch_id: $e');
+      }
+      debugPrint('SUBMIT 3: branch_id=$branchId');
+
+      final leaveName = _getLeaveTypeName(_selectedLeaveType);
+      final shiftName = _selectedShift == 0
+          ? 'Cả ngày'
+          : (_selectedShift == 1 ? 'Buổi sáng' : 'Buổi chiều');
+      final range = _fromDate == _toDate
+          ? _dmy.format(_fromDate)
+          : '${_dmy.format(_fromDate)} - ${_dmy.format(_toDate)}';
+      final daysText = '${_days.toStringAsFixed(1)} ngày công';
+
+      final row = await client
+          .from('requests')
+          .insert({
+            'user_id': user.id,
+            'branch_id': branchId,
+            'request_type': 'Nghỉ phép',
+            'title': '$leaveName ($range)',
+            'content': 'Loại nghỉ: $leaveName\n'
+                'Thời gian: $range ($shiftName)\n'
+                'Số ngày: $daysText\n'
+                'Lý do: $reason',
+            'status': 'PENDING',
+          })
+          .select('id')
+          .single()
+          .timeout(const Duration(seconds: 15));
+      debugPrint('SUBMIT 4: insert xong: $row');
+
+      if (!mounted) return;
+      Navigator.pop(context, {'id': row['id'].toString()});
+    } on PostgrestException catch (e) {
+      debugPrint('SUBMIT ERROR (Postgrest): ${e.code} ${e.message}');
+      if (e.code == '23514') {
+        _snack(
+            'Cơ sở dữ liệu chưa chấp nhận loại đơn "Nghỉ phép" (cần chạy SCRUM-62).');
+      } else if (e.code == '42501') {
+        _snack('Tài khoản này không có quyền tạo đơn.');
+      } else {
+        _snack('Không gửi được đơn: ${e.message}');
+      }
+    } catch (e, st) {
+      debugPrint('SUBMIT ERROR: $e\n$st');
+      _snack('Lỗi: $e');
+    } finally {
+      if (mounted) setState(() => _sending = false);
+    }
   }
 
   String _getLeaveTypeName(int index) {
@@ -75,21 +175,6 @@ class _CreateLeaveRequestScreenState extends State<CreateLeaveRequestScreen> {
         return 'Nghỉ không lương';
       default:
         return 'Nghỉ phép năm';
-    }
-  }
-
-  String _getLeaveTypeSubtitle(int index) {
-    switch (index) {
-      case 0:
-        return 'Hưởng nguyên lương theo quy định';
-      case 1:
-        return 'Hưởng chế độ BHXH theo chỉ định';
-      case 2:
-        return 'Theo luật lao động';
-      case 3:
-        return 'Thỏa thuận quản lý';
-      default:
-        return 'Hưởng nguyên lương theo quy định';
     }
   }
 
@@ -221,7 +306,8 @@ class _CreateLeaveRequestScreenState extends State<CreateLeaveRequestScreen> {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                 decoration: BoxDecoration(
                   color: Colors.white.withOpacity(0.2),
                   borderRadius: BorderRadius.circular(12),
@@ -239,7 +325,8 @@ class _CreateLeaveRequestScreenState extends State<CreateLeaveRequestScreen> {
                 ),
               ),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                 decoration: BoxDecoration(
                   color: const Color(0xFF10B981).withOpacity(0.25),
                   borderRadius: BorderRadius.circular(12),
@@ -348,12 +435,14 @@ class _CreateLeaveRequestScreenState extends State<CreateLeaveRequestScreen> {
                       color: Colors.black87),
                   children: [
                     TextSpan(text: 'Loại hình nghỉ phép '),
-                    TextSpan(text: '*', style: TextStyle(color: Colors.redAccent)),
+                    TextSpan(
+                        text: '*', style: TextStyle(color: Colors.redAccent)),
                   ],
                 ),
               ),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                 decoration: BoxDecoration(
                   color: const Color(0xFFEFF6FF),
                   borderRadius: BorderRadius.circular(8),
@@ -454,6 +543,44 @@ class _CreateLeaveRequestScreenState extends State<CreateLeaveRequestScreen> {
     );
   }
 
+  // Ô chọn ngày (bấm mở lịch)
+  Widget _buildDateBox(String label, DateTime date, VoidCallback onTap) {
+    return Expanded(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(label,
+              style: const TextStyle(fontSize: 11, color: Colors.grey)),
+          const SizedBox(height: 6),
+          GestureDetector(
+            onTap: onTap,
+            child: Container(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF9FAFB),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.grey.shade200),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Icon(Icons.calendar_today_outlined,
+                      size: 16, color: Color(0xFF2563EB)),
+                  Text(_dmy.format(date),
+                      style: const TextStyle(
+                          fontWeight: FontWeight.bold, fontSize: 13)),
+                  const Icon(Icons.calendar_month,
+                      size: 16, color: Colors.grey),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   // Khối Ca làm việc & Chọn ngày
   Widget _buildShiftAndDateSection() {
     return Container(
@@ -487,86 +614,22 @@ class _CreateLeaveRequestScreenState extends State<CreateLeaveRequestScreen> {
             child: Row(
               children: [
                 _buildShiftOption(0, Icons.sunny, 'Cả ngày'),
-                _buildShiftOption(1, Icons.wb_twighlight, 'Buổi sáng'),
+                _buildShiftOption(1, Icons.wb_twilight, 'Buổi sáng'),
                 _buildShiftOption(2, Icons.nightlight_round, 'Buổi chiều'),
               ],
             ),
           ),
           const SizedBox(height: 16),
-
-          // Chọn từ ngày - đến ngày
           Row(
             children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text('Từ ngày',
-                        style: TextStyle(fontSize: 11, color: Colors.grey)),
-                    const SizedBox(height: 6),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 12, vertical: 10),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFF9FAFB),
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: Colors.grey.shade200),
-                      ),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: const [
-                          Icon(Icons.calendar_today_outlined,
-                              size: 16, color: Color(0xFF2563EB)),
-                          Text('10/28/2024',
-                              style: TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 13)),
-                          Icon(Icons.calendar_month,
-                              size: 16, color: Colors.grey),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
+              _buildDateBox(
+                  'Từ ngày', _fromDate, () => _pickDate(isFrom: true)),
               const SizedBox(width: 10),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text('Đến ngày',
-                        style: TextStyle(fontSize: 11, color: Colors.grey)),
-                    const SizedBox(height: 6),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 12, vertical: 10),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFF9FAFB),
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: Colors.grey.shade200),
-                      ),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: const [
-                          Icon(Icons.calendar_today_outlined,
-                              size: 16, color: Color(0xFF2563EB)),
-                          Text('10/29/2024',
-                              style: TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 13)),
-                          Icon(Icons.calendar_month,
-                              size: 16, color: Colors.grey),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
+              _buildDateBox(
+                  'Đến ngày', _toDate, () => _pickDate(isFrom: false)),
             ],
           ),
           const SizedBox(height: 14),
-
-          // Tính toán số ngày
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
             decoration: BoxDecoration(
@@ -581,10 +644,8 @@ class _CreateLeaveRequestScreenState extends State<CreateLeaveRequestScreen> {
                     Icon(Icons.access_time,
                         size: 16, color: Color(0xFF2563EB)),
                     SizedBox(width: 8),
-                    Text(
-                      'Thời gian nghỉ tính toán:',
-                      style: TextStyle(fontSize: 13, color: Colors.black87),
-                    ),
+                    Text('Thời gian nghỉ tính toán:',
+                        style: TextStyle(fontSize: 13, color: Colors.black87)),
                   ],
                 ),
                 Container(
@@ -594,9 +655,9 @@ class _CreateLeaveRequestScreenState extends State<CreateLeaveRequestScreen> {
                     color: Colors.white,
                     borderRadius: BorderRadius.circular(8),
                   ),
-                  child: const Text(
-                    '2.0 ngày công',
-                    style: TextStyle(
+                  child: Text(
+                    '${_days.toStringAsFixed(1)} ngày công',
+                    style: const TextStyle(
                       color: Color(0xFF2563EB),
                       fontWeight: FontWeight.bold,
                       fontSize: 12,
@@ -672,7 +733,8 @@ class _CreateLeaveRequestScreenState extends State<CreateLeaveRequestScreen> {
                       color: Colors.black87),
                   children: [
                     TextSpan(text: 'Lý do xin nghỉ '),
-                    TextSpan(text: '*', style: TextStyle(color: Colors.redAccent)),
+                    TextSpan(
+                        text: '*', style: TextStyle(color: Colors.redAccent)),
                   ],
                 ),
               ),
@@ -733,7 +795,7 @@ class _CreateLeaveRequestScreenState extends State<CreateLeaveRequestScreen> {
     );
   }
 
-  // Khối Người phê duyệt & Bàn giao công việc
+  // Khối Người phê duyệt & Bàn giao công việc (giao diện mẫu)
   Widget _buildApprovalAndHandoverSection() {
     return Container(
       padding: const EdgeInsets.all(16),
@@ -753,7 +815,8 @@ class _CreateLeaveRequestScreenState extends State<CreateLeaveRequestScreen> {
                       fontWeight: FontWeight.bold,
                       color: Colors.black87)),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                 decoration: BoxDecoration(
                   color: const Color(0xFFECFDF5),
                   borderRadius: BorderRadius.circular(8),
@@ -848,8 +911,11 @@ class _CreateLeaveRequestScreenState extends State<CreateLeaveRequestScreen> {
                 Icon(Icons.person_search_outlined,
                     size: 18, color: Colors.grey),
                 SizedBox(width: 8),
-                Text('Tìm đồng nghiệp theo tên hoặc mã nhân viên...',
-                    style: TextStyle(fontSize: 12, color: Colors.grey)),
+                Expanded(
+                  child: Text('Tìm đồng nghiệp theo tên hoặc mã nhân viên...',
+                      style: TextStyle(fontSize: 12, color: Colors.grey),
+                      overflow: TextOverflow.ellipsis),
+                ),
               ],
             ),
           ),
@@ -890,7 +956,7 @@ class _CreateLeaveRequestScreenState extends State<CreateLeaveRequestScreen> {
     );
   }
 
-  // Khối Tệp đính kèm
+  // Khối Tệp đính kèm (giao diện mẫu)
   Widget _buildAttachmentSection() {
     return Container(
       padding: const EdgeInsets.all(16),
@@ -959,11 +1025,19 @@ class _CreateLeaveRequestScreenState extends State<CreateLeaveRequestScreen> {
           width: double.infinity,
           height: 50,
           child: ElevatedButton.icon(
-            onPressed: _submitRequest,
-            icon: const Icon(Icons.send_rounded, size: 18, color: Colors.white),
-            label: const Text(
-              'Gửi đơn phê duyệt',
-              style: TextStyle(
+            onPressed: _sending ? null : _submitRequest,
+            icon: _sending
+                ? const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(
+                        strokeWidth: 2, color: Colors.white),
+                  )
+                : const Icon(Icons.send_rounded,
+                    size: 18, color: Colors.white),
+            label: Text(
+              _sending ? 'Đang gửi...' : 'Gửi đơn phê duyệt',
+              style: const TextStyle(
                 color: Colors.white,
                 fontWeight: FontWeight.bold,
                 fontSize: 15,
@@ -971,6 +1045,7 @@ class _CreateLeaveRequestScreenState extends State<CreateLeaveRequestScreen> {
             ),
             style: ElevatedButton.styleFrom(
               backgroundColor: const Color(0xFF3B82F6),
+              disabledBackgroundColor: const Color(0xFF93C5FD),
               elevation: 0,
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(16),
