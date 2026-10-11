@@ -15,6 +15,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 
+import MobileNav from "@/components/MobileNav";
 import ThemeToggle from "@/components/ThemeToggle";
 import { useProfile } from "@/components/ProfileProvider";
 import { roleLabel } from "@/lib/accessPolicy";
@@ -403,10 +404,12 @@ export default function Header() {
   }
 
   return (
-    <header className="sticky top-0 z-10 flex h-16 shrink-0 items-center justify-between gap-3 border-b border-slate-200/80 bg-surface px-4 md:gap-4 md:px-6">
+    <header className="sticky top-0 z-10 flex h-16 shrink-0 items-center gap-2 border-b border-slate-200/80 bg-surface px-4 md:gap-4 md:px-6">
+      <MobileNav />
+
       <div
         ref={searchContainerRef}
-        className="relative w-full max-w-xl md:mx-auto"
+        className="relative min-w-0 flex-1 md:mx-auto md:max-w-xl"
       >
         <div className="group relative">
           <span className="pointer-events-none absolute inset-y-0 left-3 flex items-center">
@@ -427,10 +430,10 @@ export default function Header() {
             aria-expanded={showDropdown}
             aria-controls="quick-search-results"
             role="combobox"
-            className="block w-full rounded-full border border-slate-200 bg-app py-2 pl-9 pr-20 text-sm text-slate-700 outline-none transition-colors placeholder:text-slate-400 focus:border-primary focus:ring-2 focus:ring-blue-500/15"
+            className="block w-full rounded-full border border-slate-200 bg-app py-2 pl-9 pr-9 text-sm text-slate-700 outline-none transition-colors placeholder:text-slate-400 focus:border-primary focus:ring-2 focus:ring-blue-500/15 md:pr-20"
           />
           {query === "" ? (
-            <kbd className="pointer-events-none absolute inset-y-0 right-3 my-auto flex h-5 items-center rounded border border-slate-200 bg-surface px-1.5 text-[10px] font-medium text-slate-500">
+            <kbd className="pointer-events-none absolute inset-y-0 right-3 my-auto hidden h-5 items-center rounded border border-slate-200 bg-surface px-1.5 text-[10px] font-medium text-slate-500 md:flex">
               ⌘K
             </kbd>
           ) : (

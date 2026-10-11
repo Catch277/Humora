@@ -136,21 +136,27 @@ is the workhorse for labels and buttons.
 ### 4.1 App shell (`app/layout.tsx`)
 
 ```tsx
-<body className="... flex h-dvh overflow-hidden bg-app font-sans text-slate-900 antialiased
-                 selection:bg-blue-100 selection:text-blue-900">
+<body className="... flex min-h-dvh overflow-x-hidden bg-app font-sans text-slate-900 antialiased
+                 selection:bg-blue-100 selection:text-blue-900 md:h-dvh md:overflow-hidden">
   <Sidebar />
-  <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
+  <div className="flex min-w-0 flex-1 flex-col md:overflow-hidden">
     <Header />
-    <main className="min-h-0 flex-1 overflow-y-auto bg-app p-4 md:p-6">
+    <main className="min-h-0 flex-1 bg-app p-4 md:overflow-y-auto md:p-6">
       <div className="mx-auto w-full max-w-[1440px]">{children}</div>
     </main>
   </div>
 </body>
 ```
 
-- Fixed-height shell: `h-dvh` + `overflow-hidden`; only `<main>` scrolls (`overflow-y-auto`).
+- Fixed-height shell from `md` up: `h-dvh` + `overflow-hidden`; only `<main>` scrolls (`md:overflow-y-auto`).
+- Below `md` the page scrolls as a normal document (`min-h-dvh`, no inner scroller) — iOS Safari overlays
+  the keyboard without resizing the layout viewport, so a field at the bottom of a modal would otherwise
+  stay hidden behind it. See §4.4.
 - Content is capped at `max-w-[1440px]` and centred; gutters `p-4` → `md:p-6`.
-- Sidebar `w-56`, hidden below `md`. Header `h-16`, `sticky top-0 z-10`, `border-b border-slate-200/80`.
+- Sidebar `w-56`, hidden below `md` (the phone gets the drawer of §4.4 instead). Header `h-16`,
+  `sticky top-0 z-10`, `border-b border-slate-200/80`.
+- The header row shrinks on a phone: hamburger + `min-w-0 flex-1` search + one theme button + bell +
+  sign-out. The three-way theme group and the `⌘K` hint are `md`-and-up only.
 
 ### 4.2 Page rhythm
 
@@ -172,6 +178,21 @@ is the workhorse for labels and buttons.
 
 Tables always live inside a horizontally scrolling wrapper on the section, with the table itself
 carrying `w-full min-w-[540px]` (compact) or `min-w-[920px]` (full report) so mobile scrolls sideways.
+
+### 4.4 Mobile (below `md` = 768px)
+
+`md` is the app's one breakpoint: it is where the sidebar becomes a sidebar, the shell becomes a frame and
+the header gets its room back. Everything below it has to be usable with one thumb on a 393px-wide phone.
+
+| Concern | Rule |
+| --- | --- |
+| Navigation | `components/navigation.ts` holds the list; `Sidebar` renders it from `md` up, `MobileNav` renders the **same** list as a drawer below it. Never add a link to one of the two. |
+| Drawer | Hamburger in the header → `fixed` panel (`w-72 max-w-[85%]`, `h-dvh`, `z-50`, `role="dialog"`, `aria-modal`). Closes on backdrop, the ✕, `Escape`, a route change and when the viewport reaches `md`; the page behind cannot scroll; focus goes in and comes back to the hamburger. Links are `py-3` (≈44px) — a touch target, not a desktop row. |
+| Touch | No hover-only affordance: the schedule cell's `+ Thêm` is `opacity-100` below `md` and revealed on hover/focus from `md` up. Anything that only exists on `group-hover` is invisible *and* tappable on a phone. |
+| Forms | Safari zooms the page when a focused field is below 16px, so `app/globals.css` forces `16px` on `input/select/textarea` under `max-width: 767px`. The rule sits **outside** every `@layer` so it outranks Tailwind's `text-xs`/`text-sm` utilities. |
+| Modals | `max-h-[85dvh]` (not `92vh`: the iOS toolbar eats into `vh`), `p-4 sm:p-6`, and the wrapper is `items-end sm:items-center`, so a dialog rises from the bottom like a sheet on a phone and stays centred on a desktop. |
+| Tables | Unchanged in shape: `overflow-x-auto` + `min-w-[…]`, so a phone swipes sideways. The first column is the row's identity (employee, ca, mã) — the place a sticky column would go if a screen needs it. |
+| Map | `LocationPickerMap` keeps Leaflet's defaults: `h-64 w-full`, wheel zoom on a desktop, and on a phone one-finger drag pans the *map* and pinch zooms it — so a swipe over the map does not scroll the page (the fields and the modal around it do). That is the normal trade-off for a picker; the pin is placed by tapping, not by dragging it. |
 
 ---
 

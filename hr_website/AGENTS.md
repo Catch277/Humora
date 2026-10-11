@@ -88,7 +88,9 @@ hr_website/
 │   ├── page.tsx                  # Dashboard
 │   ├── layout.tsx                # Shell: Sidebar + Header + Be Vietnam Pro font
 │   └── globals.css
-├── components/                   # Header.tsx, Sidebar.tsx, ProfileProvider.tsx, LocationPickerMap*.tsx (Leaflet)
+├── components/                   # Header.tsx, Sidebar.tsx + MobileNav.tsx (phone drawer) + navigation.ts
+│                                 #   (the one nav list) + OrganizationCard.tsx, ProfileProvider.tsx,
+│                                 #   LocationPickerMap*.tsx (Leaflet)
 ├── lib/
 │   ├── accessPolicy.ts           # Capability table + screen→capability map (SCRUM-59)
 │   ├── domain/branchScope.ts     # canManageBranch() / defaultBranchId() — who may manage a branch (SCRUM-61)
@@ -371,6 +373,18 @@ screen that talks to Supabase Auth directly instead of through `app/api/**`.
 - Tailwind CSS v4 (no `tailwind.config.*`; the PostCSS plugin is `@tailwindcss/postcss`). Reuse the
   existing visual language: primary `#0C66E4` with `blue-50` tints, surfaces `#F8F9FF`/`#F3F6FC`,
   `rounded-xl`/`rounded-2xl`, `border-slate-200/80`, small uppercase section labels, `lucide-react` icons.
+- **Responsive rules — a phone is a supported target, not an afterthought.** `md` (768px) is the single
+  breakpoint. `components/navigation.ts` is the **only** navigation list: `Sidebar` renders it from `md` up
+  and `components/MobileNav.tsx` renders the same list as a drawer below it (hamburger in the header, a
+  `fixed` panel with `role="dialog"`, closing on backdrop/✕/Escape/route change/`md`, page scroll locked
+  while open) — never add a link to one of the two. Below `md` the shell scrolls as a document
+  (`min-h-dvh`, `app/layout.tsx`) because iOS Safari overlays the keyboard without resizing the layout
+  viewport, while from `md` up it keeps the `h-dvh` frame. `app/globals.css` forces 16px on
+  `input/select/textarea` under 768px — deliberately outside every `@layer`, so it outranks Tailwind's
+  `text-xs`/`text-sm` — which is what stops Safari zooming the page on focus. No hover-only affordance
+  (`opacity-0 group-hover:opacity-100` is invisible *and* the button is still tappable on touch: gate it
+  with `md:` instead), dialogs cap at `max-h-[85dvh]` and are `items-end sm:items-center` with
+  `p-4 sm:p-6`, and a control a thumb must hit is ≥ ~40px. The reasoning lives in `DESIGN.md` §4.4.
 - **Never write a literal hex in a component.** Use the semantic tokens from `app/globals.css`:
   `bg-surface` (panels — replaced every `bg-white`), `bg-app` (page canvas), `bg-surface-muted`,
   `bg-canvas`, `bg-primary` / `text-primary` / `border-primary` / `hover:bg-primary-strong`. They resolve
@@ -973,4 +987,11 @@ screen that talks to Supabase Auth directly instead of through `app/api/**`.
   thật — Passkey vẫn là tính năng thử nghiệm của Supabase và phải bật riêng cho từng thiết bị. Yêu cầu Face ID
   trước khi chấm công là bước tiếp theo (SCRUM-80), hiện chưa bật.
 
+- Giao diện điện thoại: `md` (768px) là mốc duy nhất. Danh sách điều hướng chỉ nằm ở
+  `components/navigation.ts` — `Sidebar` cho màn hình rộng, `MobileNav` là ngăn kéo trượt cho điện thoại (mở
+  bằng nút hamburger trên header, đóng bằng nền mờ / ✕ / Escape / đổi trang / khi màn hình rộng trở lại).
+  Dưới `md` trang cuộn theo luồng tài liệu (không dùng khung `h-dvh`) để bàn phím iOS không che ô nhập, và
+  `app/globals.css` ép cỡ chữ ô nhập về 16px để Safari không tự phóng to khi chạm vào ô. Không dùng hiệu ứng
+  chỉ có khi hover; hộp thoại giới hạn `max-h-[85dvh]`, nằm dưới cùng màn hình và `p-4 sm:p-6`; vùng chạm
+  tối thiểu ~40px. Chi tiết ở `DESIGN.md` §4.4.
 - Thời gian nghiệp vụ theo `Asia/Bangkok` (UTC+7), dữ liệu lưu ở UTC; không tự ý đổi múi giờ.

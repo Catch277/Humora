@@ -16,6 +16,13 @@ const OPTIONS: { value: ThemeChoice; label: string; Icon: typeof Sun }[] = [
   { value: "system", label: "Theo hệ thống", Icon: Monitor },
 ];
 
+/** The cycle the phone button walks through: Sáng → Tối → Theo hệ thống → Sáng. */
+const NEXT_CHOICE: Record<ThemeChoice, ThemeChoice> = {
+  light: "dark",
+  dark: "system",
+  system: "light",
+};
+
 function readChoice(): ThemeChoice {
   const stored = window.localStorage.getItem(STORAGE_KEY);
 
@@ -81,33 +88,53 @@ export default function ThemeToggle() {
     window.dispatchEvent(new Event(CHOICE_EVENT));
   }
 
-  return (
-    <div
-      role="group"
-      aria-label="Chọn giao diện"
-      className="flex items-center gap-0.5 rounded-lg border border-slate-200 bg-surface-muted p-0.5"
-    >
-      {OPTIONS.map(({ value, label, Icon }) => {
-        const isActive = choice === value;
+  const active = OPTIONS.find((option) => option.value === choice) ?? OPTIONS[2];
+  const ActiveIcon = active.Icon;
 
-        return (
-          <button
-            key={value}
-            type="button"
-            onClick={() => choose(value)}
-            aria-pressed={isActive}
-            title={label}
-            className={`rounded-md p-1.5 transition-colors ${
-              isActive
-                ? "bg-surface text-primary shadow-sm"
-                : "text-slate-500 hover:text-slate-800"
-            }`}
-          >
-            <Icon size={14} />
-            <span className="sr-only">{label}</span>
-          </button>
-        );
-      })}
-    </div>
+  return (
+    <>
+      {/*
+        Below `md` the header has no room for three choices beside the hamburger, the search box, the bell
+        and sign-out, so one button walks the same three options. The group returns on a wide screen, where
+        showing all three at once is the point.
+      */}
+      <button
+        type="button"
+        onClick={() => choose(NEXT_CHOICE[choice])}
+        aria-label={`Giao diện: ${active.label}. Nhấn để đổi.`}
+        title={`Giao diện: ${active.label}`}
+        className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-slate-200 bg-surface text-slate-600 transition-colors hover:bg-slate-50 md:hidden"
+      >
+        <ActiveIcon size={15} />
+      </button>
+
+      <div
+        role="group"
+        aria-label="Chọn giao diện"
+        className="hidden items-center gap-0.5 rounded-lg border border-slate-200 bg-surface-muted p-0.5 md:flex"
+      >
+        {OPTIONS.map(({ value, label, Icon }) => {
+          const isActive = choice === value;
+
+          return (
+            <button
+              key={value}
+              type="button"
+              onClick={() => choose(value)}
+              aria-pressed={isActive}
+              title={label}
+              className={`rounded-md p-1.5 transition-colors ${
+                isActive
+                  ? "bg-surface text-primary shadow-sm"
+                  : "text-slate-500 hover:text-slate-800"
+              }`}
+            >
+              <Icon size={14} />
+              <span className="sr-only">{label}</span>
+            </button>
+          );
+        })}
+      </div>
+    </>
   );
 }

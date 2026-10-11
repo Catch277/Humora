@@ -488,7 +488,7 @@ export default function RevenuePage() {
               <p className="text-xs font-semibold text-emerald-800">
                 Đã chốt ca lúc {formatDateTime(todayRecord.closed_at)}
               </p>
-              <div className="mt-2 grid grid-cols-3 gap-2 text-xs">
+              <div className="mt-2 grid grid-cols-1 gap-1 text-xs sm:grid-cols-3 sm:gap-2">
                 <span className="text-slate-600">
                   Đầu ca
                   <b className="mt-0.5 block tabular-nums text-slate-900">

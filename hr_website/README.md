@@ -533,6 +533,13 @@ An honest snapshot of what is real and what is still a prototype:
 - **Face ID / passkey quick login is real; a face-gated check-in is not yet:** `/security` registers the
   passkey and `/login` signs in with it (SCRUM-79), with nothing biometric stored anywhere. Requiring a
   fresh Face ID prompt before `/check-in` writes a row is the planned SCRUM-80.
+- **Mobile: the app is usable on a phone now; the widest tables still scroll sideways.** Below 768px
+  (`md`) the shell scrolls as a document, the header carries a hamburger that opens the **same** navigation
+  list the sidebar shows (`components/navigation.ts` is the single source, so the two cannot drift), the
+  theme switch collapses to one cycling button, dialogs become bottom sheets capped at `85dvh`, and every
+  input is 16px so Safari does not zoom the page on focus. The wide data tables keep their horizontal
+  scroll on purpose instead of a card rewrite, so `/schedules`, `/attendance` and `/reports` are swiped
+  sideways on a phone; a sticky first column and per-screen mobile layouts would be the next step.
 - **No demo data left:** `lib/mock/adminStore.ts` was deleted together with its last consumer, once
   trạng thái nhân viên moved to `get_employee_status`. Every screen now reads a table or an RPC, and the
   last simulated thing — the header search box — is wired to `GET /api/search` too:
@@ -542,7 +549,8 @@ An honest snapshot of what is real and what is still a prototype:
   (`GET /api/notifications?unread=true&page_size=1` → `total`, a filter added for this), and the
   profile block prints the branch under the name for a manager (the chi nhánh they head, from
   `branches.manager_id`) and for an employee (their `users.branch_id`) — never for the owner, who stands
-  above every branch (SCRUM-63). The Sáng / Tối / Theo hệ thống switch stores `localStorage["humora-theme"]`. The theme is applied as
+  above every branch (SCRUM-63). The Sáng / Tối / Theo hệ thống switch stores `localStorage["humora-theme"]`
+  — below `md` it collapses to one cycling button, because the header has no room for three. The theme is applied as
   `.dark` on `<html>` by an inline script in `app/layout.tsx` (no flash on reload) and re-points
   Tailwind's palette variables in `app/globals.css`, so dark mode covers every screen; components use
   the semantic tokens (`bg-surface`, `bg-app`, `bg-surface-muted`, `bg-canvas`, `bg-primary`,

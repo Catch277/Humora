@@ -1265,7 +1265,7 @@ export default function SchedulesPage() {
                               type="button"
                               onClick={() => openCreate(day)}
                               aria-label={`Thêm ca ${shift.name} ngày ${formatDay(day)}`}
-                              className="flex w-full items-center justify-center gap-1 rounded-lg border border-dashed border-slate-200 py-1.5 text-[10px] font-semibold text-slate-400 opacity-0 transition-opacity hover:border-primary hover:text-primary focus-visible:opacity-100 group-hover:opacity-100"
+                              className="flex w-full items-center justify-center gap-1 rounded-lg border border-dashed border-slate-200 py-2 text-[10px] font-semibold text-slate-400 transition-opacity hover:border-primary hover:text-primary focus-visible:opacity-100 md:py-1.5 md:opacity-0 md:group-hover:opacity-100"
                             >
                               <Plus size={11} /> Thêm
                             </button>
@@ -1282,8 +1282,8 @@ export default function SchedulesPage() {
       </section>
 
       {modal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4">
-          <div className="max-h-[92vh] w-full max-w-lg overflow-y-auto rounded-2xl bg-surface p-6 shadow-2xl">
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-900/40 p-4 sm:items-center">
+          <div className="max-h-[85dvh] w-full max-w-lg overflow-y-auto rounded-2xl bg-surface p-4 shadow-2xl sm:p-6">
             <div className="flex items-start justify-between">
               <div className="flex items-start gap-3">
                 <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-blue-50 text-primary">
