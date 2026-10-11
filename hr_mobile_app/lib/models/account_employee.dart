@@ -156,7 +156,7 @@ class _AccountEmployeeScreenState extends State<AccountEmployeeScreen> {
               // 8. Nút đăng xuất
               LogoutButton(
                 onLogout: () {
-                  Navigator.pushReplacementNamed(context, '/login'); // Điều hướng đến màn hình đăng nhập
+                  Navigator.of(context).pushReplacementNamed('/login'); // Điều hướng đến màn hình đăng nhập
                 },
               ),
               const SizedBox(height: 30),
