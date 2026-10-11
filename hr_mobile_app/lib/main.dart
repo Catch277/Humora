@@ -13,7 +13,6 @@ Future<void> main() async {
   await Supabase.initialize(
     url: 'https://fnirmgvwsdvbcwevhhfx.supabase.co', // URL dự án của bạn
     publishableKey: 'sb_publishable_G8C8TTehw-_sYzP4kSXixQ_2atfw3Ig',
-    
   );
 
   runApp(const MyApp());
@@ -25,6 +24,7 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
+      debugShowCheckedModeBanner: false, // <-- Thêm dòng này để ẩn dải băng DEBUG
       title: 'Human Resource App',
       // Gọi route mặc định ban đầu từ AppRoutes
       initialRoute: AppRoutes.login,
