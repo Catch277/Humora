@@ -341,6 +341,15 @@ screen that talks to Supabase Auth directly instead of through `app/api/**`.
   Relying Party display name + **RP ID = the deployed bare domain**, `localhost` for dev) and **HTTPS** in
   production — WebAuthn has no secure-context fallback, so an IP-address host cannot work at all. Passkeys
   are **experimental** in Supabase and **per device**: enrolling a phone does not enable a desktop.
+- **The capability probe is advisory, never a gate:** `isUserVerifyingPlatformAuthenticatorAvailable()`
+  only colours a hint on `/security` — it answers `false` on any machine without Windows Hello or a
+  reachable Touch ID (a desktop, an external keyboard or monitor, clamshell, Remote Desktop, some VMs) and
+  wherever the browser simply cannot tell, while a **phone (the QR hand-off) or a security key can still
+  complete the ceremony**. Disabling the button on that answer hid a working path once; do not do it again.
+  `PublicKeyCredential` missing is the only real stop (WebAuthn is a `[SecureContext]` API, so plain HTTP,
+  an old browser or an in-app/preview webview), and even that is a sentence, not a disabled button. While a
+  hint is up the screen also prints `Chẩn đoán: máy · HTTPS · WebAuthn · Face ID / Windows Hello`, so the
+  operator can report the cause without opening DevTools.
 - **State inside an effect:** React 19's `react-hooks/set-state-in-effect` fails the lint on a `setState`
   called synchronously in an effect body, so a screen loads data through the promise callbacks
   (`components/Sidebar.tsx` is the reference) and asks about browser capabilities at press time instead.

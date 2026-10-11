@@ -67,6 +67,11 @@ function suggestedDeviceName(): string {
   return "Thiết bị này";
 }
 
+/** ✓ / ✗ so one screenshot answers what a DevTools console would. */
+function mark(value: boolean): string {
+  return value ? "✓" : "✗";
+}
+
 /** Which action is running, so one button's spinner never impersonates the other two. */
 type BusyAction = "REGISTER" | "RENAME" | "DELETE";
 
@@ -84,9 +89,18 @@ const DANGER_BUTTON_CLASS =
 
 export default function SecurityPage() {
   const [passkeys, setPasskeys] = useState<Passkey[] | null>(null);
+  /** Whether this browser exposes WebAuthn at all (`false` on plain HTTP, or in an old browser). */
+  const [webAuthnAvailable, setWebAuthnAvailable] = useState<boolean | null>(
+    null,
+  );
+  /** Whether it reports a platform authenticator (Touch ID / Windows Hello). Advisory only. */
   const [platformAuthenticator, setPlatformAuthenticator] = useState<
     boolean | null
   >(null);
+  /** The one-line "why is it off?" answer; shown only while one of the two banners is up. */
+  const [ceremonyDiagnostics, setCeremonyDiagnostics] = useState<string | null>(
+    null,
+  );
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [busy, setBusy] = useState<BusyAction | null>(null);
@@ -152,18 +166,34 @@ export default function SecurityPage() {
   }, []);
 
   /**
-   * Whether this device can run the ceremony at all. Without a platform authenticator there is no Face
-   * ID / Windows Hello to unlock, so the button would only ever fail — better to say so.
+   * Two advisory answers, and neither one disables the button — that was the bug this replaced: a machine
+   * without Windows Hello (a desktop, an external keyboard or monitor, clamshell, Remote Desktop) answers
+   * `false` to `isUserVerifyingPlatformAuthenticatorAvailable()`, yet the same browser can still complete
+   * the ceremony with a phone (the QR hand-off) or a security key, so a grey button hid a working path.
+   *
+   * `PublicKeyCredential` is the only hard stop: WebAuthn is a `[SecureContext]` API, so plain HTTP without
+   * a certificate hides it completely. A probe that throws means "cannot be determined" — not "cannot be
+   * done" — so it leaves the hint out rather than guessing.
    */
   useEffect(() => {
     let cancelled = false;
 
-    async function detectPlatformAuthenticator() {
-      if (typeof window.PublicKeyCredential === "undefined") {
+    async function detectCeremonySupport() {
+      const secureContext = window.isSecureContext;
+      const hasApi = typeof window.PublicKeyCredential !== "undefined";
+
+      if (!hasApi) {
         if (!cancelled) {
-          setPlatformAuthenticator(false);
+          setWebAuthnAvailable(false);
+          setCeremonyDiagnostics(
+            `Chẩn đoán: ${suggestedDeviceName()} · ${mark(secureContext)} HTTPS · ${mark(false)} WebAuthn`,
+          );
         }
         return;
+      }
+
+      if (!cancelled) {
+        setWebAuthnAvailable(true);
       }
 
       try {
@@ -172,15 +202,19 @@ export default function SecurityPage() {
 
         if (!cancelled) {
           setPlatformAuthenticator(available);
+
+          if (!available) {
+            setCeremonyDiagnostics(
+              `Chẩn đoán: ${suggestedDeviceName()} · ${mark(true)} WebAuthn · ${mark(false)} Face ID / Windows Hello`,
+            );
+          }
         }
       } catch {
-        if (!cancelled) {
-          setPlatformAuthenticator(false);
-        }
+        // Left unknown on purpose: the ceremony itself is the authority.
       }
     }
 
-    void detectPlatformAuthenticator();
+    void detectCeremonySupport();
 
     return () => {
       cancelled = true;
@@ -336,15 +370,39 @@ export default function SecurityPage() {
         </div>
       )}
 
-      {platformAuthenticator === false && (
+      {webAuthnAvailable === false && (
         <div className="flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4 text-xs text-amber-800">
           <TriangleAlert size={16} className="mt-0.5 shrink-0" />
-          <p>
-            Thiết bị hoặc trình duyệt này không có Face ID / Windows Hello cho
-            WebAuthn, nên chưa bật đăng nhập nhanh được. Hãy mở trang này trên
-            điện thoại hoặc máy tính có cảm biến, qua HTTPS (localhost cũng
-            được). Đăng nhập bằng mật khẩu vẫn hoạt động bình thường.
-          </p>
+          <div>
+            <p>
+              Trình duyệt này không cung cấp WebAuthn nên chưa bật đăng nhập nhanh
+              được ở đây: WebAuthn chỉ chạy trên HTTPS (localhost cũng được) và cần
+              một trình duyệt hiện đại, không phải trình duyệt trong ứng dụng hay
+              khung xem trước. Đăng nhập bằng mật khẩu vẫn hoạt động bình thường.
+            </p>
+            {ceremonyDiagnostics && (
+              <p className="mt-2 font-semibold">{ceremonyDiagnostics}</p>
+            )}
+          </div>
+        </div>
+      )}
+
+      {webAuthnAvailable === true && platformAuthenticator === false && (
+        <div className="flex items-start gap-3 rounded-xl border border-blue-200 bg-blue-50 p-4 text-xs text-blue-800">
+          <ScanFace size={16} className="mt-0.5 shrink-0" />
+          <div>
+            <p>
+              Máy này không báo có Face ID / Windows Hello — máy để bàn, màn hình
+              ngoài, phiên Remote Desktop và một số máy ảo thường như vậy. Bạn vẫn
+              có thể bấm{" "}
+              <span className="font-semibold">Bật Face ID</span> rồi chọn dùng điện
+              thoại (quét mã QR) hoặc khoá bảo mật; nếu không, hãy mở trang này
+              trên chính điện thoại của bạn.
+            </p>
+            {ceremonyDiagnostics && (
+              <p className="mt-2 font-semibold">{ceremonyDiagnostics}</p>
+            )}
+          </div>
         </div>
       )}
 
@@ -511,7 +569,7 @@ export default function SecurityPage() {
           </label>
           <button
             type="submit"
-            disabled={busy !== null || platformAuthenticator === false}
+            disabled={busy !== null}
             className={PRIMARY_BUTTON_CLASS}
           >
             {busy === "REGISTER" ? (
