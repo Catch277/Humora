@@ -8,7 +8,7 @@ import '../widgets/employee_home/checkin_card.dart';
 import '../widgets/employee_home/performance_card.dart';
 import '../widgets/employee_home/hr_services_grid.dart';
 import '../widgets/employee_home/internal_news_card.dart';
-import 'camera_checkin.dart'; // Import màn hình camera
+import 'camera_checkin.dart'; // Import màn hình Camera Check-in
 
 class HomeEmployeeScreen extends StatefulWidget {
   const HomeEmployeeScreen({super.key});
@@ -24,15 +24,17 @@ class _HomeEmployeeScreenState extends State<HomeEmployeeScreen> {
   Timer? _timer;
   DateTime _currentTime = DateTime.now();
 
-  // Quản lý trạng thái Check-in
+  // Quản lý trạng thái Check-in / Check-out
   bool _isCheckedIn = false;
   String _checkInTime = '--:--';
 
+  // Mốc giờ vào ca mặc định (08:30 AM)
   final TimeOfDay _shiftStart = const TimeOfDay(hour: 8, minute: 30);
 
   @override
   void initState() {
     super.initState();
+    // Đồng hồ chạy liên tục mỗi 1 giây
     _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
       if (mounted) {
         setState(() {
@@ -48,6 +50,7 @@ class _HomeEmployeeScreenState extends State<HomeEmployeeScreen> {
     super.dispose();
   }
 
+  // Đếm ngược từ thời gian hiện tại về 08:30 AM
   String _getCountdownToShiftStart() {
     final now = _currentTime;
     final startDateTime = DateTime(
@@ -71,7 +74,7 @@ class _HomeEmployeeScreenState extends State<HomeEmployeeScreen> {
     return 'Còn ${hours.toString().padLeft(2, '0')}:${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}';
   }
 
-  // Điều hướng mở Camera Chụp ảnh
+  // Điều hướng mở Màn hình Camera Chụp ảnh Check-in
   Future<void> _handleCheckIn() async {
     final result = await Navigator.push(
       context,
@@ -80,7 +83,7 @@ class _HomeEmployeeScreenState extends State<HomeEmployeeScreen> {
       ),
     );
 
-    // Xử lý khi chụp ảnh thành công và quay về Home
+    // Khi chụp thành công và nhận dữ liệu trả về từ CameraCheckInScreen
     if (result != null && result is Map<String, String>) {
       final String time = result['time'] ?? '';
       final String ip = result['ip'] ?? '';
@@ -106,6 +109,7 @@ class _HomeEmployeeScreenState extends State<HomeEmployeeScreen> {
       );
       final isLate = now.isAfter(startDateTime);
 
+      // Hiển thị thông báo SnackBar
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Row(
@@ -194,7 +198,12 @@ class _HomeEmployeeScreenState extends State<HomeEmployeeScreen> {
         ),
       ),
       bottomNavigationBar: BottomNavBar(
-        currentIndex: 0,
+        currentIndex: _selectedIndex,
+        onTap: (index) {
+          setState(() {
+            _selectedIndex = index;
+          });
+        },
       ),
     );
   }

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../main.dart'; // Import themeNotifier từ main.dart
 
 class HomeHeader extends StatelessWidget {
   final String formattedDate;
@@ -31,6 +32,7 @@ class HomeHeader extends StatelessWidget {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
+              // Ngày tháng
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
                 decoration: BoxDecoration(
@@ -46,32 +48,37 @@ class HomeHeader extends StatelessWidget {
                   ),
                 ),
               ),
+
+              // Các nút công cụ trên Header
               Row(
                 children: [
-                  _buildIconButton(Icons.search),
+                  _buildIconButton(
+                    icon: Icons.search,
+                    onTap: () {},
+                  ),
                   const SizedBox(width: 10),
-                  Stack(
-                    children: [
-                      _buildIconButton(Icons.notifications_none),
-                      Positioned(
-                        right: 10,
-                        top: 10,
-                        child: Container(
-                          width: 8,
-                          height: 8,
-                          decoration: const BoxDecoration(
-                            color: Colors.redAccent,
-                            shape: BoxShape.circle,
-                          ),
-                        ),
-                      )
-                    ],
+
+                  // Nút chuyển đổi giao diện Sáng/Tối toàn hệ thống
+                  ValueListenableBuilder<ThemeMode>(
+                    valueListenable: themeNotifier,
+                    builder: (context, currentMode, child) {
+                      final isDark = currentMode == ThemeMode.dark;
+                      return _buildIconButton(
+                        icon: isDark ? Icons.wb_sunny_outlined : Icons.nightlight_round,
+                        onTap: () {
+                          // Đổi trạng thái themeMode
+                          themeNotifier.value = isDark ? ThemeMode.light : ThemeMode.dark;
+                        },
+                      );
+                    },
                   ),
                 ],
               )
             ],
           ),
           const SizedBox(height: 20),
+
+          // Thông tin Nhân viên
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -212,15 +219,18 @@ class HomeHeader extends StatelessWidget {
     );
   }
 
-  Widget _buildIconButton(IconData icon) {
-    return Container(
-      width: 36,
-      height: 36,
-      decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.18),
-        shape: BoxShape.circle,
+  Widget _buildIconButton({required IconData icon, required VoidCallback onTap}) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: 36,
+        height: 36,
+        decoration: BoxDecoration(
+          color: Colors.white.withOpacity(0.18),
+          shape: BoxShape.circle,
+        ),
+        child: Icon(icon, color: Colors.white, size: 20),
       ),
-      child: Icon(icon, color: Colors.white, size: 20),
     );
   }
 }
