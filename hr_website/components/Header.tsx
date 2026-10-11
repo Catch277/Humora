@@ -13,17 +13,48 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import ThemeToggle from "@/components/ThemeToggle";
 import { useProfile } from "@/components/ProfileProvider";
 import { roleLabel } from "@/lib/accessPolicy";
 import type { QuickSearchResult } from "@/lib/domain/entities/QuickSearch";
+import { isBranchHeadRole, isOwnerRole } from "@/lib/domain/roles";
 import { isPublicPath } from "@/lib/publicPaths";
 
 /** `GET /api/search` cần tối thiểu 2 ký tự; dưới ngưỡng đó chỉ hiện gợi ý, không gọi API. */
 const MIN_QUERY_LENGTH = 2;
 const SEARCH_DEBOUNCE_MS = 250;
+
+/**
+ * How often the bell badge is refreshed (SCRUM-70). The producers write rows while the shell is
+ * mounted — a ca is assigned, a đơn is filed — so a route change alone would leave the badge stale on
+ * the screen the user is reading. Cheap: one row, `unread=true&page_size=1` (see the route docs).
+ */
+const UNREAD_POLL_INTERVAL_MS = 30_000;
+
+/**
+ * `null` means "could not read the count" (offline, 401) — the caller keeps the number it already
+ * shows instead of flipping the badge to 0 and back.
+ */
+async function fetchUnreadCount(): Promise<number | null> {
+  try {
+    const response = await fetch(
+      "/api/notifications?page=1&page_size=1&unread=true",
+      { cache: "no-store" },
+    );
+
+    if (!response.ok) {
+      return null;
+    }
+
+    const data = (await response.json()) as { total?: number };
+
+    return typeof data.total === "number" ? data.total : 0;
+  } catch {
+    return null;
+  }
+}
 
 const REQUEST_STATUS_LABELS: Record<string, string> = {
   PENDING: "Chờ duyệt",
@@ -51,6 +82,9 @@ const GROUP_LABELS: Record<SearchHit["group"], string> = {
   requests: "Đơn từ",
   shifts: "Ca làm việc",
 };
+
+/** `GET /api/branches` as the header needs it: the name, and who heads it (SCRUM-61/63). */
+type BranchOption = { id: string; name: string; manager_id: string | null };
 
 function toHits(results: QuickSearchResult | null): SearchHit[] {
   if (!results) {
@@ -91,6 +125,9 @@ export default function Header() {
   // The profile is read once for the whole shell (SCRUM-59); the header only labels it.
   const { profile } = useProfile();
   const [unreadCount, setUnreadCount] = useState(0);
+  // SCRUM-63: the branch line under the name. It comes from the same `branches` list the pickers use,
+  // so the header and the screens cannot disagree about which chi nhánh somebody is in.
+  const [branchOptions, setBranchOptions] = useState<BranchOption[]>([]);
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<QuickSearchResult | null>(null);
   const [isSearching, setIsSearching] = useState(false);
@@ -109,28 +146,95 @@ export default function Header() {
 
     let cancelled = false;
 
-    // `unread=true&page_size=1` makes `total` the exact unread count (see the route docs), so the
-    // badge is a real number instead of a decorative dot. Refetched per route change, which also
-    // refreshes it right after the user reads notifications.
-    fetch("/api/notifications?page=1&page_size=1&unread=true", {
-      cache: "no-store",
-    })
-      .then((response) => (response.ok ? response.json() : null))
-      .then((data: { total?: number } | null) => {
-        if (!cancelled) {
-          setUnreadCount(typeof data?.total === "number" ? data.total : 0);
-        }
-      })
-      .catch(() => {
-        if (!cancelled) {
-          setUnreadCount(0);
-        }
-      });
+    // Refetched per route change, which also refreshes the badge right after the user reads
+    // notifications on `/notifications`.
+    void fetchUnreadCount().then((total) => {
+      if (!cancelled && total !== null) {
+        setUnreadCount(total);
+      }
+    });
 
     return () => {
       cancelled = true;
     };
   }, [pathname]);
+
+  // ...and polled on an interval, because the notification arrives while this screen is open (the
+  // producers run in the database). A hidden tab is skipped.
+  useEffect(() => {
+    if (isPublicPath(pathname)) {
+      return;
+    }
+
+    const timer = window.setInterval(() => {
+      if (document.visibilityState !== "visible") {
+        return;
+      }
+
+      void fetchUnreadCount().then((total) => {
+        if (total !== null) {
+          setUnreadCount(total);
+        }
+      });
+    }, UNREAD_POLL_INTERVAL_MS);
+
+    return () => window.clearInterval(timer);
+  }, [pathname]);
+
+  // The branch line under the name (SCRUM-63): only a manager and an employee have one — the owner
+  // stands above every branch, so the fetch is skipped for them entirely.
+  useEffect(() => {
+    if (!profile || isOwnerRole(profile.role)) {
+      return;
+    }
+
+    let cancelled = false;
+
+    fetch("/api/branches", { cache: "no-store" })
+      .then((response) => (response.ok ? response.json() : []))
+      .then((data: BranchOption[]) => {
+        if (!cancelled) {
+          setBranchOptions(data);
+        }
+      })
+      .catch(() => {
+        // A failed lookup only leaves the sub-line empty; the shell must never break for it.
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [profile]);
+
+  const branchLabel = useMemo(() => {
+    if (!profile || isOwnerRole(profile.role)) {
+      return "";
+    }
+
+    // A manager is described by the chi nhánh they head — that *is* their scope — while an employee is
+    // described by the branch they belong to (`users.branch_id`, SCRUM-60/63).
+    if (isBranchHeadRole(profile.role)) {
+      const headed = branchOptions
+        .filter((branch) => branch.manager_id === profile.id)
+        .map((branch) => branch.name);
+
+      if (headed.length > 0) {
+        return headed.join(", ");
+      }
+
+      // An empty list means "nothing loaded", so it must not claim the manager heads nothing.
+      return branchOptions.length > 0 ? "Chưa phụ trách chi nhánh" : "";
+    }
+
+    if (branchOptions.length === 0) {
+      return "";
+    }
+
+    return (
+      branchOptions.find((branch) => branch.id === profile.branch_id)?.name ??
+      "Chưa gán chi nhánh"
+    );
+  }, [branchOptions, profile]);
 
   // Debounced query → GET /api/search. The in-flight request is aborted when the query changes, so a
   // slow response cannot overwrite the results of a newer one.
@@ -455,6 +559,15 @@ export default function Header() {
             <p className="text-xs font-semibold text-slate-800">
               {profile?.full_name ?? "Đang tải..."}
             </p>
+            {branchLabel && (
+              // 13rem keeps a two-branch manager's line inside the header; the full text stays in the title.
+              <p
+                className="mt-0.5 max-w-[13rem] truncate text-[10px] font-medium text-primary"
+                title={branchLabel}
+              >
+                {branchLabel}
+              </p>
+            )}
             <p className="mt-0.5 text-[10px] text-slate-500">
               {profile ? roleLabel(profile.role) : "—"}
             </p>

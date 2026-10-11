@@ -108,7 +108,7 @@
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  *       403:
- *         description: The account has no user profile, the role may not file a request (SCRUM-59 — the organization's OWNER never does, SCRUM-63), the account is not assigned to a branch yet, or it names a branch other than its own (SCRUM-63).
+ *         description: The account has no user profile, the role may not file a request (SCRUM-59 — the organization's OWNER never does, SCRUM-63), the account is not assigned to a branch yet, or it names a branch other than its own — or, for a manager, a branch they do not head (SCRUM-61/63).
  *         content:
  *           application/json:
  *             schema:
@@ -134,6 +134,7 @@ import {
   MAX_REQUEST_TITLE_LENGTH,
   REQUEST_TYPES,
 } from "@/lib/domain/entities/RequestEntity";
+import { BranchForbiddenError } from "@/lib/domain/errors/BranchForbiddenError";
 import { BranchNotFoundError } from "@/lib/domain/errors/BranchNotFoundError";
 import { RequestBranchForbiddenError } from "@/lib/domain/errors/RequestBranchForbiddenError";
 import { RequestBranchNotAssignedError } from "@/lib/domain/errors/RequestBranchNotAssignedError";
@@ -291,8 +292,10 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: error.message }, { status: 400 });
     }
 
-    // SCRUM-63: an employee files for their own branch, and an unassigned account files nothing.
+    // SCRUM-63: an employee files for their own branch, an unassigned account files nothing, and a
+    // manager files only for a branch they head (`BranchForbiddenError`).
     if (
+      error instanceof BranchForbiddenError ||
       error instanceof RequestBranchNotAssignedError ||
       error instanceof RequestBranchForbiddenError
     ) {

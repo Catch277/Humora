@@ -158,6 +158,15 @@ export default function RequestsPage() {
     // SCRUM-63: a branch head cannot decide their own đơn; the owner is the one role that may,
     // because nobody sits above them (`ReviewRequestUseCase` repeats this).
     (request.user_id !== viewerId || managesAllBranches);
+
+  // The branches the "Gửi đơn mới" dialog may offer: an employee is pinned to the one they belong to
+  // (the form renders a statement instead of a select for them), a manager files only for a branch
+  // they head — `CreateRequestUseCase` refuses any other with a `403` — and nobody else can file.
+  const submittableBranches = branches.filter(
+    (branch) =>
+      isManagerRole(profile?.role) &&
+      canManageBranch(branch, { userId: viewerId, managesAllBranches }),
+  );
   const [loading, setLoading] = useState(true);
   const [pageError, setPageError] = useState("");
   const [tab, setTab] = useState(ALL);
@@ -171,11 +180,14 @@ export default function RequestsPage() {
   // instead of filing — SCRUM-63). Until this dialog existed the screen could only review đơn: nothing
   // in the app ever wrote the row the queue was waiting for.
   //
-  // SCRUM-63: an employee belongs to one branch, so their đơn is filed there — and an account with no
-  // branch cannot file at all, which is why the button is hidden rather than answered with a `403`.
+  // SCRUM-63: an employee belongs to one branch, so their đơn is filed there — an account with no
+  // branch cannot file at all, and a manager who heads none has nothing to file against, which is why
+  // the button is hidden rather than answered with a `403`.
   const ownBranchId = profile?.branch_id ?? null;
   const isManager = isManagerRole(profile?.role);
-  const canSubmit = can("request:create") && (isManager || ownBranchId !== null);
+  const canSubmit =
+    can("request:create") &&
+    (isManager ? submittableBranches.length > 0 : ownBranchId !== null);
   const [submitOpen, setSubmitOpen] = useState(false);
   const [form, setForm] = useState<RequestForm>(EMPTY_FORM);
   const [formError, setFormError] = useState("");
@@ -348,14 +360,13 @@ export default function RequestsPage() {
   }
 
   function openSubmit() {
-    // A branch head starts on the branch they head, an employee on the first branch they can see.
-    // Filing a request is not a branch *write*, so no branch is disabled here: a person may ask for
-    // leave at a branch they do not manage — but an employee (SCRUM-63) only files for the branch
-    // they belong to, so for them there is nothing to choose.
+    // A branch head starts on the branch they head, an employee on the branch they belong to. SCRUM-63
+    // narrowed this field twice: the list holds only branches the caller may file against (a manager
+    // their own, an employee exactly one), and the API refuses anything else.
     setForm({
       ...EMPTY_FORM,
       branchId: isManager
-        ? defaultBranchId(branches, {
+        ? defaultBranchId(submittableBranches, {
             userId: viewerId,
             managesAllBranches,
           })
@@ -605,9 +616,11 @@ export default function RequestsPage() {
                     {requests.length === 0
                       ? canSubmit
                         ? "Chưa có đơn nào được gửi — bấm “Tạo đơn” để gửi đơn đầu tiên"
-                        : can("request:create") && ownBranchId === null
-                          ? "Bạn chưa được gán chi nhánh — nhờ chủ sở hữu gán chi nhánh ở trang Quản lý nhân sự để gửi đơn"
-                          : "Chưa có đơn nào được gửi"
+                        : can("request:create") && isManager
+                          ? "Bạn chưa phụ trách chi nhánh nào — nhờ chủ sở hữu gán bạn làm chi nhánh trưởng ở trang Quản lý chi nhánh để gửi đơn"
+                          : can("request:create") && ownBranchId === null
+                            ? "Bạn chưa được gán chi nhánh — nhờ chủ sở hữu gán chi nhánh ở trang Quản lý nhân sự để gửi đơn"
+                            : "Chưa có đơn nào được gửi"
                       : "Không có đơn phù hợp bộ lọc hiện tại"}
                   </td>
                 </tr>
@@ -775,7 +788,7 @@ export default function RequestsPage() {
                       className={inputClassName}
                     >
                       <option value="">Chọn chi nhánh</option>
-                      {branches.map((branch) => (
+                      {submittableBranches.map((branch) => (
                         <option key={branch.id} value={branch.id}>
                           {branch.name}
                         </option>

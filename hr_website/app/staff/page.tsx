@@ -99,6 +99,36 @@ function formatDateTime(value: string): string {
   }).format(parsed);
 }
 
+/**
+ * The order the `/staff` table reads in (SCRUM-24): active accounts first, then the newest account,
+ * then A→Z. The two first keys mirror what the owner does on this screen — hand out a branch to
+ * somebody who still works here, and see the account that was just created at the top.
+ *
+ * `created_at` is an ISO timestamp, so it is compared through `createdAtValue` rather than as a string:
+ * a row whose date is missing or hand-edited then sorts as the oldest instead of throwing the whole
+ * list off (the server has already ordered by name, which is what the `full_name` tie-break restores).
+ */
+function compareStaffRows(first: StaffMemberRow, second: StaffMemberRow): number {
+  if (first.is_active !== second.is_active) {
+    return first.is_active ? -1 : 1;
+  }
+
+  const recency = createdAtValue(second) - createdAtValue(first);
+
+  if (recency !== 0) {
+    return recency;
+  }
+
+  return first.full_name.localeCompare(second.full_name, "vi");
+}
+
+/** `0` for a missing or unparseable `created_at`, which keeps such a row at the bottom of the list. */
+function createdAtValue(member: StaffMemberRow): number {
+  const parsed = new Date(member.created_at).getTime();
+
+  return Number.isNaN(parsed) ? 0 : parsed;
+}
+
 function actionErrorMessage(status: number, data: { error?: string } | null): string {
   if (status === 401) {
     return "Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.";
@@ -228,20 +258,33 @@ export default function StaffPage() {
     return map;
   }, [branches]);
 
+  /**
+   * The rows the table shows: the search filter (name, role label or branch name), then the order this
+   * screen reads in (SCRUM-24) —
+   *
+   *   1. whoever still works here (a departed account is history the owner scrolls past, not the first
+   *      thing the screen shows),
+   *   2. then the account created most recently,
+   *   3. then A→Z, so two accounts created the same day keep a stable, readable order.
+   *
+   * `GET /api/users` answers name order because `/schedules` and `/branches` pick people from the same
+   * directory and a picker wants A→Z, so how *this* table reads is decided here, not in the repository.
+   */
   const filteredMembers = useMemo(() => {
     const keyword = query.trim().toLowerCase();
 
-    if (!keyword) {
-      return members;
-    }
+    const matching = keyword
+      ? members.filter((member) =>
+          `${
+            member.full_name
+          } ${roleLabel(member.role)} ${branchNames.get(member.branch_id ?? "") ?? ""}`
+            .toLowerCase()
+            .includes(keyword),
+        )
+      : members;
 
-    return members.filter((member) =>
-      `${
-        member.full_name
-      } ${roleLabel(member.role)} ${branchNames.get(member.branch_id ?? "") ?? ""}`
-        .toLowerCase()
-        .includes(keyword),
-    );
+    // A copy: `members` is state, and `sort` reorders the array in place.
+    return [...matching].sort(compareStaffRows);
   }, [members, query, branchNames]);
 
   const activeCount = members.filter((member) => member.is_active).length;

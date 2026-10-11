@@ -24,10 +24,16 @@ import { roleLabel } from "@/lib/accessPolicy";
 import { canManageBranch } from "@/lib/domain/branchScope";
 import { isBranchHeadRole } from "@/lib/domain/roles";
 import { isInsideVietnam } from "@/lib/geo/vietnam";
+import {
+  branchAssetToken,
+  formatFacilityAssetCode,
+} from "@/lib/usecases/facilityAssetCode";
 
 type Branch = {
   id: string;
   name: string;
+  /** SCRUM-67: the branch's own number, which prefixes every asset code of its facilities. */
+  asset_prefix: number | null;
   address: string | null;
   manager_id: string | null;
   latitude: number | null;
@@ -99,6 +105,15 @@ function formatGps(latitude: number | null, longitude: number | null): string {
   const longitudeLabel = `${Math.abs(longitude).toFixed(6)}° ${longitude >= 0 ? "E" : "W"}`;
 
   return `${latitudeLabel}, ${longitudeLabel}`;
+}
+
+/**
+ * The first asset code the branch will issue (SCRUM-67), e.g. `01HSVH-0001`: the number is the branch's own
+ * `asset_prefix` and the letters are the initials of its name, so the owner can see what a printed label
+ * says before the inventory even exists. A branch without a number falls back to the bare acronym.
+ */
+function firstAssetCode(branch: Branch): string {
+  return formatFacilityAssetCode(branchAssetToken(branch), 1);
 }
 
 function toForm(branch: Branch): BranchForm {
@@ -772,6 +787,12 @@ export default function BranchesPage() {
                             <p className="mt-0.5 max-w-[20rem] break-words text-[11px] text-slate-500">
                               {branch.address ?? "Chưa cập nhật địa chỉ"}
                             </p>
+                            <p className="mt-1 inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-600">
+                              Mã tài sản {firstAssetCode(branch)}
+                              {branch.asset_prefix
+                                ? ` · số ${String(branch.asset_prefix).padStart(2, "0")}`
+                                : " · chưa có số thứ tự"}
+                            </p>
                           </div>
                         </div>
                       </td>
@@ -931,6 +952,17 @@ export default function BranchesPage() {
             </div>
 
             <div className="mt-5 space-y-4">
+              {modal.mode === "edit" && (
+                <p className="rounded-lg bg-slate-50 px-3 py-2 text-[11px] font-normal text-slate-600">
+                  Mã tài sản của chi nhánh này bắt đầu bằng{" "}
+                  <span className="font-semibold">
+                    {firstAssetCode(modal.branch)}
+                  </span>
+                  {modal.branch.asset_prefix
+                    ? " — số thứ tự được cấp khi chi nhánh được tạo và không đổi khi đổi tên."
+                    : " — chi nhánh này chưa có số thứ tự, chạy SCRUM-67 để cấp."}
+                </p>
+              )}
               <label className="block text-xs font-semibold text-slate-600">
                 Tên chi nhánh <span className="text-rose-500">*</span>
                 <input

@@ -1,9 +1,24 @@
 "use client";
 
-import { KeyRound, Loader2, Mail, ShieldCheck } from "lucide-react";
+import { KeyRound, Loader2, Mail, ScanFace, ShieldCheck } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+
+import { passkeyErrorMessage } from "@/lib/domain/passkeyMessages";
+import { getBrowserSupabaseClient } from "@/lib/infrastructure/browserSupabaseClient";
+
+/**
+ * Whether this browser can run a WebAuthn ceremony — what the passkey button below starts. Every browser
+ * this app targets has it, so the answer is asked at press time rather than from an effect (which React
+ * 19 warns about) and a browser without it gets a sentence instead of a button that does nothing.
+ */
+function supportsWebAuthn(): boolean {
+  return (
+    typeof window !== "undefined" &&
+    typeof window.PublicKeyCredential !== "undefined"
+  );
+}
 
 export default function LoginPage() {
   const router = useRouter();
@@ -11,6 +26,51 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [passkeySubmitting, setPasskeySubmitting] = useState(false);
+  const [passkeyError, setPasskeyError] = useState("");
+
+  /**
+   * Quick login (SCRUM-79): signs the account in with the passkey it registered on `/security`. The
+   * browser client is used instead of `/api/auth/sign-in` because the ceremony cannot leave the browser;
+   * it writes the same session cookies the server reads, so the redirect below is all that is left.
+   */
+  async function handlePasskeySignIn() {
+    if (submitting || passkeySubmitting) {
+      return;
+    }
+
+    setError("");
+    setPasskeyError("");
+    if (!supportsWebAuthn()) {
+      setPasskeyError("Trình duyệt này không hỗ trợ Passkey (WebAuthn).");
+      return;
+    }
+
+    setPasskeySubmitting(true);
+
+    try {
+      const supabase = getBrowserSupabaseClient();
+      const { data, error: passkeyFailure } =
+        await supabase.auth.signInWithPasskey();
+
+      if (passkeyFailure || !data.session) {
+        setPasskeyError(
+          passkeyFailure
+            ? passkeyErrorMessage(passkeyFailure)
+            : "Không mở được phiên làm việc. Vui lòng thử lại.",
+        );
+        setPasskeySubmitting(false);
+        return;
+      }
+
+      // Same landing as the password path, and `replace` keeps this screen out of the history.
+      router.replace(resolveRedirectTarget());
+      router.refresh();
+    } catch (passkeyFailure) {
+      setPasskeyError(passkeyErrorMessage(passkeyFailure));
+      setPasskeySubmitting(false);
+    }
+  }
 
   /** Only same-origin relative paths are honoured, so `?next=` cannot bounce the user off-site. */
   function resolveRedirectTarget(): string {
@@ -153,6 +213,42 @@ export default function LoginPage() {
             )}
           </button>
         </form>
+
+      <div className="mt-5 flex items-center gap-3">
+        <span className="h-px flex-1 bg-slate-200" />
+        <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+          hoặc
+        </span>
+        <span className="h-px flex-1 bg-slate-200" />
+      </div>
+
+      {passkeyError && (
+        <div
+          role="alert"
+          className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800"
+        >
+          {passkeyError}
+        </div>
+      )}
+
+      <button
+        type="button"
+        onClick={() => void handlePasskeySignIn()}
+        disabled={submitting || passkeySubmitting}
+        className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-lg border border-slate-200 bg-surface px-4 py-2.5 text-xs font-semibold text-slate-700 shadow-sm transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+      >
+        {passkeySubmitting ? (
+          <Loader2 size={14} className="animate-spin" />
+        ) : (
+          <ScanFace size={14} className="text-primary" />
+        )}
+        {passkeySubmitting ? "Đang chờ thiết bị..." : "Đăng nhập bằng Face ID"}
+      </button>
+
+      <p className="mt-2 text-center text-[10px] text-slate-400">
+        Chỉ dùng được trên thiết bị bạn đã bật Passkey ở trang Bảo mật.
+      </p>
+
 
         <p className="mt-6 text-center text-xs text-slate-500">
           Chưa có tài khoản?{" "}

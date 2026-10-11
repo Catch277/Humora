@@ -1,28 +1,53 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import {
   AlertTriangle,
   Bell,
+  Building2,
+  CalendarRange,
   Check,
   CheckCheck,
   CircleDollarSign,
   ClipboardCheck,
+  ExternalLink,
   FileText,
   Loader2,
+  PackageSearch,
   RefreshCw,
   Settings2,
+  Store,
+  UsersRound,
   X,
 } from "lucide-react";
+import Link from "next/link";
+import { useEffect, useState } from "react";
 
+import { useProfile } from "@/components/ProfileProvider";
 import { asArray, asArrayField } from "@/lib/asArray";
+import { canAccessScreen } from "@/lib/accessPolicy";
 import type {
   Notification,
   PaginatedNotifications,
 } from "@/lib/domain/entities/Notification";
 import type { NotificationSetting } from "@/lib/domain/entities/NotificationSetting";
+import {
+  CATEGORY_LABELS,
+  NOTIFICATION_CATEGORIES,
+  notificationCategory,
+  notificationHref,
+  notificationTypeLabel,
+  notificationTypesOfCategory,
+  type NotificationCategory,
+} from "@/lib/domain/notificationCatalog";
 
 const PAGE_SIZE = 20;
+
+/**
+ * The producers (SCRUM-70/71/72) write rows while the screen is open — a ca is assigned, a khiếu nại
+ * arrives — so the list is re-fetched quietly on this interval. It is not a loading state: a poll
+ * must not make the screen look like it is reloading.
+ */
+const POLL_INTERVAL_MS = 30_000;
 
 const CHANNEL_LABELS: Record<string, string> = {
   in_app: "Trong ứng dụng",
@@ -30,10 +55,27 @@ const CHANNEL_LABELS: Record<string, string> = {
   push: "Thông báo đẩy (mobile)",
 };
 
-const TYPE_ICONS: Record<string, typeof Bell> = {
-  REQUEST: FileText,
-  REVENUE: CircleDollarSign,
-  ATTENDANCE: ClipboardCheck,
+/**
+ * What each channel actually does today. Only `in_app` is delivered (the bell and this screen); the
+ * other two are switches without a service behind them, and saying so is the point — the drawer used
+ * to imply a delivery that never happened.
+ */
+const CHANNEL_NOTES: Record<string, string> = {
+  in_app: "Thông báo hiện trong chuông của ứng dụng. Tắt là ngừng nhận.",
+  email: "Chưa được cấu hình: hệ thống chưa có dịch vụ gửi email.",
+  push: "Chưa được cấu hình: hệ thống chưa có dịch vụ thông báo đẩy.",
+};
+
+/** The icon of a notification group — the same family the sidebar uses for the matching screen. */
+const CATEGORY_ICONS: Record<NotificationCategory, typeof Bell> = {
+  revenue: CircleDollarSign,
+  requests: FileText,
+  schedule: CalendarRange,
+  attendance: ClipboardCheck,
+  staff: UsersRound,
+  branch: Building2,
+  facility: PackageSearch,
+  organization: Store,
 };
 
 function formatDateTime(value: string): string {
@@ -73,15 +115,24 @@ const KNOWN_CHANNELS = ["in_app", "email", "push"];
 function mergeChannels(rows: NotificationSetting[]): ChannelToggle[] {
   return KNOWN_CHANNELS.map((channel) => ({
     channel,
-    enabled: rows.find((row) => row.channel === channel)?.enabled ?? false,
+    // `in_app` is the channel the product actually delivers, so a member who has never touched this
+    // drawer does receive notifications — the default `notification_in_app_enabled()` applies in the
+    // database (SCRUM-70). Showing "off" for a switch the database treats as "on" is what made the old
+    // drawer disagree with reality after the first screenshot.
+    enabled: rows.find((row) => row.channel === channel)?.enabled ?? channel === "in_app",
   }));
 }
 
+
 export default function NotificationsPage() {
+  // The shell already knows the role (SCRUM-59); the inbox uses it to decide where a row links — an
+  // employee may not open `/attendance`, so their timesheet rows open `/check-in` (SCRUM-68).
+  const { profile } = useProfile();
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
   const [tab, setTab] = useState<"all" | "unread" | "read">("all");
+  const [category, setCategory] = useState<NotificationCategory | "all">("all");
   const [loading, setLoading] = useState(true);
   const [pageError, setPageError] = useState("");
   const [busyId, setBusyId] = useState("");
@@ -93,6 +144,11 @@ export default function NotificationsPage() {
   const [settingsSaved, setSettingsSaved] = useState(false);
   const [reloadToken, setReloadToken] = useState(0);
 
+  // The chips expand to the codes the trigger wrote (`type=A,B`), so the inbox is filtered by the
+  // database rather than by the page that happens to be loaded.
+  const typeFilter =
+    category === "all" ? "" : notificationTypesOfCategory(category).join(",");
+
   useEffect(() => {
     let cancelled = false;
 
@@ -101,10 +157,24 @@ export default function NotificationsPage() {
       total: number;
       error: string | null;
     }> {
-      const response = await fetch(
-        `/api/notifications?page=${page}&page_size=${PAGE_SIZE}`,
-        { cache: "no-store" },
-      );
+      const params = new URLSearchParams({
+        page: String(page),
+        page_size: String(PAGE_SIZE),
+      });
+
+      if (tab === "unread") {
+        params.set("unread", "true");
+      } else if (tab === "read") {
+        params.set("read", "true");
+      }
+
+      if (typeFilter !== "") {
+        params.set("type", typeFilter);
+      }
+
+      const response = await fetch(`/api/notifications?${params.toString()}`, {
+        cache: "no-store",
+      });
 
       if (!response.ok) {
         const data = (await response.json().catch(() => null)) as {
@@ -154,12 +224,38 @@ export default function NotificationsPage() {
     return () => {
       cancelled = true;
     };
-  }, [page, reloadToken]);
+  }, [page, tab, typeFilter, reloadToken]);
+
+  // A live inbox: the producers (SCRUM-70/71/72) write rows while this screen is open — a ca is
+  // assigned, a khiếu nại arrives — so the list is refetched quietly on an interval. It is not a
+  // loading state (a poll must not look like a reload), and a hidden tab is skipped.
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      if (document.visibilityState === "visible") {
+        setReloadToken((token) => token + 1);
+      }
+    }, POLL_INTERVAL_MS);
+
+    return () => window.clearInterval(timer);
+  }, []);
 
   function refresh() {
     setLoading(true);
     setPageError("");
     setReloadToken((token) => token + 1);
+  }
+
+  /** A filter change starts a new server query, so the page has to go back to the first one. */
+  function selectTab(next: "all" | "unread" | "read") {
+    setTab(next);
+    setPage(1);
+    setLoading(true);
+  }
+
+  function selectCategory(next: NotificationCategory | "all") {
+    setCategory(next);
+    setPage(1);
+    setLoading(true);
   }
 
   function openSettings() {
@@ -260,9 +356,7 @@ export default function NotificationsPage() {
   }
 
   async function markAllRead() {
-    const unread = notifications.filter((item) => !item.is_read);
-
-    if (markingAll || unread.length === 0) {
+    if (markingAll) {
       return;
     }
 
@@ -270,19 +364,25 @@ export default function NotificationsPage() {
     setPageError("");
 
     try {
-      // There is no bulk endpoint, so this is one request per unread notification of the current
-      // page. Marking read is idempotent, so a retry is harmless.
-      const responses = await Promise.all(
-        unread.map((item) =>
-          fetch(`/api/notifications/${item.id}/read`, { method: "PATCH" }),
+      // One statement for the whole inbox (SCRUM-70), narrowed to the active chip so the button acts
+      // on what the user is looking at. The screen used to send a `PATCH` per row, so "mark all"
+      // could never reach past the page that happened to be loaded.
+      const response = await fetch("/api/notifications/read-all", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(
+          category === "all"
+            ? {}
+            : { types: notificationTypesOfCategory(category) },
         ),
-      );
-      const failed = responses.filter((response) => !response.ok).length;
+      });
 
-      if (failed > 0) {
-        setPageError(
-          `Chỉ đánh dấu được ${unread.length - failed}/${unread.length} thông báo. Vui lòng thử lại.`,
-        );
+      if (!response.ok) {
+        const data = (await response.json().catch(() => null)) as {
+          error?: string;
+        } | null;
+        setPageError(statusMessage(response.status, data?.error));
+        return;
       }
 
       refresh();
@@ -323,10 +423,9 @@ export default function NotificationsPage() {
     }
   }
 
-  const unreadCount = notifications.filter((item) => !item.is_read).length;
-  const visible = notifications.filter((item) =>
-    tab === "all" ? true : tab === "unread" ? !item.is_read : item.is_read,
-  );
+  // The tab and the chip are server-side filters, so what came back *is* what the screen shows — no
+  // second, page-only filter that would disagree with the counters and the pagination under it.
+  const visible = notifications;
   const lastPage = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
   return (
@@ -334,12 +433,14 @@ export default function NotificationsPage() {
       <section className="flex flex-col justify-between gap-4 rounded-xl border border-slate-200/80 bg-surface p-5 shadow-sm lg:flex-row lg:items-center">
         <div>
           <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-slate-400">
-            Hệ thống / SCRUM-48
+            Hệ thống / SCRUM-48 · SCRUM-70
           </p>
           <h1 className="text-2xl font-bold tracking-tight text-slate-900">Thông báo</h1>
           <p className="mt-1 max-w-2xl text-xs leading-relaxed text-slate-500">
-            Thông báo trong ứng dụng của chính tài khoản đang đăng nhập: đơn từ, doanh thu và chấm
-            công. Tổng {total} thông báo, trong đó {unreadCount} chưa đọc trên trang này.
+            Hộp thư của chính tài khoản đang đăng nhập, theo vai trò. Nhân viên nhận ca làm việc, đơn
+            từ và bảng công của mình; quản lý chi nhánh nhận việc cần duyệt và các bất thường chấm
+            công; chủ sở hữu nhận toàn tổ chức. Bộ lọc chạy trên máy chủ, nên số trang và bộ đếm
+            luôn khớp với danh sách.
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -362,7 +463,7 @@ export default function NotificationsPage() {
           <button
             type="button"
             onClick={() => void markAllRead()}
-            disabled={markingAll || unreadCount === 0}
+            disabled={markingAll}
             className="inline-flex items-center gap-2 rounded-lg bg-primary px-3 py-2 text-xs font-semibold text-white hover:bg-primary-strong disabled:cursor-not-allowed disabled:opacity-50"
           >
             {markingAll ? (
@@ -370,7 +471,9 @@ export default function NotificationsPage() {
             ) : (
               <CheckCheck size={14} />
             )}
-            Đánh dấu trang này đã đọc
+            {category === "all"
+              ? "Đánh dấu tất cả đã đọc"
+              : `Đánh dấu nhóm ${CATEGORY_LABELS[category]} đã đọc`}
           </button>
         </div>
       </section>
@@ -383,30 +486,75 @@ export default function NotificationsPage() {
       )}
 
       <section className="overflow-hidden rounded-xl border border-slate-200/80 bg-surface shadow-sm">
-        <div className="flex flex-wrap items-center gap-2 border-b border-slate-100 px-4 py-3">
-          {(
-            [
-              { value: "all", label: "Tất cả" },
-              { value: "unread", label: "Chưa đọc" },
-              { value: "read", label: "Đã đọc" },
-            ] as const
-          ).map((option) => (
+        <div className="space-y-3 border-b border-slate-100 px-4 py-3">
+          <div className="flex flex-wrap items-center gap-2">
+            {(
+              [
+                { value: "all", label: "Tất cả" },
+                { value: "unread", label: "Chưa đọc" },
+                { value: "read", label: "Đã đọc" },
+              ] as const
+            ).map((option) => (
+              <button
+                key={option.value}
+                type="button"
+                onClick={() => selectTab(option.value)}
+                aria-pressed={tab === option.value}
+                className={`rounded-full px-3 py-1.5 text-xs font-semibold transition-colors ${
+                  tab === option.value
+                    ? "bg-primary text-white"
+                    : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                }`}
+              >
+                {option.label}
+              </button>
+            ))}
+            <span className="ml-auto text-[10px] text-slate-500">
+              Trang {page}/{lastPage} · {total} thông báo khớp bộ lọc
+            </span>
+          </div>
+
+          {/* The group chips (SCRUM-70): each one stands for the codes its triggers write, and the
+              filter is sent to the API — the note that used to say "chỉ áp dụng trên trang hiện tại"
+              is gone because the database now answers the question. */}
+          <div
+            className="flex flex-wrap items-center gap-2"
+            role="group"
+            aria-label="Nhóm thông báo"
+          >
             <button
-              key={option.value}
               type="button"
-              onClick={() => setTab(option.value)}
-              className={`rounded-full px-3 py-1.5 text-xs font-semibold transition-colors ${
-                tab === option.value
-                  ? "bg-primary text-white"
-                  : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+              onClick={() => selectCategory("all")}
+              aria-pressed={category === "all"}
+              className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[11px] font-semibold transition-colors ${
+                category === "all"
+                  ? "border-primary bg-blue-50 text-primary"
+                  : "border-slate-200 text-slate-600 hover:bg-slate-50"
               }`}
             >
-              {option.label}
+              Tất cả nhóm
             </button>
-          ))}
-          <span className="ml-auto text-[10px] text-slate-500">
-            Trang {page}/{lastPage} · bộ lọc chỉ áp dụng trên trang hiện tại
-          </span>
+            {NOTIFICATION_CATEGORIES.map((value) => {
+              const Icon = CATEGORY_ICONS[value];
+
+              return (
+                <button
+                  key={value}
+                  type="button"
+                  onClick={() => selectCategory(value)}
+                  aria-pressed={category === value}
+                  className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[11px] font-semibold transition-colors ${
+                    category === value
+                      ? "border-primary bg-blue-50 text-primary"
+                      : "border-slate-200 text-slate-600 hover:bg-slate-50"
+                  }`}
+                >
+                  <Icon size={12} />
+                  {CATEGORY_LABELS[value]}
+                </button>
+              );
+            })}
+          </div>
         </div>
 
         {loading ? (
@@ -416,14 +564,20 @@ export default function NotificationsPage() {
           </div>
         ) : visible.length === 0 ? (
           <p className="px-5 py-12 text-center text-xs text-slate-400">
-            {notifications.length === 0
-              ? "Chưa có thông báo nào. Thông báo được tạo khi có đơn từ cần duyệt, ca được chốt doanh thu hoặc chấm công cần xác minh."
-              : "Không có thông báo nào khớp với bộ lọc này trên trang hiện tại."}
+            {category !== "all" || tab !== "all"
+              ? "Không có thông báo nào khớp bộ lọc này."
+              : "Chưa có thông báo nào. Hộp thư chỉ ghi việc thật sự xảy ra: đơn từ được gửi hoặc được duyệt, doanh thu mở/chốt ca (kể cả khi lệch), ca làm việc được xếp hoặc đổi, chấm công bất thường (đi muộn, ngoài vùng, về sớm, vào ca lại, khiếu nại), và các thay đổi về nhân sự, chi nhánh, thiết bị."}
           </p>
         ) : (
           <ul className="divide-y divide-slate-100">
             {visible.map((item) => {
-              const Icon = TYPE_ICONS[item.type] ?? Bell;
+              const group = notificationCategory(item.type);
+              const Icon = group ? CATEGORY_ICONS[group] : Bell;
+              // Where the row opens, decided through the same screen table `proxy.ts` reads — an
+              // employee's timesheet notice lands on `/check-in`, a manager's on `/attendance`.
+              const href = notificationHref(item, (path) =>
+                canAccessScreen(profile?.role, path),
+              );
 
               return (
                 <li
@@ -455,25 +609,40 @@ export default function NotificationsPage() {
                       {item.body}
                     </p>
                     <p className="mt-1 text-[10px] text-slate-400">
-                      {formatDateTime(item.created_at)} · {item.type}
+                      {formatDateTime(item.created_at)}
+                      {group
+                        ? ` · ${CATEGORY_LABELS[group]}`
+                        : ` · ${notificationTypeLabel(item.type)}`}
                     </p>
                   </div>
 
-                  {!item.is_read && (
-                    <button
-                      type="button"
-                      onClick={() => void markRead(item)}
-                      disabled={busyId === item.id}
-                      className="inline-flex shrink-0 items-center gap-1 rounded-lg border border-slate-200 px-2.5 py-1.5 text-[10px] font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-50"
-                    >
-                      {busyId === item.id ? (
-                        <Loader2 size={12} className="animate-spin" />
-                      ) : (
-                        <Check size={12} />
-                      )}
-                      Đã đọc
-                    </button>
-                  )}
+                  <div className="flex shrink-0 items-center gap-1">
+                    {href && (
+                      <Link
+                        href={href}
+                        onClick={() => void markRead(item)}
+                        className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-2.5 py-1.5 text-[10px] font-semibold text-primary hover:bg-blue-50"
+                      >
+                        <ExternalLink size={12} />
+                        Xem
+                      </Link>
+                    )}
+                    {!item.is_read && (
+                      <button
+                        type="button"
+                        onClick={() => void markRead(item)}
+                        disabled={busyId === item.id}
+                        className="inline-flex shrink-0 items-center gap-1 rounded-lg border border-slate-200 px-2.5 py-1.5 text-[10px] font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-50"
+                      >
+                        {busyId === item.id ? (
+                          <Loader2 size={12} className="animate-spin" />
+                        ) : (
+                          <Check size={12} />
+                        )}
+                        Đã đọc
+                      </button>
+                    )}
+                  </div>
                 </li>
               );
             })}
@@ -555,7 +724,8 @@ export default function NotificationsPage() {
                         {CHANNEL_LABELS[item.channel] ?? item.channel}
                       </span>
                       <span className="mt-0.5 block text-[10px] text-slate-500">
-                        Bật/tắt sẽ tạo hoặc cập nhật cấu hình cho kênh này.
+                        {CHANNEL_NOTES[item.channel] ??
+                          "Bật/tắt sẽ tạo hoặc cập nhật cấu hình cho kênh này."}
                       </span>
                     </span>
                     <input
@@ -568,6 +738,21 @@ export default function NotificationsPage() {
                     />
                   </label>
                 ))
+              )}
+
+              {/*
+                The master switch is easy to leave off: the drawer used to render every channel as
+                "off" (SCRUM-48 default) so a single toggle saved `in_app: false` for the whole
+                account, and the inbox then stayed empty with nothing on screen to explain it
+                (SCRUM-70 gates the fan-out on this switch).
+              */}
+              {channels.some(
+                (item) => item.channel === "in_app" && !item.enabled,
+              ) && (
+                <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] text-amber-700">
+                  Kênh &quot;Trong ứng dụng&quot; đang tắt nên bạn sẽ không nhận thông báo nào. Bật
+                  lại để nhận thông báo mới.
+                </div>
               )}
 
               {settingsError && (
@@ -586,8 +771,9 @@ export default function NotificationsPage() {
             </div>
 
             <div className="border-t border-slate-100 px-5 py-3 text-[10px] text-slate-500">
-              Thay đổi được lưu ngay khi gạt công tắc. Các kênh này quyết định nơi hệ thống gửi
-              thông báo cho bạn.
+              Thay đổi được lưu ngay khi gạt công tắc. Chỉ kênh &quot;Trong ứng dụng&quot; đang hoạt
+              động: tắt nó thì hộp thư ngừng nhận thông báo mới (các thông báo cũ vẫn còn). Email và
+              thông báo đẩy cần một dịch vụ gửi mà hệ thống chưa cấu hình.
             </div>
           </div>
         </div>

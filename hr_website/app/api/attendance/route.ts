@@ -6,7 +6,11 @@
  *     description: |
  *       The Bảng công timesheet (SCRUM-21/22/29). Each row embeds the employee name, the branch
  *       (with its GPS centre and allowed radius, so the screen can judge the geofence) and the
- *       shift hours. Check-in and check-out themselves happen in the mobile app.
+ *       shift hours.
+ *
+ *       Rows are written by two clients since SCRUM-68: `POST /api/attendance/check-in` /
+ *       `check-out` on the web (GPS point, no photo) and the mobile app, which also captures the
+ *       check-in photo. Reviewing, correcting and verifying stay a web task.
  *     tags:
  *       - Attendance
  *     parameters:

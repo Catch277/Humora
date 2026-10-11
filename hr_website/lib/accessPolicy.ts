@@ -19,7 +19,7 @@ export const CAPABILITIES = [
   "dashboard:view",
   "notification:view",
   "knowledge:view",
-  /** Own requests / own shifts / own timesheet — every member, narrowed to own rows by RLS. */
+  /** Own requests / own shifts — every member, narrowed to own rows by RLS. */
   "request:view",
   /**
    * File one's own đơn (SCRUM-41). Every member holds it *except the organization's `OWNER`* (SCRUM-63):
@@ -29,11 +29,31 @@ export const CAPABILITIES = [
    */
   "request:create",
   "schedule:view",
-  "attendance:view",
+  /**
+   * Clock in / clock out (SCRUM-68). Every member holds it *except the organization's `OWNER`*: they
+   * stand above the operation, so `/check-in` offers them no button and both check-in endpoints answer
+   * `403`. The use case repeats the rule and `attendance_insert_own` refuses the row in the database.
+   */
+  "attendance:checkin",
+  /**
+   * One's own passkeys (SCRUM-79): `/security` is where a member turns Face ID quick login on for the
+   * device they are using. It grants no row and no branch — the credential lives in Supabase Auth, which
+   * scopes every passkey call to the signed-in caller — so every role holds it (see
+   * `EMPLOYEE_CAPABILITIES`, which carries the row the other two inherit).
+   */
+  "security:manage",
+
   /** Manager: run the operation. */
   "revenue:manage",
   "report:view",
   "employee-status:view",
+  /**
+   * The Bảng công review screen (SCRUM-21). Manager-only since SCRUM-68: an employee's own timesheet is
+   * `/check-in`, which reads `/api/attendance` under the same RLS, so the review screen — geofence
+   * verdict, sửa giờ, xử lý khiếu nại, xác nhận — is not theirs to open. Hidden rather than read-only
+   * because every action on it needs `attendance:review` anyway.
+   */
+  "attendance:view",
   "request:review",
   "schedule:manage",
   "attendance:review",
@@ -58,7 +78,14 @@ const EMPLOYEE_CAPABILITIES: readonly Capability[] = [
   "request:view",
   "request:create",
   "schedule:view",
-  "attendance:view",
+  // Every role holds `security:manage` too (SCRUM-79): a passkey belongs to the account, not to a job, so
+  // an owner and a manager turn Face ID on for themselves exactly like an employee does.
+  "security:manage",
+
+  // An employee does **not** hold `attendance:view` (SCRUM-68): the review screen is the manager's, and
+  // their own timesheet lives on `/check-in` (30-day history, same `/api/attendance` under RLS).
+  // Everybody below the owner clocks in though; see `OWNER_CAPABILITIES` for the exception.
+  "attendance:checkin",
 ];
 
 const MANAGER_CAPABILITIES: readonly Capability[] = [
@@ -68,6 +95,8 @@ const MANAGER_CAPABILITIES: readonly Capability[] = [
   "employee-status:view",
   "request:review",
   "schedule:manage",
+  // Bảng công review (SCRUM-21) — the employee half of this capability was removed by SCRUM-68.
+  "attendance:view",
   "attendance:review",
   "facility:manage",
   "branch:view",
@@ -78,13 +107,15 @@ const MANAGER_CAPABILITIES: readonly Capability[] = [
 /**
  * The owner may do everything a manager may, plus own the organization: its branches, its staff
  * accounts and its settings. Written as an extension so a capability added to `MANAGER` can never
- * be forgotten for `OWNER` — with one deliberate exception: the owner does not *file* đơn, because
- * they sit above the approval chain (SCRUM-63). `ReviewRequestUseCase` still allows an owner to
- * decide their own legacy request; the screen and the API simply no longer offer the submission.
+ * be forgotten for `OWNER` — with two deliberate exceptions, both describing the same idea (the owner
+ * sits above the day-to-day operation): they do not *file* đơn (SCRUM-63), and they do not *clock in*
+ * (SCRUM-68). `ReviewRequestUseCase` still allows an owner to decide their own legacy request; the
+ * screens and the APIs simply no longer offer those two actions.
  */
 const OWNER_CAPABILITIES: readonly Capability[] = [
   ...MANAGER_CAPABILITIES.filter(
-    (capability) => capability !== "request:create",
+    (capability) =>
+      capability !== "request:create" && capability !== "attendance:checkin",
   ),
   "branch:manage",
   "staff:manage",
@@ -118,12 +149,19 @@ export const SCREEN_ACCESS: readonly { path: string; capability: Capability }[] 
   { path: "/requests", capability: "request:view" },
   { path: "/schedules", capability: "schedule:view" },
   { path: "/employee-status", capability: "employee-status:view" },
+  // SCRUM-68 sits next to the timesheet it feeds: `/check-in` is where a ca is started and closed,
+  // `/attendance` is where a manager reviews the rows that come out of it.
+  { path: "/check-in", capability: "attendance:checkin" },
   { path: "/attendance", capability: "attendance:view" },
   { path: "/staff", capability: "staff:manage" },
   { path: "/reports", capability: "report:view" },
   { path: "/notifications", capability: "notification:view" },
   { path: "/chat", capability: "knowledge:view" },
   { path: "/organization", capability: "organization:manage" },
+  // SCRUM-79 sits at the end on purpose: it is an account setting rather than a daily destination, and
+  // the order here is only what `firstAccessiblePath` walks — the sidebar has its own list.
+  { path: "/security", capability: "security:manage" },
+
 ];
 
 /**

@@ -8,6 +8,8 @@ import {
   CircleDollarSign,
   FileText,
   CalendarRange,
+  Fingerprint,
+  ScanFace,
   Landmark,
   PackageSearch,
   UserCheck,
@@ -32,11 +34,13 @@ const navItems = [
   { name: "Đơn từ", href: "/requests", icon: FileText },
   { name: "Lịch làm việc", href: "/schedules", icon: CalendarRange },
   { name: "Trạng thái nhân viên", href: "/employee-status", icon: UserCheck },
+  { name: "Chấm công", href: "/check-in", icon: Fingerprint },
   { name: "Bảng công", href: "/attendance", icon: ClipboardCheck },
   { name: "Quản lý nhân sự", href: "/staff", icon: UsersRound },
   { name: "Báo cáo", href: "/reports", icon: PieChart },
   { name: "Thông báo", href: "/notifications", icon: Bell },
   { name: "Trợ lý AI", href: "/chat", icon: Bot },
+  { name: "Bảo mật", href: "/security", icon: ScanFace },
 ];
 
 type OrganizationSummary = {

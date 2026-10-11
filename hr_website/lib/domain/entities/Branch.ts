@@ -1,6 +1,15 @@
 export interface Branch {
   id: string;
   name: string;
+  /**
+   * The branch's own number inside the organization (SCRUM-67): `1`, `2`, … handed out once when the
+   * branch is created and never reused, which is what makes it stable — renaming a branch does not move
+   * it and deleting one does not renumber the others. It prefixes every asset code of the branch
+   * (`01HSVH-0001`), so the tag always says which branch the device belongs to even when two branches
+   * abbreviate to the same letters. `null` for a branch created before `SCRUM-67`; its tags fall back to
+   * the bare acronym.
+   */
+  asset_prefix: number | null;
   address: string | null;
   manager_id: string | null;
   latitude: number | null;

@@ -356,8 +356,13 @@ font-semibold text-blue-800` ("3 thông báo chưa đọc").
 
 Rules: header `bg-[#F3F6FC]` in uppercase micro-type; numeric columns `text-right` + `tabular-nums`;
 row separator `border-t border-slate-100`; money via `Intl.NumberFormat("vi-VN")`; wrap the table in an
-`overflow-x-auto` container inside the section; the editable cell (shifts grid) is a
-`min-h-[68px] rounded-lg border border-blue-100 bg-blue-50/60` button with a hover-only `Pencil`.
+`overflow-x-auto` container inside the section. The one grid-shaped table is `/schedules` (§8): the first
+column is the row header (the ca and its hours, on `bg-app`), the seven day columns carry the date they
+describe with today tinted `bg-blue-50/60`, and a cell stacks assignment blocks — `rounded-lg border px-2.5
+py-2` tinted by status (emerald `SCHEDULED`, blue `LEAVE`, slate `CANCELLED`) with a 24px initials avatar,
+the branch name, a status pill for anything but `SCHEDULED` and the note in `truncate`. A block keeps its
+`Sửa` / `Xoá` icons (`text-slate-400` until hovered); a cell reveals a dashed `+ Thêm` on hover, because
+only that cell knows the ca and the day being filled.
 
 ### 7.8 Modal / dialog
 
@@ -488,6 +493,23 @@ variant uses `border-slate-200 bg-white text-slate-900`.
 
 ---
 
+### 7.16 Inbox (Thông báo) — SCRUM-48 + SCRUM-70/71/72
+
+The inbox is a **read surface**: every row is written by a database trigger (`SCRUM-70/71/72`), so the
+screen never composes a notification — it labels, groups and links what it finds.
+
+| Element | Recipe |
+| --- | --- |
+| Page header | eyebrow `Hệ thống / SCRUM-48 · SCRUM-70`, then `Tải lại` and `Cài đặt kênh nhận` (secondary) plus `Đánh dấu tất cả đã đọc` (solid brand) |
+| Filter bar (§7.4) | Two rows: solid segmented tabs `Tất cả / Chưa đọc / Đã đọc`, then soft group chips (`bg-blue-50 text-primary`, `border-primary`) carrying the group icon — `Tất cả nhóm`, `Doanh thu`, `Đơn từ`, `Lịch làm việc`, `Chấm công`, `Nhân sự`, `Chi nhánh`, `Thiết bị`, `Tổ chức`. Each chip sets `aria-pressed`; the row is `role="group"` + `aria-label="Nhóm thông báo"` |
+| Row | 32px tinted icon (blue when unread, slate when read), title, body (the trigger's Vietnamese sentence), then `timestamp · <nhóm>` — never the raw `type` code |
+| Row actions | `Xem` — a link to the entity's screen, rendered only when `canAccessScreen` allows that role — and `Đã đọc` on an unread row |
+| Empty state | One plain sentence naming the real events, and when a filter is on, saying the filter is the reason |
+| Settings drawer | `Trong ứng dụng` (on by default and honoured by the fan-out), `Email` / `Thông báo đẩy` labelled *chưa được cấu hình*: the drawer must not imply a delivery that does not exist |
+| Live | 30s `setInterval` refresh (skipped while the tab is hidden) and the same 30s poll on the header bell — no spinner for a poll |
+
+---
+
 ## 8. Content, number & i18n conventions
 
 - **Copy is Vietnamese.** Labels are short, verb-first and sentence case except the uppercase eyebrows:
@@ -518,7 +540,7 @@ variant uses `border-slate-200 bg-white text-slate-900`.
 | Transitions | `transition-colors` on controls, `transition-shadow` on cards; nothing longer/exotic |
 | Labelling | Interactive filters carry `aria-label` (`Chi nhánh`, `Kỳ báo cáo`, `Tìm thông báo`); grouped buttons use `role="group"` + `aria-label` |
 | Destructive actions | Guarded with a native `confirm()` in the admin screens (e.g. deleting a shift) and a mandatory reason inside the reject dialog |
-| Data refresh | Pages use `fetch(..., { cache: "no-store" })`, a manual `Làm mới` button, and — on giám sát screens — a 60s `setInterval` poll |
+| Data refresh | Pages use `fetch(..., { cache: "no-store" })`, a manual `Làm mới` button, and — on giám sát screens — a 60s `setInterval` poll. The inbox and the header bell poll every 30s instead (a notification arrives while the screen is open) and hide the spinner for a poll |
 | Loading | Button label swap + `Loader2 animate-spin`; skeletons are not used yet |
 | Feedback | Inline error banners (rose) for form failures — the review flow now uses one too, instead of the `alert()` it used while it ran on the mock store |
 
@@ -537,11 +559,13 @@ Current `Sidebar` order (module → route → icon):
 | Đơn từ | `/requests` | `FileText` |
 | Lịch làm việc | `/schedules` | `CalendarRange` |
 | Trạng thái nhân viên | `/employee-status` | `UserCheck` |
+| Chấm công | `/check-in` | `Fingerprint` |
 | Bảng công | `/attendance` | `ClipboardCheck` |
 | Quản lý nhân sự | `/staff` | `UsersRound` |
 | Báo cáo | `/reports` | `PieChart` |
 | Thông báo | `/notifications` | `Bell` |
 | Trợ lý AI | `/chat` | `Bot` |
+| Bảo mật | `/security` | `ScanFace` |
 
 Sibling screens outside the sidebar: `/login` (sign-in — it hides the shell), `/register`
 (self-registration — hides the shell too, same card recipe with a fourth "Xác nhận mật khẩu" field),
@@ -564,14 +588,34 @@ Screens required by the in-flight epics, following the same header/card/badge la
 | Cơ sở vật chất theo chi nhánh | SCRUM-45/46 | `/facilities` ✅ built | Cơ sở vật chất | `PackageSearch` |
 | Lịch làm việc (phân ca theo tuần) | SCRUM-30 | `/schedules` ✅ built | Lịch làm việc | `CalendarRange` |
 | Chấm công (check-in/out + ảnh + toạ độ) | SCRUM-21/22/29 | `/attendance` ✅ built (web review side) | Bảng công | `ClipboardCheck` |
+| Chấm công trên web (vào ca / ra ca, GPS, không ảnh) | SCRUM-68 | `/check-in` ✅ built | Chấm công | `Fingerprint` |
 | Sửa giờ + xử lý khiếu nại | SCRUM-23 | `/attendance` ✅ built (dialog + badge, no new route) | Bảng công | `Pencil` / `Check` |
 | Quản lý nhân sự (vai trò, nghỉ việc) | SCRUM-24 | `/staff` ✅ built | Quản lý nhân sự | `UsersRound` |
 | Tổ chức + mã tham gia + danh sách tài khoản | SCRUM-51 | `/organization` ✅ built | Tổ chức | `Landmark` |
 | Tạo hoặc gia nhập tổ chức | SCRUM-51 | `/onboarding` ✅ built (shell-less) | Bắt đầu | `Landmark` / `KeyRound` |
 | Tài khoản do chủ sở hữu tạo (mật khẩu tạm) | SCRUM-52 | `/change-password` ✅ built (shell-less) | Đổi mật khẩu | `KeyRound` |
+| Đăng nhập nhanh bằng Face ID / Passkey | SCRUM-79 | `/security` ✅ built (+ nút ở `/login`) | Bảo mật | `ScanFace` |
 
-Check-in/check-out themselves are mobile-first (`hr_mobile_app`); the web counterpart is the review
-screen (ảnh xác minh + toạ độ + trạng thái hợp lệ).
+Check-in/check-out themselves were mobile-first (`hr_mobile_app`); since SCRUM-68 the web records them too,
+so `/check-in` (vào ca / ra ca) writes the row and `/attendance` stays the **manager's** review screen (ảnh
+xác minh + toạ độ + trạng thái hợp lệ + sửa giờ) — `attendance:view` is no longer an employee capability, and
+the employee's own timesheet is the 30-day list on `/check-in`. Two states the screen must get right:
+a check-out stores `EARLY_LEAVE` only onto an `ON_TIME` row (a late arrival never loses its `LATE`), and while
+the ca is still running the same button re-opens the row ("Vào ca lại") instead of creating a second one —
+re-deriving the arrival verdict from the stored giờ vào, never from the status column a previous write left
+behind. "Giờ làm" counts only the worked segments (SCRUM-69: the pause between "Ra ca" and "Vào ca lại" is not
+working time), so both screens read it from `effectiveWorkedHours` rather than subtracting the two timestamps —
+and a ca nobody closed ends at the **ca's end time** (SCRUM-75), rendered as `09:14 → 17:00` plus a grey
+**tự động** chip and the tooltip "Nhân viên không bấm Ra ca…", because a forgotten click is a fact the reviewer
+must be able to see. The inference is only drawn for a row with no giờ ra once the ca's end has passed (a real
+check-out always wins, a running ca keeps `--:--`, and no `EARLY_LEAVE` is ever derived from it), and the
+"Sửa giờ" dialog pre-fills it so one save records it as a real check-out. The
+organization's `OWNER` never clocks in — the capability `attendance:checkin` is filtered out of their row, so
+the link is not rendered and the API answers `403`; `attendance_insert_own` (SCRUM-68) repeats the rule in the
+database. No photo from the browser: there is no Storage bucket, so `check_in_photo_url` stays null and the
+review screen shows "Ảnh xác minh: —". The screen carries a "Chỉ công của tôi" toggle for the account that runs
+it: a manager and the owner track the organization here, and their own ca must be findable in the same list
+(it travels to the API as `employee_id`, so the KPI cards and the table agree).
 
 ---
 
@@ -649,7 +693,9 @@ Known inconsistencies to fix when the relevant screen is next touched (do not ma
    offers only accounts whose `is_active` is true — the earlier `GET /api/search?type=users` flow needed two
    characters and a click on "Tìm", and could not tell an employee who had quit from one who still works. Its
    "Ca làm việc" `<select>` reads the per-organization catalogue, so an unseeded organization gets a hint
-   naming `supabase/sql/SCRUM-58_shift_catalogue.sql` instead of an unexplained empty list. The `MockShift`
+   naming `supabase/sql/SCRUM-58_shift_catalogue.sql` instead of an unexplained empty list. The week is a
+   table now (§7.7): one row per ca with `Nghỉ` last, seven day columns, one block per assignment, and the
+   picker ordered by the same `compareShiftsByStartTime`. The `MockShift`
    helpers mentioned here are gone: SCRUM-22 deleted `lib/mock/adminStore.ts`.
 8. `/facilities` and `/schedules` are the first screens with **pills for one dimension + `<select>`s for
    another** (facilities: condition pills + branch/category selects; schedules: status pills + branch
@@ -672,9 +718,11 @@ Known inconsistencies to fix when the relevant screen is next touched (do not ma
     reach a `403`. The visible consequences are deliberate:
     - a manager (`branch:view` without `branch:manage`) opens `/branches` **read-only** — the header has no
       "Thêm chi nhánh" and the row's action column reads "Chỉ xem" instead of "Chỉnh sửa";
-    - an employee (`request:view`, `schedule:view`, `attendance:view`) opens `/requests` as "Đơn từ của
-      tôi", `/schedules` without "Xếp ca / Sửa / Xoá", and `/attendance` without "Xác nhận / Sửa giờ / Xử
-      lý khiếu nại" — but keeps "Ghi khiếu nại", which the API accepts for the employee on the record;
+    - an employee (`request:view`, `schedule:view`, `attendance:checkin`) opens `/requests` as "Đơn từ của
+      tôi", `/schedules` without "Xếp ca / Sửa / Xoá" (their own ca are the schedule they see), and
+      `/check-in` for vào ca / ra ca and their own 30-day timesheet. They hold no `attendance:view`, so
+      `/attendance` — the Bảng công review screen — is not in their sidebar and a deep link is bounced
+      (SCRUM-68: it only ever held reviewer actions, which need `attendance:review`);
     - `/requests` also *submits*, but never for the owner: "Tạo đơn" (`request:create`) opens a dialog with
       the đơn type (`REQUEST_TYPES`), the branch, a title and an optional note, and posts it as the caller's
       own `PENDING` row — the same queue a manager then reviews, which is what closes the loop the screen
@@ -690,8 +738,8 @@ Known inconsistencies to fix when the relevant screen is next touched (do not ma
 12. Branch scope and deletion (SCRUM-61). A chi nhánh trưởng (`branches.manager_id`) manages only their
     branch, and the UI has to *show* that instead of letting the click reach a `403`:
     - every picker whose value is the target of a write (the revenue branch select, the "Chi nhánh" field
-      of the schedule and facility modals) renders the branches the caller does not head as
-      `disabled` options labelled `— chỉ xem`, and opens on the caller's own branch
+      of the facility modal) renders the branches the caller does not head as `disabled` options labelled
+      `— chỉ xem`, and opens on the caller's own branch
       (`defaultBranchId`) rather than on whichever row the API sorted first;
     - the **Chi nhánh trưởng** field of the branch modal lists only `OWNER`/`MANAGER` accounts (`isManagerRole`
       over the SCRUM-24 directory): an employee is not offered, and the API answers `400` if one is sent;
@@ -725,7 +773,16 @@ Known inconsistencies to fix when the relevant screen is next touched (do not ma
       `branches.manager_id` (or "Chưa phụ trách chi nhánh nào — vẫn xem được toàn tổ chức") — never the
       amber "Chưa gán: không thấy ca, bảng công hay gửi được đơn" warning, which would be false: a manager
       reads the whole organization (SCRUM-60). Both that warning and the select are reserved for an
-      `EMPLOYEE`, the only role the branch narrowing actually constrains.
+      `EMPLOYEE`, the only role the branch narrowing actually constrains;
+    - **`/schedules` is scoped to the branches the caller runs** (SCRUM-63): the branch filter and the
+      modal's "Chi nhánh" field list `scopedBranches` (every branch for the owner, the headed ones for a
+      manager) instead of graying the others out, the week table and the four KPI cards count the same rows
+      (`visibleAssignments`), and the employee combobox offers **only** `EMPLOYEE` accounts of those
+      branches — each row labelled with their chi nhánh instead of the role, which is now always "Nhân
+      viên". A manager who heads no branch reads "Bạn chưa phụ trách chi nhánh nào nên chưa xếp ca được";
+    - the **header** prints that same scope under the account name: the branch a manager heads (joined
+      with ", " when they head several, truncated to 13 rem with the full text in `title`), or the
+      employee's own branch ("Chưa gán chi nhánh" while unassigned) — and nothing at all for the owner.
 
 ---
 

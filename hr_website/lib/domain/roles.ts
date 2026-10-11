@@ -60,3 +60,12 @@ export function isOwnerRole(raw: string | null | undefined): boolean {
 export function isBranchHeadRole(raw: string | null | undefined): boolean {
   return normalizeRole(raw) === "MANAGER";
 }
+
+/**
+ * True for `EMPLOYEE` only — the role a shift is actually scheduled for (SCRUM-63). A manager and the
+ * organization's owner run the operation, so a ca is never assigned to them and the schedule picker
+ * leaves them out.
+ */
+export function isEmployeeRole(raw: string | null | undefined): boolean {
+  return normalizeRole(raw) === "EMPLOYEE";
+}

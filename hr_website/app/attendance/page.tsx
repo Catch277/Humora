@@ -11,6 +11,7 @@ import {
   RefreshCw,
   Search,
   ShieldCheck,
+  UserRound,
   X,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
@@ -22,6 +23,10 @@ import {
   type Attendance,
   type AttendanceStatus,
 } from "@/lib/domain/entities/Attendance";
+import {
+  effectiveCheckOut,
+  effectiveWorkedHours,
+} from "@/lib/usecases/attendanceAutoClose";
 
 // SCRUM-61 needs `manager_id`: it is what says whether the caller heads the branch.
 type Branch = { id: string; name: string; manager_id: string | null };
@@ -143,22 +148,6 @@ function weekdayShort(value: string): string {
   return WEEKDAY_SHORT[weekday];
 }
 
-/** Hours between check-in and check-out, one decimal; null while the shift is still open. */
-function workedHours(record: Attendance): number | null {
-  if (!record.check_in_at || !record.check_out_at) {
-    return null;
-  }
-
-  const start = new Date(record.check_in_at).getTime();
-  const end = new Date(record.check_out_at).getTime();
-
-  if (Number.isNaN(start) || Number.isNaN(end) || end < start) {
-    return null;
-  }
-
-  return Math.round(((end - start) / 3_600_000) * 10) / 10;
-}
-
 type GeofenceVerdict = "INSIDE" | "OUTSIDE" | "UNKNOWN";
 
 /**
@@ -214,10 +203,11 @@ function initials(fullName: string | undefined): string {
 }
 
 export default function AttendancePage() {
-  // SCRUM-59/61: every role may open the timesheet (`attendance:view`, narrowed to own rows by
-  // SCRUM-60), but Xác nhận / xử lý khiếu nại / sửa giờ are the reviewer's actions — and only for the
-  // branch they head. Raising a complaint stays available because the API also accepts the
-  // employee's own record.
+  // SCRUM-59/61: opening the timesheet is `attendance:view` — a manager capability since SCRUM-68, when
+  // the employee's own timesheet moved to `/check-in` (the review screen's every action needs
+  // `attendance:review` anyway, so an employee would only ever have read it). For a manager the screen
+  // stays read-only outside the branches they head: Xác nhận / xử lý khiếu nại / sửa giờ are allowed only
+  // there, while a complaint can still be raised on any record they can see.
   const { profile, can } = useProfile();
   const viewerId = profile?.id ?? null;
   const managesAllBranches = can("branch:manage");
@@ -239,6 +229,18 @@ export default function AttendancePage() {
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
   const [query, setQuery] = useState("");
+  /**
+   * "Chỉ công của tôi": the same list, narrowed to the signed-in account's own rows.
+   *
+   * A manager and the owner track the organization on this screen; their own ca have to be findable in it
+   * too, and an employee cannot open the screen at all (SCRUM-68 — their own history is `/check-in`). It
+   * travels to the API as `employee_id`, so the KPI cards, the counters and the table all describe the same
+   * rows instead of the header promising a number the list does not show.
+   */
+  const [mineOnly, setMineOnly] = useState(false);
+
+  /** The viewer's own id while the shortcut is on — `null` otherwise, and while the profile is loading. */
+  const mineEmployeeId = mineOnly ? viewerId : null;
   const [complaintTarget, setComplaintTarget] = useState<ComplaintTarget | null>(null);
   const [complaintText, setComplaintText] = useState("");
   const [savingComplaint, setSavingComplaint] = useState(false);
@@ -262,7 +264,7 @@ export default function AttendancePage() {
     let cancelled = false;
 
     async function load(): Promise<LoadResult> {
-      // Branch, status and date range are filtered by the database because a timesheet grows by
+      // Branch, status, employee and date range are filtered by the database because a timesheet grows by
       // one row per employee per shift; only the name search is client-side.
       const params = new URLSearchParams();
 
@@ -272,6 +274,12 @@ export default function AttendancePage() {
 
       if (statusFilter !== ALL) {
         params.set("status", statusFilter);
+      }
+
+      // `mineEmployeeId` is the viewer's id while "Chỉ công của tôi" is on, otherwise null: the value (not
+      // the flag) is what the effect depends on, so the first load does not refetch when the profile lands.
+      if (mineEmployeeId) {
+        params.set("employee_id", mineEmployeeId);
       }
 
       if (startDate) {
@@ -337,7 +345,7 @@ export default function AttendancePage() {
     return () => {
       cancelled = true;
     };
-  }, [branchFilter, statusFilter, startDate, endDate, reloadToken]);
+  }, [branchFilter, statusFilter, mineEmployeeId, startDate, endDate, reloadToken]);
 
   function refresh() {
     setLoading(true);
@@ -366,9 +374,14 @@ export default function AttendancePage() {
     (record) => record.complaint_status === "OPEN",
   ).length;
   const attentionCount = records.filter(needsAttention).length;
+  // Giờ làm counts the ca's end time for a record nobody closed (SCRUM-75), which is why the total
+  // uses the effective figure and not only what the database accumulated.
   const totalHours =
     Math.round(
-      records.reduce((total, record) => total + (workedHours(record) ?? 0), 0) * 10,
+      records.reduce(
+        (total, record) => total + (effectiveWorkedHours(record, record.shift) ?? 0),
+        0,
+      ) * 10,
     ) / 10;
 
   function actionErrorMessage(
@@ -480,7 +493,9 @@ export default function AttendancePage() {
     });
     setCorrectionForm({
       checkIn: toBangkokInputValue(record.check_in_at),
-      checkOut: toBangkokInputValue(record.check_out_at),
+      // A record the system closed at the ca's end time (SCRUM-75) is pre-filled with that value, so
+      // "Lưu thay đổi" turns the fallback into a recorded check-out with who and why attached.
+      checkOut: toBangkokInputValue(effectiveCheckOut(record, record.shift).at),
       status: record.status,
       note: record.note ?? "",
       reason: "",
@@ -681,6 +696,20 @@ export default function AttendancePage() {
           </label>
 
           <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setMineOnly((current) => !current)}
+              aria-pressed={mineOnly}
+              className={`inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-xs transition-colors ${
+                mineOnly
+                  ? "border-blue-200 bg-blue-50 font-semibold text-primary"
+                  : "border-slate-200 bg-surface font-medium text-slate-700 hover:bg-slate-50"
+              }`}
+            >
+              <UserRound size={14} />
+              Chỉ công của tôi
+            </button>
+
             <select
               aria-label="Lọc theo chi nhánh"
               value={branchFilter}
@@ -788,7 +817,10 @@ export default function AttendancePage() {
               {!loading &&
                 filtered.map((record) => {
                   const verdict = geofenceVerdict(record);
-                  const hours = workedHours(record);
+                  // A record nobody closed reads as closed at the ca's end time (SCRUM-75); a real
+                  // check-out always wins over that fallback.
+                  const checkOut = effectiveCheckOut(record, record.shift);
+                  const hours = effectiveWorkedHours(record, record.shift);
 
                   return (
                     <tr
@@ -824,8 +856,16 @@ export default function AttendancePage() {
                         <span className="inline-flex items-center gap-1">
                           <Clock3 size={12} className="text-slate-400" />
                           {formatTime(record.check_in_at)} →{" "}
-                          {formatTime(record.check_out_at)}
+                          {formatTime(checkOut.at)}
                         </span>
+                        {checkOut.automatic && (
+                          <span
+                            className="ml-1.5 inline-flex rounded-full bg-slate-100 px-1.5 py-0.5 text-[9px] font-semibold text-slate-500"
+                            title="Nhân viên không bấm Ra ca: hệ thống ghi giờ ra bằng giờ kết thúc ca. Quản lý sửa giờ nếu thực tế khác."
+                          >
+                            tự động
+                          </span>
+                        )}
                       </td>
                       <td className="px-4 py-4 text-right tabular-nums text-slate-700">
                         {hours === null ? "—" : `${hours} h`}

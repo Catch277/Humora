@@ -13,12 +13,15 @@ import {
 import { useEffect, useMemo, useState } from "react";
 
 import { roleLabel } from "@/lib/accessPolicy";
+import { useProfile } from "@/components/ProfileProvider";
+import { canManageBranch } from "@/lib/domain/branchScope";
 import type {
   EmployeeStatus,
   EmployeeStatusValue,
 } from "@/lib/domain/entities/EmployeeStatus";
 
-type Branch = { id: string; name: string };
+// SCRUM-63 needs `manager_id`: it is what says whether the caller heads the branch.
+type Branch = { id: string; name: string; manager_id: string | null };
 
 type LoadResult = {
   statuses: EmployeeStatus[];
@@ -98,6 +101,12 @@ function initials(fullName: string): string {
 }
 
 export default function EmployeeStatusPage() {
+  // SCRUM-63: the API already returns only the branches this caller runs, so the branch filter offers
+  // the same set — a filter that could only ever answer "không có ai" would be a lie on screen.
+  const { profile, can } = useProfile();
+  const viewerId = profile?.id ?? null;
+  const managesAllBranches = can("branch:manage");
+
   const [statuses, setStatuses] = useState<EmployeeStatus[]>([]);
   const [branches, setBranches] = useState<Branch[]>([]);
   const [loading, setLoading] = useState(true);
@@ -200,6 +209,16 @@ export default function EmployeeStatusPage() {
     setPageError("");
     setReloadToken((token) => token + 1);
   }
+
+  // A branch the caller does not head is not in the API's answer either, so the filter lists the same
+  // branches the roster can contain (SCRUM-63).
+  const scopedBranches = useMemo(
+    () =>
+      branches.filter((branch) =>
+        canManageBranch(branch, { userId: viewerId, managesAllBranches }),
+      ),
+    [branches, viewerId, managesAllBranches],
+  );
 
   const filtered = useMemo(() => {
     const keyword = query.trim().toLowerCase();
@@ -354,15 +373,19 @@ export default function EmployeeStatusPage() {
               onChange={(event) => setBranchFilter(event.target.value)}
               className="rounded-lg border border-slate-200 bg-surface px-3 py-2 text-xs outline-none focus:border-primary"
             >
-              <option value={ALL}>Tất cả chi nhánh</option>
-              {branches.map((branch) => (
+              <option value={ALL}>
+                {managesAllBranches ? "Tất cả chi nhánh" : "Tất cả chi nhánh bạn phụ trách"}
+              </option>
+              {scopedBranches.map((branch) => (
                 <option key={branch.id} value={branch.id}>
                   {branch.name}
                 </option>
               ))}
             </select>
             <p className="text-[10px] text-slate-400">
-              {filtered.length} nhân sự · tự động làm mới mỗi phút
+              {filtered.length} nhân sự
+              {managesAllBranches ? "" : " thuộc chi nhánh bạn phụ trách"} · tự động làm mới
+              mỗi phút
             </p>
           </div>
         </div>

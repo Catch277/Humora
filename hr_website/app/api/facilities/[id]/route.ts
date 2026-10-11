@@ -3,7 +3,7 @@
  * /api/facilities/{id}:
  *   put:
  *     summary: Update a facility
- *     description: Replaces the editable fields of one facility. Restricted to managers (`facility:manage`, SCRUM-59) and enforced by RLS; a hidden or unknown id answers 404. SCRUM-45.
+ *     description: Replaces the editable fields of one facility. Restricted to managers (`facility:manage`, SCRUM-59) and enforced by RLS; a hidden or unknown id answers 404. SCRUM-45. SCRUM-67 — the request must not carry a `code`; the stored tag is kept while it still matches the branch, and a facility moved to another branch (or one holding a legacy code) is given a fresh tag for the branch it lands in.
  *     tags:
  *       - Facilities
  *     parameters:
@@ -27,7 +27,7 @@
  *             schema:
  *               $ref: '#/components/schemas/Facility'
  *       400:
- *         description: The id is not a UUID, or the request body is invalid.
+ *         description: The id is not a UUID, or the request body is invalid (including a `code`, which is generated — SCRUM-67).
  *         content:
  *           application/json:
  *             schema:
@@ -46,6 +46,12 @@
  *               $ref: '#/components/schemas/ErrorResponse'
  *       404:
  *         description: The facility does not exist or is not updatable by the caller.
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       409:
+ *         description: The asset code is already used by another facility of the organization (SCRUM-66).
  *         content:
  *           application/json:
  *             schema:
@@ -115,6 +121,8 @@ import { NextResponse } from "next/server";
 
 import { BranchForbiddenError } from "@/lib/domain/errors/BranchForbiddenError";
 import { BranchNotFoundError } from "@/lib/domain/errors/BranchNotFoundError";
+import { FacilityCategoryNotFoundError } from "@/lib/domain/errors/FacilityCategoryNotFoundError";
+import { FacilityCodeConflictError } from "@/lib/domain/errors/FacilityCodeConflictError";
 import { FacilityNotFoundError } from "@/lib/domain/errors/FacilityNotFoundError";
 import { SupabaseBranchRepository } from "@/lib/infrastructure/repositories/SupabaseBranchRepository";
 import { SupabaseFacilityRepository } from "@/lib/infrastructure/repositories/SupabaseFacilityRepository";
@@ -180,6 +188,18 @@ export async function PUT(
 
     if (error instanceof FacilityNotFoundError) {
       return NextResponse.json({ error: error.message }, { status: 404 });
+    }
+
+    // SCRUM-65: the category is no longer a fixed list, so "unknown group" is a `400` the operator can
+    // fix by reloading the form rather than a `500` from the foreign key.
+    if (error instanceof FacilityCategoryNotFoundError) {
+      return NextResponse.json({ error: error.message }, { status: 400 });
+    }
+
+    // SCRUM-66/67: `code` is unique per organization; a generated tag only reaches this through a race
+    // between two saves, so the answer is `409` (retry), never a `500`.
+    if (error instanceof FacilityCodeConflictError) {
+      return NextResponse.json({ error: error.message }, { status: 409 });
     }
 
     console.error("Failed to update facility", error);
