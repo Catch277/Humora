@@ -31,10 +31,11 @@ dependencies:
   flutter:
     sdk: flutter
   camera: ^0.11.0+2   #Xử lý mở camera và chụp ảnh
-  http: ^1.2.1    #gọi  API lấy địa chỉ IP công cộng
+  http: ^1.6.0    #gọi  API lấy địa chỉ IP công cộng
   cupertino_icons: ^1.0.8
   supabase_flutter: ^2.17.2
   intl: ^0.20.3 
+  geolocator: ^14.1.1
 
 dev_dependencies:
   flutter_test:

@@ -34,18 +34,12 @@ class _LoginScreenState extends State<LoginScreen>
     );
 
     _slideAnimation = Tween<Offset>(
-<<<<<<< HEAD
-      begin: const Offset(0, 1), // Bắt đầu ở vị trí khuất bên dưới
-      end: Offset.zero, // Trượt lên vị trí gốc
-    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeOutCubic));
-=======
-      begin: const Offset(0, 1),
+      begin: const Offset(0, 0.2),
       end: Offset.zero,
     ).animate(CurvedAnimation(
       parent: _controller,
       curve: Curves.easeOutCubic,
     ));
->>>>>>> a084c334e8c7cf84edd2d67dc131a8c94b2212a9
 
     _controller.forward();
   }
@@ -145,319 +139,388 @@ class _LoginScreenState extends State<LoginScreen>
     final size = MediaQuery.of(context).size;
 
     return Scaffold(
-<<<<<<< HEAD
-      backgroundColor:
-          Colors.blue[200], // Màu nền xanh nhạt cho toàn bộ màn hình
-=======
-      backgroundColor: Colors.blue[200],
->>>>>>> a084c334e8c7cf84edd2d67dc131a8c94b2212a9
+      backgroundColor: const Color(0xFFE9EEF9),
       body: Stack(
         children: [
-          // 1. Background Image
+          // Background Gradient Spheres (Trang trí hiệu ứng nền bóng mờ)
           Positioned(
-            top: 0,
-            left: 0,
-            right: 0,
-            height: size.height * 0.45,
-            child: Stack(
-              children: [
-                Container(
-                  decoration: const BoxDecoration(
-                    image: DecorationImage(
-<<<<<<< HEAD
-                      image: AssetImage(
-                        'assets/images/bg.png',
-                      ), // Đổi tên file ảnh của bạn tại đây
-=======
-                      image: AssetImage('assets/images/bg.png'),
->>>>>>> a084c334e8c7cf84edd2d67dc131a8c94b2212a9
-                      fit: BoxFit.cover,
-                    ),
-                  ),
-                ),
-<<<<<<< HEAD
-                // Lớp phủ đen mờ nhẹ giúp chữ Welcome nổi bật
-                Container(color: Colors.black.withOpacity(0.2)),
-                // Text Welcome Back
-=======
-                Container(color: Colors.black.withOpacity(0.2)),
->>>>>>> a084c334e8c7cf84edd2d67dc131a8c94b2212a9
-                Positioned(
-                  top: size.height * 0.12,
-                  left: 28,
-                  child: Text(
-<<<<<<< HEAD
-                    'Welcome\nHuman Resources!',
-=======
-                    'Welcome Humora\nQuản lý nhân sự',
->>>>>>> a084c334e8c7cf84edd2d67dc131a8c94b2212a9
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 34,
-                      fontWeight: FontWeight.bold,
-                      height: 1.2,
-<<<<<<< HEAD
-                      // Thêm danh sách các bóng ở đây
-                      shadows: [
-                        Shadow(
-                          offset: const Offset(
-                            2.0,
-                            2.0,
-                          ), // Độ lệch x, y của bóng
-                          blurRadius: 6.0, // Độ mờ nhòe của bóng
-                          color: Colors.black.withOpacity(
-                            0.7,
-                          ), // Màu sắc và độ trong suốt của bóng
-=======
-                      shadows: [
-                        Shadow(
-                          offset: const Offset(2.0, 2.0),
-                          blurRadius: 6.0,
-                          color: Colors.black.withOpacity(0.7),
->>>>>>> a084c334e8c7cf84edd2d67dc131a8c94b2212a9
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-
-          // 2. Thẻ Form Login
-          Align(
-            alignment: Alignment.bottomCenter,
-            child: SlideTransition(
-              position: _slideAnimation,
-              child: Container(
-                height: size.height * 0.62,
-                width: double.infinity,
-                decoration: const BoxDecoration(
-<<<<<<< HEAD
-                  color: Color.fromARGB(
-                    255,
-                    253,
-                    252,
-                    252,
-                  ), // Tone đen xám hiện đại
-=======
-                  color: Color.fromARGB(255, 253, 252, 252),
->>>>>>> a084c334e8c7cf84edd2d67dc131a8c94b2212a9
-                  borderRadius: BorderRadius.only(
-                    topLeft: Radius.circular(36),
-                    topRight: Radius.circular(36),
-                  ),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black54,
-                      blurRadius: 20,
-                      spreadRadius: 5,
-                    ),
-                  ],
-                ),
-                child: Stack(
-                  clipBehavior: Clip.none,
-                  children: [
-                    // Floating Action Button cho Đăng Nhập
-                    Positioned(
-                      top: -28,
-                      right: 32,
-                      child: FloatingActionButton(
-                        onPressed: _isLoading ? null : _loginWithSupabase,
-                        elevation: 6,
-                        backgroundColor: Colors.white,
-                        shape: const CircleBorder(),
-                        child: _isLoading
-                            ? const SizedBox(
-                                width: 22,
-                                height: 22,
-                                child: CircularProgressIndicator(strokeWidth: 2),
-                              )
-                            : const Icon(
-                                Icons.arrow_forward,
-                                color: Colors.black,
-                              ),
-                      ),
-                    ),
-
-                    // Nội dung Form
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(28, 40, 28, 20),
-                      child: SingleChildScrollView(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Text(
-                              'Login',
-                              style: TextStyle(
-                                color: Colors.black,
-                                fontSize: 26,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                            const SizedBox(height: 24),
-
-                            // Input Email
-                            TextField(
-<<<<<<< HEAD
-                              style: const TextStyle(
-                                color: Color.fromARGB(255, 0, 0, 0),
-                              ),
-                              decoration: InputDecoration(
-                                hintText: 'Email address',
-                                hintStyle: TextStyle(
-                                  color: const Color.fromARGB(255, 11, 11, 11),
-                                ),
-                                enabledBorder: UnderlineInputBorder(
-                                  borderSide: BorderSide(
-                                    color: Colors.grey[800]!,
-                                  ),
-                                ),
-                                focusedBorder: const UnderlineInputBorder(
-                                  borderSide: BorderSide(
-                                    color: Color.fromARGB(255, 0, 0, 0),
-                                  ),
-=======
-                              controller: _emailController,
-                              keyboardType: TextInputType.emailAddress,
-                              style: const TextStyle(color: Colors.black),
-                              decoration: InputDecoration(
-                                hintText: 'Email address',
-                                hintStyle: const TextStyle(color: Colors.grey),
-                                enabledBorder: UnderlineInputBorder(
-                                  borderSide: BorderSide(color: Colors.grey[400]!),
-                                ),
-                                focusedBorder: const UnderlineInputBorder(
-                                  borderSide: BorderSide(color: Colors.black),
->>>>>>> a084c334e8c7cf84edd2d67dc131a8c94b2212a9
-                                ),
-                              ),
-                            ),
-                            const SizedBox(height: 20),
-
-                            // Input Password
-                            TextField(
-                              controller: _passwordController,
-                              obscureText: _obscurePassword,
-                              style: const TextStyle(color: Colors.black),
-                              decoration: InputDecoration(
-                                hintText: 'Password',
-<<<<<<< HEAD
-                                hintStyle: TextStyle(
-                                  color: const Color.fromARGB(255, 11, 11, 11),
-                                ),
-                                suffixIcon: Icon(
-                                  Icons.visibility_off_outlined,
-                                  color: Colors.grey[500],
-                                ),
-                                enabledBorder: UnderlineInputBorder(
-                                  borderSide: BorderSide(
-                                    color: Colors.grey[800]!,
-                                  ),
-=======
-                                hintStyle: const TextStyle(color: Colors.grey),
-                                suffixIcon: IconButton(
-                                  icon: Icon(
-                                    _obscurePassword
-                                        ? Icons.visibility_off_outlined
-                                        : Icons.visibility_outlined,
-                                    color: Colors.grey,
-                                  ),
-                                  onPressed: () {
-                                    setState(() {
-                                      _obscurePassword = !_obscurePassword;
-                                    });
-                                  },
-                                ),
-                                enabledBorder: UnderlineInputBorder(
-                                  borderSide: BorderSide(color: Colors.grey[400]!),
->>>>>>> a084c334e8c7cf84edd2d67dc131a8c94b2212a9
-                                ),
-                                focusedBorder: const UnderlineInputBorder(
-                                  borderSide: BorderSide(color: Colors.black),
-                                ),
-                              ),
-                            ),
-
-                            // Quên mật khẩu
-                            Align(
-                              alignment: Alignment.centerRight,
-                              child: TextButton(
-                                onPressed: () {},
-                                child: const Text(
-                                  'Forgot password?',
-<<<<<<< HEAD
-                                  style: TextStyle(
-                                    color: Colors.grey[400],
-                                    fontSize: 13,
-                                  ),
-=======
-                                  style: TextStyle(color: Colors.grey, fontSize: 13),
->>>>>>> a084c334e8c7cf84edd2d67dc131a8c94b2212a9
-                                ),
-                              ),
-                            ),
-
-                            // Option Remember me
-                            Row(
-                              children: [
-                                SizedBox(
-                                  height: 24,
-                                  width: 24,
-                                  child: Checkbox(
-                                    value: _rememberMe,
-<<<<<<< HEAD
-                                    activeColor: Colors.white,
-                                    checkColor: Colors.black,
-                                    side: BorderSide(
-                                      color: const Color.fromARGB(
-                                        255,
-                                        10,
-                                        10,
-                                        10,
-                                      )!,
-                                    ),
-=======
-                                    activeColor: Colors.black,
-                                    checkColor: Colors.white,
-                                    side: const BorderSide(color: Colors.grey),
->>>>>>> a084c334e8c7cf84edd2d67dc131a8c94b2212a9
-                                    onChanged: (value) {
-                                      setState(() {
-                                        _rememberMe = value ?? false;
-                                      });
-                                    },
-                                  ),
-                                ),
-                                const SizedBox(width: 8),
-                                const Text(
-                                  'Remember me',
-<<<<<<< HEAD
-                                  style: TextStyle(
-                                    color: const Color.fromARGB(255, 9, 9, 9),
-                                    fontSize: 14,
-                                  ),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 35),
-=======
-                                  style: TextStyle(color: Colors.black, fontSize: 14),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 25),
->>>>>>> a084c334e8c7cf84edd2d67dc131a8c94b2212a9
-                          ],
-                        ),
-                      ),
-                    ),
+            top: -60,
+            left: -60,
+            child: Container(
+              width: 260,
+              height: 260,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                gradient: RadialGradient(
+                  colors: [
+                    Colors.white.withOpacity(0.9),
+                    const Color(0xFFC7D7F8).withOpacity(0.4),
+                    Colors.transparent,
                   ],
                 ),
               ),
             ),
           ),
+          Positioned(
+            top: size.height * 0.18,
+            right: -50,
+            child: Container(
+              width: 180,
+              height: 180,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                gradient: RadialGradient(
+                  colors: [
+                    Colors.white.withOpacity(0.8),
+                    const Color(0xFFC7D7F8).withOpacity(0.3),
+                    Colors.transparent,
+                  ],
+                ),
+              ),
+            ),
+          ),
+          Positioned(
+            bottom: -50,
+            right: -30,
+            child: Container(
+              width: 280,
+              height: 280,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                gradient: RadialGradient(
+                  colors: [
+                    const Color(0xFF2563EB).withOpacity(0.2),
+                    Colors.white.withOpacity(0.5),
+                    Colors.transparent,
+                  ],
+                ),
+              ),
+            ),
+          ),
+
+          // Top Header Icon (Chế độ ban đêm / Icon moon)
+          Positioned(
+            top: 50,
+            right: 24,
+            child: Container(
+              width: 44,
+              height: 44,
+              decoration: BoxDecoration(
+                color: const Color(0xFFE0E7F5),
+                shape: BoxShape.circle,
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.white.withOpacity(0.8),
+                    offset: const Offset(-4, -4),
+                    blurRadius: 8,
+                  ),
+                  BoxShadow(
+                    color: const Color(0xFFA6B4C9).withOpacity(0.5),
+                    offset: const Offset(4, 4),
+                    blurRadius: 8,
+                  ),
+                ],
+              ),
+              child: const Icon(Icons.nightlight_round, color: Color(0xFF1E293B), size: 20),
+            ),
+          ),
+
+          // Nội dung Form Đăng Nhập
+          SafeArea(
+            child: Center(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 16),
+                child: SlideTransition(
+                  position: _slideAnimation,
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const SizedBox(height: 10),
+                      
+                      // Logo bg.png
+Container(
+  width: 130,
+  height: 130,
+  padding: const EdgeInsets.all(16), // Khoảng lề giúp ảnh nằm gọn đẹp trong thẻ
+  decoration: BoxDecoration(
+    color: const Color(0xFFE9EEF9),
+    borderRadius: BorderRadius.circular(36),
+    boxShadow: [
+      BoxShadow(
+        color: Colors.white.withOpacity(0.9),
+        offset: const Offset(-8, -8),
+        blurRadius: 16,
+      ),
+      BoxShadow(
+        color: const Color(0xFFA6B4C9).withOpacity(0.5),
+        offset: const Offset(8, 8),
+        blurRadius: 16,
+      ),
+    ],
+  ),
+  child: ClipRRect(
+    borderRadius: BorderRadius.circular(24),
+    child: Image.asset(
+      'assets/images/bg.png',
+      fit: BoxFit.cover,
+    ),
+  ),
+),
+                      const SizedBox(height: 28),
+
+                      // Tiêu đề Welcome Back
+                      const Text(
+                        'Welcome Back',
+                        style: TextStyle(
+                          fontSize: 28,
+                          fontWeight: FontWeight.bold,
+                          color: Color(0xFF0F172A),
+                          letterSpacing: 0.5,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      const Text(
+                        'Sign in to continue',
+                        style: TextStyle(
+                          fontSize: 14,
+                          color: Color(0xFF64748B),
+                          letterSpacing: 0.8,
+                        ),
+                      ),
+                      const SizedBox(height: 32),
+
+                      // Ô nhập Email / Username
+                      _buildNeumorphicInput(
+                        controller: _emailController,
+                        hintText: 'Username or Email',
+                        icon: Icons.person_outline_rounded,
+                        keyboardType: TextInputType.emailAddress,
+                      ),
+                      const SizedBox(height: 18),
+
+                      // Ô nhập Mật khẩu
+                      _buildNeumorphicInput(
+                        controller: _passwordController,
+                        hintText: 'Password',
+                        icon: Icons.lock_outline_rounded,
+                        obscureText: _obscurePassword,
+                        suffixIcon: IconButton(
+                          icon: Icon(
+                            _obscurePassword
+                                ? Icons.visibility_off_outlined
+                                : Icons.visibility_outlined,
+                            color: const Color(0xFF64748B),
+                            size: 20,
+                          ),
+                          onPressed: () {
+                            setState(() {
+                              _obscurePassword = !_obscurePassword;
+                            });
+                          },
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+
+                      // Hàng Remember me & Forgot Password
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Row(
+                            children: [
+                              GestureDetector(
+                                onTap: () {
+                                  setState(() {
+                                    _rememberMe = !_rememberMe;
+                                  });
+                                },
+                                child: Container(
+                                  width: 22,
+                                  height: 22,
+                                  decoration: BoxDecoration(
+                                    color: _rememberMe
+                                        ? const Color(0xFF2563EB)
+                                        : const Color(0xFFE9EEF9),
+                                    borderRadius: BorderRadius.circular(6),
+                                    boxShadow: _rememberMe
+                                        ? []
+                                        : [
+                                            BoxShadow(
+                                              color: Colors.white.withOpacity(0.8),
+                                              offset: const Offset(-2, -2),
+                                              blurRadius: 4,
+                                            ),
+                                            BoxShadow(
+                                              color: const Color(0xFFA6B4C9).withOpacity(0.5),
+                                              offset: const Offset(2, 2),
+                                              blurRadius: 4,
+                                            ),
+                                          ],
+                                  ),
+                                  child: _rememberMe
+                                      ? const Icon(Icons.check, size: 16, color: Colors.white)
+                                      : null,
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              const Text(
+                                'Remember Me',
+                                style: TextStyle(
+                                  color: Color(0xFF334155),
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ],
+                          ),
+                          TextButton(
+                            onPressed: () {},
+                            style: TextButton.styleFrom(
+                              padding: EdgeInsets.zero,
+                              minimumSize: Size.zero,
+                              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                            ),
+                            child: const Text(
+                              'Forgot Password?',
+                              style: TextStyle(
+                                color: Color(0xFF2563EB),
+                                fontSize: 13,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 28),
+
+                      // Nút Đăng nhập Gradient Neumorphism
+                      Container(
+                        width: double.infinity,
+                        height: 56,
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(28),
+                          gradient: const LinearGradient(
+                            colors: [Color(0xFF3B82F6), Color(0xFF1D4ED8)],
+                            begin: Alignment.centerLeft,
+                            end: Alignment.centerRight,
+                          ),
+                          boxShadow: [
+                            BoxShadow(
+                              color: const Color(0xFF2563EB).withOpacity(0.4),
+                              offset: const Offset(0, 8),
+                              blurRadius: 16,
+                            ),
+                          ],
+                        ),
+                        child: Material(
+                          color: Colors.transparent,
+                          child: InkWell(
+                            borderRadius: BorderRadius.circular(28),
+                            onTap: _isLoading ? null : _loginWithSupabase,
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: 24),
+                              child: Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  const Spacer(),
+                                  _isLoading
+                                      ? const SizedBox(
+                                          width: 22,
+                                          height: 22,
+                                          child: CircularProgressIndicator(
+                                            strokeWidth: 2.5,
+                                            color: Colors.white,
+                                          ),
+                                        )
+                                      : const Text(
+                                          'Login',
+                                          style: TextStyle(
+                                            color: Colors.white,
+                                            fontSize: 18,
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                        ),
+                                  const Spacer(),
+                                  Container(
+                                    padding: const EdgeInsets.all(6),
+                                    decoration: BoxDecoration(
+                                      color: Colors.white.withOpacity(0.2),
+                                      shape: BoxShape.circle,
+                                    ),
+                                    child: const Icon(
+                                      Icons.arrow_forward_rounded,
+                                      color: Colors.white,
+                                      size: 18,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 24),
+                      
+
+                      // Text Footer
+                      const Text(
+                        'NHÂN SỰ  •  CHẤM CÔNG  •  TĂNG TRƯỞNG',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: Color(0xFF94A3B8),
+                          letterSpacing: 1.2,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
         ],
+      ),
+    );
+  }
+
+  // Widget ô Nhập Liệu Neumorphism (Đã sửa lỗi inset)
+  Widget _buildNeumorphicInput({
+    required TextEditingController controller,
+    required String hintText,
+    required IconData icon,
+    bool obscureText = false,
+    TextInputType keyboardType = TextInputType.text,
+    Widget? suffixIcon,
+  }) {
+    return Container(
+      decoration: BoxDecoration(
+        color: const Color(0xFFE9EEF9),
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.white.withOpacity(0.9),
+            offset: const Offset(-4, -4),
+            blurRadius: 8,
+          ),
+          BoxShadow(
+            color: const Color(0xFFA6B4C9).withOpacity(0.4),
+            offset: const Offset(4, 4),
+            blurRadius: 8,
+          ),
+        ],
+      ),
+      child: TextField(
+        controller: controller,
+        obscureText: obscureText,
+        keyboardType: keyboardType,
+        style: const TextStyle(color: Color(0xFF0F172A), fontSize: 15),
+        decoration: InputDecoration(
+          hintText: hintText,
+          hintStyle: const TextStyle(color: Color(0xFF94A3B8), fontSize: 14),
+          prefixIcon: Icon(icon, color: const Color(0xFF64748B), size: 22),
+          suffixIcon: suffixIcon,
+          border: InputBorder.none,
+          contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+        ),
       ),
     );
   }

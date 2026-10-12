@@ -1,14 +1,31 @@
 import 'package:flutter/material.dart';
 
-class HomeHeader extends StatelessWidget {
+class HomeHeader extends StatefulWidget {
   final String formattedDate;
   final String greeting;
+  final bool isDarkMode;
+  final VoidCallback? onToggleTheme;
 
   const HomeHeader({
     super.key,
     required this.formattedDate,
     required this.greeting,
+    this.isDarkMode = false,
+    this.onToggleTheme,
   });
+
+  @override
+  State<HomeHeader> createState() => _HomeHeaderState();
+}
+
+class _HomeHeaderState extends State<HomeHeader> {
+  late bool _isDark;
+
+  @override
+  void initState() {
+    super.initState();
+    _isDark = widget.isDarkMode;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -38,7 +55,7 @@ class HomeHeader extends StatelessWidget {
                   borderRadius: BorderRadius.circular(20),
                 ),
                 child: Text(
-                  formattedDate,
+                  widget.formattedDate,
                   style: const TextStyle(
                     color: Colors.white,
                     fontSize: 13,
@@ -48,24 +65,22 @@ class HomeHeader extends StatelessWidget {
               ),
               Row(
                 children: [
-                  _buildIconButton(Icons.search),
+                  _buildIconButton(
+                    icon: Icons.search,
+                    onTap: () {},
+                  ),
                   const SizedBox(width: 10),
-                  Stack(
-                    children: [
-                      _buildIconButton(Icons.notifications_none),
-                      Positioned(
-                        right: 10,
-                        top: 10,
-                        child: Container(
-                          width: 8,
-                          height: 8,
-                          decoration: const BoxDecoration(
-                            color: Colors.redAccent,
-                            shape: BoxShape.circle,
-                          ),
-                        ),
-                      )
-                    ],
+                  // Icon chỉnh Sáng / Tối (thay thế nút chuông)
+                  _buildIconButton(
+                    icon: _isDark ? Icons.wb_sunny_outlined : Icons.nightlight_round,
+                    onTap: () {
+                      setState(() {
+                        _isDark = !_isDark;
+                      });
+                      if (widget.onToggleTheme != null) {
+                        widget.onToggleTheme!();
+                      }
+                    },
                   ),
                 ],
               )
@@ -114,7 +129,7 @@ class HomeHeader extends StatelessWidget {
                     Row(
                       children: [
                         Text(
-                          greeting,
+                          widget.greeting,
                           style: const TextStyle(
                             color: Colors.white70,
                             fontSize: 14,
@@ -212,15 +227,18 @@ class HomeHeader extends StatelessWidget {
     );
   }
 
-  Widget _buildIconButton(IconData icon) {
-    return Container(
-      width: 36,
-      height: 36,
-      decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.18),
-        shape: BoxShape.circle,
+  Widget _buildIconButton({required IconData icon, required VoidCallback onTap}) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: 36,
+        height: 36,
+        decoration: BoxDecoration(
+          color: Colors.white.withOpacity(0.18),
+          shape: BoxShape.circle,
+        ),
+        child: Icon(icon, color: Colors.white, size: 20),
       ),
-      child: Icon(icon, color: Colors.white, size: 20),
     );
   }
 }

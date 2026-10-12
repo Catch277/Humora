@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/create_leave_request.dart'; // Import màn hình tạo đơn
 
 class LeaveRequestEmployeeScreen extends StatefulWidget {
@@ -13,41 +15,110 @@ class _LeaveRequestEmployeeScreenState
     extends State<LeaveRequestEmployeeScreen> {
   int _selectedFilterIndex = 0;
 
-  // Danh sách các đơn nghỉ phép (Có thể thêm/sửa động)
-  final List<Map<String, dynamic>> _leaveRequests = [
-    {
-      'id': '#NP-2024-089',
-      'timeStr': '• 13:32 Hôm nay',
-      'status': 'Chờ duyệt',
-      'leaveType': 'Nghỉ phép năm',
-      'leaveSubtitle': 'Hưởng nguyên lương theo quy định',
-      'daysCount': '2.0 ngày công',
-      'dateRange': '28/10/2024 - 29/10/2024',
-      'shiftType': 'Cả ngày',
-      'reason': 'Việc gia đình đột xuất',
-      'stepIndex': 1,
-      'totalSteps': 3,
-    },
-    {
-      'id': '#NP-2024-072',
-      'timeStr': '• 15/10/2024',
-      'status': 'Đã duyệt',
-      'leaveType': 'Nghỉ ốm / Khám bệnh',
-      'leaveSubtitle': 'Hưởng chế độ BHXH theo chỉ định',
-      'daysCount': '1.0 ngày',
-      'attachment': 'Giay_kham_suc_khoe_BHYT.pdf',
-    },
-    {
-      'id': '#NP-2024-061',
-      'timeStr': '• 02/09/2024',
-      'status': 'Đã duyệt',
-      'leaveType': 'Việc riêng có lương',
-      'leaveSubtitle': 'Kỷ niệm ngày cưới gia đình',
-      'daysCount': '1.0 ngày',
-    },
-  ];
+  // Danh sách đơn nghỉ phép đọc từ Supabase (bảng requests)
+  List<Map<String, dynamic>> _leaveRequests = [];
+  bool _loading = true;
+  String? _error;
+  final DateFormat _timeFmt = DateFormat('HH:mm dd/MM/yyyy');
 
-  // Mở màn hình Tạo đơn mới và nhận kết quả trả về
+  @override
+  void initState() {
+    super.initState();
+    _loadRequests();
+  }
+
+  // Đọc đơn nghỉ phép của chính nhân viên từ Supabase
+  Future<void> _loadRequests() async {
+    final client = Supabase.instance.client;
+    final user = client.auth.currentUser;
+    if (user == null) {
+      setState(() {
+        _loading = false;
+        _error = 'Bạn cần đăng nhập lại.';
+      });
+      return;
+    }
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      final rows = await client
+          .from('requests')
+          .select()
+          .eq('user_id', user.id)
+          .eq('request_type', 'Nghỉ phép')
+          .order('created_at', ascending: false)
+          .timeout(const Duration(seconds: 15));
+      if (!mounted) return;
+      setState(() {
+        _leaveRequests = (rows as List)
+            .map((r) => _mapRow(Map<String, dynamic>.from(r)))
+            .toList();
+        _loading = false;
+      });
+    } catch (e) {
+      debugPrint('LOAD ERROR: $e');
+      if (!mounted) return;
+      setState(() {
+        _loading = false;
+        _error = 'Không tải được danh sách đơn: $e';
+      });
+    }
+  }
+
+  // Đổi một dòng của bảng requests thành Map mà các card đang dùng
+  Map<String, dynamic> _mapRow(Map<String, dynamic> r) {
+    final content = (r['content'] ?? '').toString();
+
+    String field(String key) {
+      for (final line in content.split('\n')) {
+        if (line.startsWith('$key: ')) return line.substring(key.length + 2);
+      }
+      return '';
+    }
+
+    final reasonIdx = content.indexOf('Lý do: ');
+    final reason =
+        reasonIdx >= 0 ? content.substring(reasonIdx + 7) : content;
+
+    final time = field('Thời gian');
+    final m = RegExp(r'^(.*) \((.*)\)$').firstMatch(time);
+    final dateRange = m != null ? m.group(1)! : time;
+    final shiftType = m != null ? m.group(2)! : 'Cả ngày';
+
+    final created = DateTime.tryParse('${r['created_at']}')?.toLocal();
+    final id = r['id'].toString();
+    final shortId = id.substring(0, id.length < 8 ? id.length : 8);
+
+    String status;
+    switch (r['status']) {
+      case 'APPROVED':
+        status = 'Đã duyệt';
+        break;
+      case 'REJECTED':
+        status = 'Từ chối';
+        break;
+      default:
+        status = 'Chờ duyệt';
+    }
+
+    final leaveType = field('Loại nghỉ');
+    return {
+      'id': '#NP-${shortId.toUpperCase()}',
+      'timeStr': created == null ? '' : '• ${_timeFmt.format(created)}',
+      'status': status,
+      'leaveType': leaveType.isEmpty ? (r['title'] ?? '') : leaveType,
+      'leaveSubtitle': '',
+      'daysCount': field('Số ngày'),
+      'dateRange': dateRange,
+      'shiftType': shiftType,
+      'reason': reason,
+      'rejectReason': r['reject_reason'] ?? '',
+    };
+  }
+
+  // Mở màn hình Tạo đơn mới; gửi xong thì tải lại danh sách từ Supabase
   Future<void> _openCreateLeaveRequest() async {
     final result = await Navigator.push(
       context,
@@ -56,11 +127,8 @@ class _LeaveRequestEmployeeScreenState
       ),
     );
 
-    // Nếu gửi đơn thành công, chèn đơn mới vào đầu danh sách
-    if (result != null && result is Map<String, dynamic>) {
-      setState(() {
-        _leaveRequests.insert(0, result);
-      });
+    if (result != null) {
+      await _loadRequests();
 
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -84,17 +152,19 @@ class _LeaveRequestEmployeeScreenState
 
   @override
   Widget build(BuildContext context) {
-    // Đếm số đơn chờ duyệt và đã duyệt
+    // Đếm số đơn theo trạng thái
     final pendingCount =
         _leaveRequests.where((item) => item['status'] == 'Chờ duyệt').length;
     final approvedCount =
         _leaveRequests.where((item) => item['status'] == 'Đã duyệt').length;
+    final rejectedCount =
+        _leaveRequests.where((item) => item['status'] == 'Từ chối').length;
 
     final List<Map<String, dynamic>> filters = [
       {'label': 'Tất cả', 'count': _leaveRequests.length},
       {'label': 'Chờ duyệt', 'count': pendingCount},
       {'label': 'Đã duyệt', 'count': approvedCount},
-      {'label': 'Từ chối', 'count': 0},
+      {'label': 'Từ chối', 'count': rejectedCount},
     ];
 
     // Lọc danh sách đơn theo Filter tab được chọn
@@ -120,23 +190,51 @@ class _LeaveRequestEmployeeScreenState
 
             // 3. Danh sách Đơn xin nghỉ
             Expanded(
-              child: filteredList.isEmpty
-                  ? const Center(
-                      child: Text('Không có đơn xin nghỉ phép nào',
-                          style: TextStyle(color: Colors.grey)))
-                  : ListView.builder(
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                      itemCount: filteredList.length,
-                      itemBuilder: (context, index) {
-                        final item = filteredList[index];
-                        return Padding(
-                          padding: const EdgeInsets.only(bottom: 16),
-                          child: item['status'] == 'Chờ duyệt'
-                              ? _buildPendingCard(item)
-                              : _buildApprovedCard(item),
-                        );
-                      },
-                    ),
+              child: _loading
+                  ? const Center(child: CircularProgressIndicator())
+                  : _error != null
+                      ? Center(
+                          child: Padding(
+                            padding: const EdgeInsets.all(24),
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text(_error!,
+                                    textAlign: TextAlign.center,
+                                    style: const TextStyle(
+                                        color: Colors.redAccent)),
+                                const SizedBox(height: 12),
+                                OutlinedButton(
+                                    onPressed: _loadRequests,
+                                    child: const Text('Thử lại')),
+                              ],
+                            ),
+                          ),
+                        )
+                      : filteredList.isEmpty
+                          ? const Center(
+                              child: Text('Không có đơn xin nghỉ phép nào',
+                                  style: TextStyle(color: Colors.grey)))
+                          : RefreshIndicator(
+                              onRefresh: _loadRequests,
+                              child: ListView.builder(
+                                physics: const AlwaysScrollableScrollPhysics(),
+                                padding:
+                                    const EdgeInsets.symmetric(horizontal: 16),
+                                itemCount: filteredList.length,
+                                itemBuilder: (context, index) {
+                                  final item = filteredList[index];
+                                  return Padding(
+                                    padding: const EdgeInsets.only(bottom: 16),
+                                    child: item['status'] == 'Chờ duyệt'
+                                        ? _buildPendingCard(item)
+                                        : item['status'] == 'Từ chối'
+                                            ? _buildRejectedCard(item)
+                                            : _buildApprovedCard(item),
+                                  );
+                                },
+                              ),
+                            ),
             ),
           ],
         ),
@@ -187,9 +285,9 @@ class _LeaveRequestEmployeeScreenState
               shape: BoxShape.circle,
             ),
             child: IconButton(
-              icon: const Icon(Icons.calendar_today_outlined,
+              icon: const Icon(Icons.refresh,
                   size: 20, color: Color(0xFF2563EB)),
-              onPressed: () {},
+              onPressed: _loadRequests,
             ),
           ),
         ],
@@ -344,24 +442,30 @@ class _LeaveRequestEmployeeScreenState
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    item['leaveType'] ?? '',
-                    style: const TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.black87,
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      item['leaveType'] ?? '',
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.black87,
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    item['leaveSubtitle'] ?? '',
-                    style: const TextStyle(fontSize: 12, color: Colors.grey),
-                  ),
-                ],
+                    if ((item['leaveSubtitle'] ?? '').toString().isNotEmpty) ...[
+                      const SizedBox(height: 2),
+                      Text(
+                        item['leaveSubtitle'],
+                        style:
+                            const TextStyle(fontSize: 12, color: Colors.grey),
+                      ),
+                    ],
+                  ],
+                ),
               ),
+              const SizedBox(width: 8),
               Container(
                 padding:
                     const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
@@ -394,10 +498,12 @@ class _LeaveRequestEmployeeScreenState
                     const Icon(Icons.calendar_today_outlined,
                         size: 16, color: Color(0xFF2563EB)),
                     const SizedBox(width: 8),
-                    Text(
-                      '${item['dateRange'] ?? ''} ',
-                      style: const TextStyle(
-                          fontWeight: FontWeight.bold, fontSize: 13),
+                    Flexible(
+                      child: Text(
+                        '${item['dateRange'] ?? ''} ',
+                        style: const TextStyle(
+                            fontWeight: FontWeight.bold, fontSize: 13),
+                      ),
                     ),
                     Text(
                       '(${item['shiftType'] ?? 'Cả ngày'})',
@@ -457,6 +563,78 @@ class _LeaveRequestEmployeeScreenState
     );
   }
 
+  // Card hiển thị Đơn bị từ chối
+  Widget _buildRejectedCard(Map<String, dynamic> item) {
+    final rejectReason = (item['rejectReason'] ?? '').toString();
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        border: const Border(
+          left: BorderSide(color: Color(0xFFEF4444), width: 4),
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.03),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Row(
+                children: [
+                  Text(item['id'] ?? '',
+                      style: const TextStyle(
+                          color: Colors.black54,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 12)),
+                  const SizedBox(width: 8),
+                  Text(item['timeStr'] ?? '',
+                      style:
+                          const TextStyle(color: Colors.grey, fontSize: 12)),
+                ],
+              ),
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFEF2F2),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: const Text('Từ chối',
+                    style: TextStyle(
+                        color: Color(0xFFEF4444),
+                        fontWeight: FontWeight.bold,
+                        fontSize: 12)),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Text(item['leaveType'] ?? '',
+              style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.black87)),
+          const SizedBox(height: 6),
+          Text('${item['dateRange'] ?? ''} (${item['shiftType'] ?? ''})',
+              style: const TextStyle(fontSize: 13, color: Colors.black87)),
+          if (rejectReason.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Text('Lý do từ chối: $rejectReason',
+                style: const TextStyle(fontSize: 13, color: Colors.redAccent)),
+          ],
+        ],
+      ),
+    );
+  }
+
   // Card hiển thị Đơn đã duyệt
   Widget _buildApprovedCard(Map<String, dynamic> item) {
     return Container(
@@ -510,7 +688,8 @@ class _LeaveRequestEmployeeScreenState
                 ),
                 child: Row(
                   children: const [
-                    Icon(Icons.check_circle, size: 14, color: Color(0xFF10B981)),
+                    Icon(Icons.check_circle,
+                        size: 14, color: Color(0xFF10B981)),
                     SizedBox(width: 4),
                     Text('Đã duyệt',
                         style: TextStyle(
@@ -527,22 +706,32 @@ class _LeaveRequestEmployeeScreenState
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    item['leaveType'] ?? '',
-                    style: const TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.black87),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(item['leaveSubtitle'] ?? '',
-                      style:
-                          const TextStyle(fontSize: 12, color: Colors.grey)),
-                ],
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      item['leaveType'] ?? '',
+                      style: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.black87),
+                    ),
+                    if ((item['leaveSubtitle'] ?? '').toString().isNotEmpty) ...[
+                      const SizedBox(height: 2),
+                      Text(item['leaveSubtitle'],
+                          style: const TextStyle(
+                              fontSize: 12, color: Colors.grey)),
+                    ],
+                    const SizedBox(height: 6),
+                    Text(
+                        '${item['dateRange'] ?? ''} (${item['shiftType'] ?? ''})',
+                        style: const TextStyle(
+                            fontSize: 13, color: Colors.black87)),
+                  ],
+                ),
               ),
+              const SizedBox(width: 8),
               Container(
                 padding:
                     const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
@@ -563,7 +752,8 @@ class _LeaveRequestEmployeeScreenState
           if (item.containsKey('attachment')) ...[
             const SizedBox(height: 12),
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
               decoration: BoxDecoration(
                 color: const Color(0xFFF9FAFB),
                 borderRadius: BorderRadius.circular(12),
@@ -721,4 +911,4 @@ class _LeaveRequestEmployeeScreenState
       ),
     );
   }
-}
+} 
