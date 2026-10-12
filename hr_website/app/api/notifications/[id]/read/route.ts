@@ -28,7 +28,7 @@
  *       400:
  *         description: The ID is not a valid UUID.
  *       401:
- *         description: Authentication is required.
+ *         description: Bạn cần đăng nhập để thực hiện thao tác này.
  *       404:
  *         description: The notification was not found or does not belong to the user.
  *       500:
@@ -51,7 +51,7 @@ export async function PATCH(
   const { id } = await context.params;
 
   if (!UUID_PATTERN.test(id)) {
-    return NextResponse.json({ error: "id must be a UUID." }, { status: 400 });
+    return NextResponse.json({ error: "id phải là UUID." }, { status: 400 });
   }
 
   try {
@@ -63,7 +63,7 @@ export async function PATCH(
 
     if (authError || !user) {
       return NextResponse.json(
-        { error: "Authentication is required." },
+        { error: "Bạn cần đăng nhập để thực hiện thao tác này." },
         { status: 401 },
       );
     }
@@ -81,7 +81,7 @@ export async function PATCH(
 
     console.error("Failed to mark notification as read", error);
     return NextResponse.json(
-      { error: "Unable to mark notification as read." },
+      { error: "Không thể đánh dấu thông báo đã đọc." },
       { status: 500 },
     );
   }

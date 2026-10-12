@@ -89,9 +89,12 @@ hr_website/
 │   ├── layout.tsx                # Shell: Sidebar + Header + Be Vietnam Pro font
 │   └── globals.css
 ├── components/                   # Header.tsx, Sidebar.tsx + MobileNav.tsx (phone drawer) + navigation.ts
-│                                 #   (the one nav list) + OrganizationCard.tsx, ProfileProvider.tsx,
+│                                 #   (the one nav list) + OrganizationCard.tsx, LocaleProvider.tsx,
+│                                 #   LanguageToggle.tsx, ThemeToggle.tsx, ProfileProvider.tsx,
 │                                 #   LocationPickerMap*.tsx (Leaflet)
 ├── lib/
+│   ├── i18n/                     # locales.ts (Locale, cookie, labels), messages/vi.ts + en.ts (the
+│   │                             #   dictionaries; vi is the source), translate.ts (t() + interpolation)
 │   ├── accessPolicy.ts           # Capability table + screen→capability map (SCRUM-59)
 │   ├── domain/branchScope.ts     # canManageBranch() / defaultBranchId() — who may manage a branch (SCRUM-61)
 │   ├── domain/entities/          # Plain interfaces (DB-backed fields stay snake_case)
@@ -314,6 +317,38 @@ The inbox is a **read surface**; the database is its only producer (SCRUM-70/71/
   table the app already selects is added, so there is no `42703` risk and no app-side order dependency —
   unlike SCRUM-68/69.
 
+## Password reset by email (forgot password)
+
+`/login` has a "Quên mật khẩu?" panel and `/reset-password` is where the emailed link lands. The flow
+is three route handlers plus one shell-less screen, and it is the one auth flow that needs a **Dashboard
+setting**:
+
+- `POST /api/auth/forgot-password` asks Supabase Auth for the recovery mail
+  (`resetPasswordForEmail`). The answer is identical whether or not the address has an account —
+  Supabase behaves that way on purpose, and restating it here would make the endpoint a way to
+  enumerate the organization's staff. The only failure it names is `429` (Supabase rate-limits the
+  recovery mail per address).
+- The mail's link returns to `GET /api/auth/recovery`, which exchanges the one-time `code` for a
+  recovery session and redirects to `/reset-password`; an unusable link lands on
+  `/login?recovery=failed`, which explains itself.
+- **Prerequisite:** Supabase Dashboard → Authentication → URL Configuration → Redirect URLs must list
+  `{origin}/api/auth/recovery` (the deployed domain **and** `http://localhost:3000/api/auth/recovery`).
+  Without it GoTrue refuses the `redirect_to` and the endpoint answers `500` — read the dev-terminal
+  `Failed to send the password reset email` line, which carries GoTrue's own sentence.
+  Email delivery uses the project's SMTP settings (the built-in one is fine for dev).
+- **`@supabase/ssr` pins `flowType: "pkce"` for both of its clients**, so the link carries `code` (not
+  the old `#access_token` fragment) and the exchange needs the PKCE verifier — a cookie stored by the
+  browser that *asked* for the mail. The link therefore completes only in that same browser; a link
+  opened elsewhere is refused rather than half-working. The verifier is why the recovery handler builds
+  its own client and writes the session cookies onto the redirect it returns (the `proxy.ts` shape):
+  `cookies().set()` lands on the response Next would otherwise have produced.
+- `/reset-password` is in `SHELL_LESS_PATHS`, not `PUBLIC_PATHS`: by the time it renders the session
+  already exists, and `proxy.ts` sends a signed-in visitor away from a public path. It saves the new
+  password through the existing `POST /api/auth/change-password`, so there is no second write path.
+- The show/hide toggle on every password field is `components/PasswordInput.tsx`; it flips the input's
+  `type` instead of re-rendering the value as text, so a password manager and the mobile keyboard still
+  see a password field. Copy is `common.showPassword` / `common.hidePassword`.
+
 ## Sign-in security: passkeys / Face ID (SCRUM-79)
 
 `/security` is how an account turns "Face ID quick login" on for the device it is using, and it is the one
@@ -384,7 +419,10 @@ screen that talks to Supabase Auth directly instead of through `app/api/**`.
   `text-xs`/`text-sm` — which is what stops Safari zooming the page on focus. No hover-only affordance
   (`opacity-0 group-hover:opacity-100` is invisible *and* the button is still tappable on touch: gate it
   with `md:` instead), dialogs cap at `max-h-[85dvh]` and are `items-end sm:items-center` with
-  `p-4 sm:p-6`, and a control a thumb must hit is ≥ ~40px. The reasoning lives in `DESIGN.md` §4.4.
+  `p-4 sm:p-6`, and a control a thumb must hit is ≥ ~40px. A table cell whose content must not break (a
+  status pill, a date, a badge) needs `whitespace-nowrap`, headers included — a `Chờ vào tổ chức` pill
+  wrapped over three lines on `/organization` at 393px before it was added. The reasoning lives in
+  `DESIGN.md` §4.4.
 - **Never write a literal hex in a component.** Use the semantic tokens from `app/globals.css`:
   `bg-surface` (panels — replaced every `bg-white`), `bg-app` (page canvas), `bg-surface-muted`,
   `bg-canvas`, `bg-primary` / `text-primary` / `border-primary` / `hover:bg-primary-strong`. They resolve
@@ -394,7 +432,10 @@ screen that talks to Supabase Auth directly instead of through `app/api/**`.
   and toggles `.dark` on `<html>`; `app/layout.tsx` applies it before first paint with an inline script
   (keep `suppressHydrationWarning` on `<html>`), and `.dark` re-points Tailwind's palette variables so
   screens need no `dark:` variants. Use `dark:` only for a genuine exception (e.g. the Swagger UI frame).
-- Currency via `new Intl.NumberFormat("vi-VN")`, dates/sizes as `vi-VN`; keep copy in Vietnamese.
+- Numbers and dates go through `lib/i18n/format.ts` (`formatCurrency`, `formatNumber`, `formatDateTime`,
+  `formatTime`, `formatDayMonth`, `weekdayShort`, …) instead of a new `new Intl.NumberFormat("vi-VN")` in a
+  screen: the reader's locale decides the grouping, `Asia/Bangkok` decides the zone. English formats as
+  **`en-GB`** on purpose — dates stay day-first and the clock 24-hour, as the Vietnamese screens write them.
 - Every screen is Supabase-backed: `/` (Tổng quan), `/revenue`, `/reports`, `/notifications` and `/chat`
   (Trợ lý AI → `POST /api/chat/ask`) all fetch `/api/*`, and so do the two header widgets — the search box
   (`GET /api/search`) and the bell badge (`GET /api/notifications?unread=true&page_size=1`, where `total`
@@ -404,8 +445,44 @@ screen that talks to Supabase Auth directly instead of through `app/api/**`.
   it, and preserve the existing layout and loading/empty states.
 - Language: code, identifiers and English-style comments stay in English. The Chat AI module
   (`ChatAnswerUseCase`, `GeminiLLMService`, `lib/domain/entities/ChatMessage.ts` and the `@swagger` text of
-  `/api/chat/ask`) is documented in Vietnamese — keep that module consistent. Do not mass-translate
-  existing API error messages or `@swagger` text: clients and docs may already rely on the wording.
+  `/api/chat/ask`) is documented in Vietnamese — keep that module consistent. **Every sentence a caller can
+  see is Vietnamese** — route payloads, domain errors, the Edge Function's answers — because the screen often
+  shows that text verbatim and the app is Vietnamese-first. `console.error` / repository diagnostics
+  (`Unable to load …: ${error.message}`) stay English on purpose: they sit in the log next to Postgres' own
+  English text and never reach a caller. `@swagger` prose keeps its mixed wording (developer documentation,
+  not UI). A route that picks a status by matching a message must match a token that survives translation —
+  a field name (`startsWith("status")`) or the Vietnamese phrase — and both sides change together; see §8 of
+  `DESIGN.md` and `app/api/organizations/_lib/organizationErrorResponse.ts`.
+- **Locale (vi / en).** Copy lives in `lib/i18n/messages/vi.ts` (source) and `messages/en.ts`, both typed
+  `Record<MessageKey, string>`, so a key missing on either side fails `npx tsc --noEmit`. A component reads it
+  through `const { t } = useLocale()` (`components/LocaleProvider.tsx`) — never a hard-coded string in new
+  code, and never a label stored in `components/navigation.ts` (it carries a `labelKey`). The locale is the
+  `humora-locale` cookie, read by `app/layout.tsx` on the server for `<html lang>`; `components/LanguageToggle.tsx`
+  switches it. Un-migrated screens keep their Vietnamese literals and are migrated one at a time — never in a
+  mass sweep. `/organization` is the reference screen for a full migration: its copy, **including its
+  module-level `accountErrorMessage` / `actionErrorMessage` / `provisioningNote` helpers** (they take
+  `t: Translate` as their last argument, because a helper outside the component has no hook), lives under the
+  `organization.*` keys, and its `formatDateTime` takes the locale so the date *style* follows the reader
+  while the `Asia/Bangkok` time zone does not. Two traps a scripted pass must respect: a literal used as an
+  attribute value (`aria-label="…"`) needs `={t("…")}`, and a line of JSX copy needs its own indentation and
+  braces (`{t("…")}`) — a bare `t(…)` in a text position does not compile. A screen is picked clean when
+  `node scripts/tmp-lines.mjs app/<segment>/page.tsx` (a throwaway helper, deleted when the pass ends)
+  reports no Vietnamese line at all.
+- **Shared labels.** A vocabulary several screens render carries a **dictionary key**, never a string:
+  `lib/i18n/labels.ts` (`attendanceStatusLabel`, `shiftAssignmentStatusLabel`, `employeeStatusLabel`,
+  `requestStatusLabel`, `requestTypeLabel`), `roleLabel(role, t)` (`lib/accessPolicy.ts`),
+  `notificationTypeLabel(type, t)` / `notificationCategoryLabel(category, t)`
+  (`lib/domain/notificationCatalog.ts`) and `passkeyErrorMessage(error, t)`
+  (`lib/domain/passkeyMessages.ts`). Each takes `t` as its **last, optional** argument and defaults to
+  `translateVi` (`lib/i18n/translate.ts`, the source locale), so a call site renders exactly what it rendered
+  before until its screen passes `useLocale().t`; a code no vocabulary knows renders itself rather than a
+  blank pill; and the vocabularies whose stored value *is* the label (`requests.request_type`) are translated
+  for **display only** — what a screen sends stays the stored value. A screen's own `STATUS_LABELS` table is
+  deleted when that screen is migrated, not kept next to the key.
+- **A public screen carries the switch itself.** `Sidebar` and `Header` return `null` for a path in
+  `PUBLIC_PATHS`, so `/login` and `/register` render `LanguageToggle` inside their own card — otherwise a
+  visitor who has never signed in could not reach English at all. Every other screen (including the
+  shell-less `/onboarding` and `/change-password`) gets it from the header.
 
 ## Boundaries
 
@@ -764,14 +841,15 @@ screen that talks to Supabase Auth directly instead of through `app/api/**`.
   service-role key exists solely in that function's Supabase secrets and must never appear in this
   repository or in a client.
 - `POST /api/organizations/accounts` answers `409` for two unrelated conflicts, so read the body rather
-  than the status: `This account is already a member of the organization.` comes from the register row
-  being *claimed*, while `An account already exists for this email address.` comes from `auth.users`
-  already holding that address. The app keeps that distinction instead of collapsing it:
-  `EdgeFunctionStaffProvisioningService` forwards the function's own sentence into
-  `StaffAccountEmailTakenError` (its constructor takes it) and `/organization` matches
-  `MEMBER_CONFLICT_MARKER` exported from that file, so reword neither side alone — and never write the
-  marker into a catch-all sentence, which is exactly how every `409` once rendered as "đã là thành
-  viên" for an address that was merely `Chờ vào tổ chức`. The second case is invisible in
+  than the status: `Tài khoản này đã là thành viên của tổ chức.` comes from the register row being *claimed*,
+  while `Email này đã có tài khoản đăng nhập.` comes from `auth.users` already holding that address. The app
+  keeps that distinction instead of collapsing it: `EdgeFunctionStaffProvisioningService` forwards the
+  function's own sentence into `StaffAccountEmailTakenError` (its constructor takes it) and `/organization`
+  asks `isMemberConflictMessage()` exported from that file, so reword neither side alone — and never write a
+  marker phrase into a catch-all sentence, which is exactly how every `409` once rendered as "đã là thành
+  viên" for an address that was merely `Chờ vào tổ chức`. That helper matches **both** spellings (the
+  Vietnamese sentence, plus the English one an older deployment still answers), so the distinction keeps
+  working until the function is pasted into the dashboard again. The second case is invisible in
   `public.users` whenever the SCRUM-50 `on_auth_user_created` trigger was missing when the account was
   made (the function then fails its own profile check with `500` and leaves an auth user behind), which
   is what makes a retry look like a phantom conflict — apply `SCRUM-50_user_registration.sql`, delete
@@ -994,4 +1072,19 @@ screen that talks to Supabase Auth directly instead of through `app/api/**`.
   `app/globals.css` ép cỡ chữ ô nhập về 16px để Safari không tự phóng to khi chạm vào ô. Không dùng hiệu ứng
   chỉ có khi hover; hộp thoại giới hạn `max-h-[85dvh]`, nằm dưới cùng màn hình và `p-4 sm:p-6`; vùng chạm
   tối thiểu ~40px. Chi tiết ở `DESIGN.md` §4.4.
+- Sửa lỗi tạo tài khoản nhân viên (`role must be EMPLOYEE or CHU.`): file Edge Function **trong repo đã
+  đúng** (`INVITE_ROLES = ["EMPLOYEE","MANAGER"]` kèm alias `CHU → MANAGER`), nên thông báo trên màn hình
+  đến từ **bản triển khai cũ**. Cách sửa: dán lại `supabase/functions/staff-account/index.ts` vào Dashboard →
+  Edge Functions → `staff-account` → Deploy, sau đó tạo lại tài khoản với vai trò quản lý. Phía web cũng đã
+  chặn rò rỉ tiếng Anh: `accountErrorMessage` trả câu tiếng Việt cho `400/422`.
+- Ngôn ngữ & thông báo lỗi: mọi câu người dùng nhìn thấy từ server (payload `error`, domain error, Edge
+  Function) **đều là tiếng Việt**; log `console.error`/repository vẫn tiếng Anh vì chỉ nằm trong log và đi
+  kèm thông báo tiếng Anh của Postgres. Nơi quyết định mã HTTP bằng cách so khớp câu thông báo phải so khớp
+  phần ổn định (tên trường như `status`, hoặc cụm tiếng Việt) — hai bên phải đổi cùng nhau.
+- Đa ngôn ngữ (vi/en): câu chữ nằm ở `lib/i18n/messages/vi.ts` (nguồn) và `messages/en.ts`, cùng kiểu
+  `Record<MessageKey, string>` nên thiếu khóa là `tsc` báo lỗi; component đọc qua `useLocale()` + `t()`
+  (`components/LocaleProvider.tsx`), còn `components/navigation.ts` chỉ lưu `labelKey`. Ngôn ngữ lưu ở cookie
+  `humora-locale` (server đọc trong `app/layout.tsx` để `<html lang>` đúng ngay byte đầu) và
+  `components/LanguageToggle.tsx` là nút chuyển. Màn hình nào chưa chuyển vẫn giữ tiếng Việt — chuyển từng
+  màn, không làm ồ ạt.
 - Thời gian nghiệp vụ theo `Asia/Bangkok` (UTC+7), dữ liệu lưu ở UTC; không tự ý đổi múi giờ.

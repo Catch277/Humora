@@ -49,7 +49,7 @@ async function readErrorMessage(response: Response): Promise<string> {
 function throwForStatus(status: number, message: string): never {
   if (status === 401) {
     throw new Error(
-      "The staff account service rejected the session token. Sign in again and retry.",
+      "Dịch vụ tạo tài khoản từ chối phiên đăng nhập. Hãy đăng nhập lại rồi thử lại.",
     );
   }
 
@@ -72,7 +72,7 @@ function throwForStatus(status: number, message: string): never {
 
   if (status === 400 || status === 422) {
     throw new StaffProvisioningInputError(
-      message || "A field of the account is invalid.",
+      message || "Thông tin tài khoản chưa hợp lệ.",
     );
   }
 
@@ -82,7 +82,7 @@ function throwForStatus(status: number, message: string): never {
   }
 
   throw new Error(
-    `The staff account service failed: ${message || `HTTP ${status}`}`,
+    `Dịch vụ tạo tài khoản gặp lỗi: ${message || `HTTP ${status}`}`,
   );
 }
 
@@ -99,7 +99,7 @@ export class EdgeFunctionStaffProvisioningService
         available: false,
         reason: "not_deployed",
         detail:
-          "NEXT_PUBLIC_SUPABASE_URL is not set, so the function URL cannot be derived.",
+          "Chưa cấu hình NEXT_PUBLIC_SUPABASE_URL nên không xác định được địa chỉ của hàm.",
       };
     }
 

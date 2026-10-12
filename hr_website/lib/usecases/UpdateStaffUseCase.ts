@@ -37,7 +37,7 @@ export class UpdateStaffUseCase {
     }
 
     if (!ROLE_SET.has(input.role)) {
-      throw new Error(`role must be one of ${APP_ROLES.join(", ")}.`);
+      throw new Error(`role phải là một trong: ${APP_ROLES.join(", ")}.`);
     }
 
     const target = await this.userRepository.getById(input.staffId);
@@ -63,7 +63,7 @@ export class UpdateStaffUseCase {
       (input.role !== callerRole || !input.isActive)
     ) {
       throw new Error(
-        "You cannot change your own role or deactivate your own account.",
+        "Bạn không thể tự đổi vai trò hoặc tự cho tài khoản của mình nghỉ việc.",
       );
     }
 
@@ -71,7 +71,7 @@ export class UpdateStaffUseCase {
     // branch is refused for them rather than stored (and a legacy value is cleared when somebody is
     // promoted to OWNER, which is what keeps the row consistent with the rule `/staff` shows).
     if (input.role === "OWNER" && typeof input.branchId === "string") {
-      throw new Error("You cannot assign a branch to the organization's owner.");
+      throw new Error("Không thể gán chi nhánh cho chủ sở hữu tổ chức.");
     }
 
     const branchId =

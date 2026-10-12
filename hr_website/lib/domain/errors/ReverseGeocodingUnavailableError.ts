@@ -5,7 +5,7 @@
  */
 export class ReverseGeocodingUnavailableError extends Error {
   constructor() {
-    super("The address lookup service is not available. Please type the address.");
+    super("Dịch vụ tra cứu địa chỉ đang không khả dụng. Vui lòng tự nhập địa chỉ.");
     this.name = "ReverseGeocodingUnavailableError";
   }
 }

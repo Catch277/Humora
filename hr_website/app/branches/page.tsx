@@ -19,11 +19,15 @@ import {
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import LocationPickerMap from "@/components/LocationPickerMap";
+import { useLocale } from "@/components/LocaleProvider";
 import { useProfile } from "@/components/ProfileProvider";
 import { roleLabel } from "@/lib/accessPolicy";
 import { canManageBranch } from "@/lib/domain/branchScope";
 import { isBranchHeadRole } from "@/lib/domain/roles";
 import { isInsideVietnam } from "@/lib/geo/vietnam";
+import { formatNumber } from "@/lib/i18n/format";
+import { errorMessageFor } from "@/lib/i18n/serverMessages";
+import type { Translate } from "@/lib/i18n/translate";
 import {
   branchAssetToken,
   formatFacilityAssetCode,
@@ -85,20 +89,22 @@ const EMPTY_FORM: BranchForm = {
   attendanceRadius: String(DEFAULT_RADIUS),
 };
 
-const radiusFormatter = new Intl.NumberFormat("vi-VN");
-
 function hasGeofence(branch: Branch): boolean {
   return branch.latitude !== null && branch.longitude !== null;
 }
 
-function formatGps(latitude: number | null, longitude: number | null): string {
+function formatGps(
+  latitude: number | null,
+  longitude: number | null,
+  t: Translate,
+): string {
   if (
     latitude === null ||
     longitude === null ||
     !Number.isFinite(latitude) ||
     !Number.isFinite(longitude)
   ) {
-    return "Chưa cấu hình";
+    return t("branches.noCoordinates");
   }
 
   const latitudeLabel = `${Math.abs(latitude).toFixed(6)}° ${latitude >= 0 ? "N" : "S"}`;
@@ -132,6 +138,7 @@ export default function BranchesPage() {
   // (`branch:update`); the owner manages every branch. The write controls follow that rule, so a row
   // the caller does not manage reads "Chỉ xem" instead of offering a button whose call answers `403`.
   const { profile, can } = useProfile();
+  const { locale, t } = useLocale();
   const [branches, setBranches] = useState<Branch[]>([]);
   const [loading, setLoading] = useState(true);
   const [pageError, setPageError] = useState("");
@@ -178,7 +185,7 @@ export default function BranchesPage() {
           } | null;
           return {
             branches: [],
-            error: data?.error ?? "Không thể tải danh sách chi nhánh.",
+            error: errorMessageFor(response.status, data, t),
           };
         }
 
@@ -199,14 +206,14 @@ export default function BranchesPage() {
         }
 
         setBranches([]);
-        setPageError("Không thể kết nối tới máy chủ. Vui lòng thử lại.");
+        setPageError(t("error.network"));
         setLoading(false);
       });
 
     return () => {
       cancelled = true;
     };
-  }, [reloadToken]);
+  }, [reloadToken, t]);
 
   useEffect(() => {
     let cancelled = false;
@@ -330,9 +337,7 @@ export default function BranchesPage() {
   async function lookupAddress(latitude: number, longitude: number) {
     if (!isInsideVietnam(latitude, longitude)) {
       setAddressNotice("");
-      setAddressError(
-        "Không tra cứu được địa chỉ: toạ độ nằm ngoài lãnh thổ Việt Nam.",
-      );
+      setAddressError(t("branches.error.geocodeOutside"));
       return;
     }
 
@@ -355,9 +360,9 @@ export default function BranchesPage() {
           error?: string;
         } | null;
 
-        setAddressError(
-          data?.error ?? "Không tra cứu được địa chỉ. Vui lòng nhập tay.",
-        );
+        // The 503 sentence names the provider *and* says the address can be typed by hand, which is the
+        // one thing the operator needs here — the token table knows it (`error.geocodingUnavailable`).
+        setAddressError(errorMessageFor(response.status, data, t));
         return;
       }
 
@@ -365,23 +370,19 @@ export default function BranchesPage() {
       const address = data.address;
 
       if (!address) {
-        setAddressError(
-          "Không tìm thấy địa chỉ cho toạ độ này. Vui lòng nhập tay.",
-        );
+        setAddressError(t("branches.error.geocodeNone"));
         return;
       }
 
       setForm((value) => ({ ...value, address }));
-      setAddressNotice("Đã điền địa chỉ theo toạ độ.");
+      setAddressNotice(t("branches.addressFilled"));
     } catch (error) {
       // A lookup that was replaced by a newer one has nothing to report.
       if (error instanceof DOMException && error.name === "AbortError") {
         return;
       }
 
-      setAddressError(
-        "Không kết nối được dịch vụ tra cứu địa chỉ. Vui lòng nhập tay.",
-      );
+      setAddressError(t("branches.error.geocodeOffline"));
     } finally {
       if (geocodeAbortRef.current === controller) {
         geocodeAbortRef.current = null;
@@ -403,7 +404,7 @@ export default function BranchesPage() {
       !Number.isFinite(longitude)
     ) {
       setAddressNotice("");
-      setAddressError("Cần nhập toạ độ hợp lệ trước khi tra cứu địa chỉ.");
+      setAddressError(t("branches.error.coordsRequired"));
       return;
     }
 
@@ -450,7 +451,7 @@ export default function BranchesPage() {
 
   function applyCurrentLocation() {
     if (!navigator.geolocation) {
-      setFormError("Thiết bị không hỗ trợ lấy vị trí GPS.");
+      setFormError(t("branches.error.geolocationUnsupported"));
       return;
     }
 
@@ -468,13 +469,13 @@ export default function BranchesPage() {
         // The device just told us where it is, so it may as well tell us the address too.
         void lookupAddress(latitude, longitude);
       },
-      () => setFormError("Không lấy được vị trí hiện tại. Vui lòng nhập tay."),
+      () => setFormError(t("branches.error.geolocationFailed")),
     );
   }
 
   async function submit() {
     if (!form.name.trim()) {
-      setFormError("Vui lòng nhập tên chi nhánh.");
+      setFormError(t("branches.error.nameRequired"));
       return;
     }
 
@@ -484,7 +485,7 @@ export default function BranchesPage() {
     const radius = Number(form.attendanceRadius);
 
     if (latitude !== null && (!Number.isFinite(latitude) || Math.abs(latitude) > 90)) {
-      setFormError("Vĩ độ phải là số trong khoảng -90 đến 90.");
+      setFormError(t("branches.error.latitude"));
       return;
     }
 
@@ -492,27 +493,25 @@ export default function BranchesPage() {
       longitude !== null &&
       (!Number.isFinite(longitude) || Math.abs(longitude) > 180)
     ) {
-      setFormError("Kinh độ phải là số trong khoảng -180 đến 180.");
+      setFormError(t("branches.error.longitude"));
       return;
     }
 
     if ((latitude === null) !== (longitude === null)) {
-      setFormError("Cần nhập đủ cả vĩ độ và kinh độ để tạo vùng chấm công.");
+      setFormError(t("branches.error.pair"));
       return;
     }
 
     // The same outline test the API and the map picker use, so a hand-typed pair is refused before
     // it becomes a request the server would answer with 400.
     if (latitude !== null && longitude !== null && !isInsideVietnam(latitude, longitude)) {
-      setFormError(
-        "Toạ độ phải nằm trong lãnh thổ Việt Nam. Vui lòng chọn lại vị trí trên bản đồ.",
-      );
+      setFormError(t("branches.error.outsideVietnam"));
       return;
     }
 
     if (!Number.isInteger(radius) || radius < MIN_RADIUS || radius > MAX_RADIUS) {
       setFormError(
-        `Bán kính chấm công phải là số nguyên từ ${MIN_RADIUS} đến ${MAX_RADIUS} mét.`,
+        t("branches.error.radius", { min: MIN_RADIUS, max: MAX_RADIUS }),
       );
       return;
     }
@@ -543,14 +542,14 @@ export default function BranchesPage() {
         const data = (await response.json().catch(() => null)) as {
           error?: string;
         } | null;
-        setFormError(data?.error ?? "Không thể lưu thông tin chi nhánh.");
+        setFormError(errorMessageFor(response.status, data, t));
         return;
       }
 
       closeModal();
       refresh();
     } catch {
-      setFormError("Không thể kết nối tới máy chủ. Vui lòng thử lại.");
+      setFormError(t("error.network"));
     } finally {
       setSaving(false);
     }
@@ -558,7 +557,7 @@ export default function BranchesPage() {
 
   async function remove(branch: Branch) {
     const confirmed = window.confirm(
-      `Xoá chi nhánh "${branch.name}"?\n\nChỉ xoá được khi chi nhánh không còn bảng công, ca làm việc, thiết bị hay doanh thu nào — nếu còn, hệ thống sẽ liệt kê số lượng cần xử lý trước.`,
+      t("branches.confirmDelete", { name: branch.name }),
     );
 
     if (!confirmed) {
@@ -579,13 +578,13 @@ export default function BranchesPage() {
         } | null;
         // The 409 sentence names the rows that still point at the branch, so the owner knows what to
         // move or remove first (`branches_guard_delete` repeats that check in the database).
-        setPageError(data?.error ?? "Không thể xoá chi nhánh.");
+        setPageError(errorMessageFor(response.status, data, t));
         return;
       }
 
       refresh();
     } catch {
-      setPageError("Không thể kết nối tới máy chủ. Vui lòng thử lại.");
+      setPageError(t("error.network"));
     } finally {
       setDeletingId("");
     }
@@ -596,13 +595,13 @@ export default function BranchesPage() {
       <div className="flex flex-col justify-between gap-3 lg:flex-row lg:items-end">
         <div>
           <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-slate-400">
-            Cơ sở hạ tầng / SCRUM-47
+            {t("branches.eyebrow")}
           </p>
           <h1 className="text-2xl font-bold tracking-tight text-slate-900">
-            Quản lý chi nhánh
+            {t("branches.title")}
           </h1>
           <p className="mt-1 text-xs text-slate-500">
-            Cấu hình thông tin cơ sở và vùng bán kính chấm công định vị GPS.
+            {t("branches.subtitle")}
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -613,7 +612,7 @@ export default function BranchesPage() {
             className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-surface px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
           >
             <RefreshCw size={14} className={loading ? "animate-spin" : undefined} />
-            Làm mới
+            {t("common.reload")}
           </button>
           {can("branch:manage") && (
             <button
@@ -621,7 +620,7 @@ export default function BranchesPage() {
               onClick={openCreate}
               className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-xs font-semibold text-white shadow-sm transition-colors hover:bg-primary-strong"
             >
-              <Plus size={14} /> Thêm chi nhánh
+              <Plus size={14} /> {t("branches.create")}
             </button>
           )}
         </div>
@@ -631,7 +630,7 @@ export default function BranchesPage() {
         <article className="rounded-xl border border-slate-200/80 border-b-2 border-b-blue-200 bg-surface p-4 shadow-sm">
           <div className="flex items-start justify-between gap-3">
             <p className="max-w-44 text-[10px] font-semibold uppercase leading-relaxed tracking-wide text-slate-500">
-              Tổng số chi nhánh
+              {t("branches.kpiTotal")}
             </p>
             <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-blue-50 text-primary">
               <Building2 size={16} />
@@ -641,14 +640,14 @@ export default function BranchesPage() {
             {branches.length}
           </p>
           <p className="mt-1 text-[10px] text-slate-500">
-            Đang quản lý trên hệ thống
+            {t("branches.kpiTotalNote")}
           </p>
         </article>
 
         <article className="rounded-xl border border-slate-200/80 border-b-2 border-b-emerald-200 bg-surface p-4 shadow-sm">
           <div className="flex items-start justify-between gap-3">
             <p className="max-w-44 text-[10px] font-semibold uppercase leading-relaxed tracking-wide text-slate-500">
-              Đã cấu hình vùng GPS
+              {t("branches.kpiGeofence")}
             </p>
             <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-emerald-50 text-emerald-600">
               <MapPin size={16} />
@@ -658,31 +657,31 @@ export default function BranchesPage() {
             {geofenceBranches.length}/{branches.length}
           </p>
           <p className="mt-1 text-[10px] text-emerald-600">
-            Sẵn sàng cho chấm công định vị
+            {t("branches.kpiGeofenceNote")}
           </p>
         </article>
 
         <article className="rounded-xl border border-slate-200/80 border-b-2 border-b-teal-200 bg-surface p-4 shadow-sm">
           <div className="flex items-start justify-between gap-3">
             <p className="max-w-44 text-[10px] font-semibold uppercase leading-relaxed tracking-wide text-slate-500">
-              Bán kính chấm công TB
+              {t("branches.kpiRadius")}
             </p>
             <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-teal-50 text-teal-600">
               <Radar size={16} />
             </span>
           </div>
           <p className="mt-5 text-2xl font-bold tabular-nums tracking-tight text-slate-900">
-            {radiusFormatter.format(averageRadius)} m
+            {formatNumber(averageRadius, locale)} m
           </p>
           <p className="mt-1 text-[10px] text-slate-500">
-            Áp dụng cho các chi nhánh có GPS
+            {t("branches.kpiRadiusNote")}
           </p>
         </article>
 
         <article className="rounded-xl border border-slate-200/80 border-b-2 border-b-amber-200 bg-surface p-4 shadow-sm">
           <div className="flex items-start justify-between gap-3">
             <p className="max-w-44 text-[10px] font-semibold uppercase leading-relaxed tracking-wide text-slate-500">
-              Chưa gán chi nhánh trưởng
+              {t("branches.kpiNoHead")}
             </p>
             <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-amber-50 text-amber-600">
               <UserX size={16} />
@@ -692,7 +691,7 @@ export default function BranchesPage() {
             {unassignedCount}
           </p>
           <p className="mt-1 text-[10px] text-amber-600">
-            Cần bổ sung quản lý phụ trách
+            {t("branches.kpiNoHeadNote")}
           </p>
         </article>
       </div>
@@ -708,19 +707,22 @@ export default function BranchesPage() {
           <label className="flex items-center gap-2 rounded-lg border border-slate-200 bg-app px-3 py-2 text-xs md:w-80">
             <Search size={14} className="shrink-0 text-slate-400" />
             <input
-              aria-label="Tìm chi nhánh"
+              aria-label={t("branches.searchAria")}
               value={query}
               onChange={(event) => {
                 setQuery(event.target.value);
                 setPage(1);
               }}
-              placeholder="Tìm tên, địa chỉ chi nhánh, địa bàn"
+              placeholder={t("branches.searchPlaceholder")}
               className="w-full bg-transparent outline-none placeholder:text-slate-400"
             />
           </label>
           <p className="text-[10px] text-slate-400">
-            Hiển thị {rangeStart} – {rangeEnd} trên tổng số {filtered.length} chi
-            nhánh
+            {t("branches.range", {
+              from: rangeStart,
+              to: rangeEnd,
+              total: filtered.length,
+            })}
           </p>
         </div>
 
@@ -728,14 +730,14 @@ export default function BranchesPage() {
           <table className="w-full min-w-[1200px] text-left text-xs">
             <thead className="bg-surface-muted text-[9px] font-semibold uppercase tracking-wide text-slate-500">
               <tr>
-                <th className="px-4 py-3">Chi nhánh</th>
-                <th className="px-4 py-3">Chi nhánh trưởng</th>
-                <th className="px-4 py-3">Toạ độ GPS</th>
+                <th className="px-4 py-3">{t("branches.columnBranch")}</th>
+                <th className="px-4 py-3">{t("branches.headLabel")}</th>
+                <th className="px-4 py-3">{t("branches.columnGps")}</th>
                 <th className="whitespace-nowrap px-4 py-3 text-right">
-                  Bán kính chấm công
+                  {t("branches.columnRadius")}
                 </th>
-                <th className="px-4 py-3">Trạng thái</th>
-                <th className="px-4 py-3 text-right">Thao tác</th>
+                <th className="px-4 py-3">{t("common.status")}</th>
+                <th className="px-4 py-3 text-right">{t("common.actions")}</th>
               </tr>
             </thead>
             <tbody>
@@ -747,7 +749,7 @@ export default function BranchesPage() {
                   >
                     <span className="inline-flex items-center gap-2">
                       <Loader2 size={14} className="animate-spin text-primary" />
-                      Đang tải danh sách chi nhánh...
+                      {t("branches.loading")}
                     </span>
                   </td>
                 </tr>
@@ -759,7 +761,9 @@ export default function BranchesPage() {
                     colSpan={6}
                     className="px-4 py-10 text-center text-slate-400"
                   >
-                    {query ? "Không tìm thấy kết quả nào" : "Chưa có chi nhánh nào"}
+                    {query
+                      ? t("branches.emptyFiltered")
+                      : t("branches.empty")}
                   </td>
                 </tr>
               )}
@@ -785,13 +789,15 @@ export default function BranchesPage() {
                               {branch.name}
                             </p>
                             <p className="mt-0.5 max-w-[20rem] break-words text-[11px] text-slate-500">
-                              {branch.address ?? "Chưa cập nhật địa chỉ"}
+                              {branch.address ?? t("branches.noAddress")}
                             </p>
                             <p className="mt-1 inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-600">
-                              Mã tài sản {firstAssetCode(branch)}
+                              {t("branches.assetCode", { code: firstAssetCode(branch) })}
                               {branch.asset_prefix
-                                ? ` · số ${String(branch.asset_prefix).padStart(2, "0")}`
-                                : " · chưa có số thứ tự"}
+                                ? t("branches.assetNumber", {
+                                    number: String(branch.asset_prefix).padStart(2, "0"),
+                                  })
+                                : t("branches.assetNoNumber")}
                             </p>
                           </div>
                         </div>
@@ -803,42 +809,43 @@ export default function BranchesPage() {
                               {manager.full_name}
                             </span>
                             <span className="text-[10px] text-slate-400">
-                              {roleLabel(manager.role)}
+                              {roleLabel(manager.role, t)}
                             </span>
                             {!hasValidHead(branch) && (
                               // SCRUM-63: the owner stands above every branch, so an owner-headed row
                               // is a branch nobody actually runs — the operator has to notice it.
                               <span className="max-w-48 text-[10px] font-semibold text-amber-600">
-                                {roleLabel(manager.role)} không phụ trách chi nhánh — cần gán
-                                quản lý chi nhánh
+                                {t("branches.headInvalid", {
+                                  role: roleLabel(manager.role, t),
+                                })}
                               </span>
                             )}
                           </span>
                         ) : branch.manager_id ? (
                           // Without the directory the row shows the state, not the name.
                           <span className="rounded-full bg-blue-50 px-2.5 py-1 text-[11px] font-semibold text-blue-700">
-                            Đã gán
+                            {t("branches.assigned")}
                           </span>
                         ) : (
                           <span className="rounded-full bg-amber-50 px-2.5 py-1 text-[11px] font-semibold text-amber-700">
-                            Chưa gán
+                            {t("branches.unassigned")}
                           </span>
                         )}
                       </td>
                       <td className="whitespace-nowrap px-4 py-4 tabular-nums text-slate-600">
-                        {formatGps(branch.latitude, branch.longitude)}
+                        {formatGps(branch.latitude, branch.longitude, t)}
                       </td>
                       <td className="whitespace-nowrap px-4 py-4 text-right tabular-nums text-slate-700">
-                        {radiusFormatter.format(branch.attendance_radius)} m
+                        {formatNumber(branch.attendance_radius, locale)} m
                       </td>
                       <td className="px-4 py-4">
                         {hasGeofence(branch) ? (
                           <span className="whitespace-nowrap rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-emerald-700">
-                            Sẵn sàng chấm công
+                            {t("branches.readyCheckIn")}
                           </span>
                         ) : (
                           <span className="whitespace-nowrap rounded-full bg-amber-50 px-2.5 py-1 text-[11px] font-semibold text-amber-700">
-                            Thiếu toạ độ
+                            {t("branches.missingCoords")}
                           </span>
                         )}
                       </td>
@@ -850,7 +857,7 @@ export default function BranchesPage() {
                               onClick={() => openEdit(branch)}
                               className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-lg border border-slate-200 px-3 py-1.5 text-[11px] font-semibold text-slate-700 transition-colors hover:bg-slate-50"
                             >
-                              <Pencil size={13} /> Chỉnh sửa
+                              <Pencil size={13} /> {t("common.edit")}
                             </button>
                             {can("branch:manage") && (
                               <button
@@ -864,13 +871,13 @@ export default function BranchesPage() {
                                 ) : (
                                   <Trash2 size={13} />
                                 )}
-                                Xoá
+                                {t("common.delete")}
                               </button>
                             )}
                           </div>
                         ) : (
                           <span className="text-[11px] font-medium text-slate-400">
-                            Chỉ xem
+                            {t("common.viewOnly")}
                           </span>
                         )}
                       </td>
@@ -884,12 +891,12 @@ export default function BranchesPage() {
         {pageCount > 1 && (
           <div className="flex items-center justify-between border-t border-slate-100 px-4 py-3">
             <p className="text-[10px] text-slate-400">
-              Trang {currentPage} / {pageCount}
+              {t("common.pageOf", { page: currentPage, count: pageCount })}
             </p>
             <div className="flex items-center gap-2">
               <button
                 type="button"
-                aria-label="Trang trước"
+                aria-label={t("common.previousPage")}
                 onClick={() => setPage(Math.max(1, currentPage - 1))}
                 disabled={currentPage === 1}
                 className="rounded-lg border border-slate-200 bg-surface p-2 text-slate-500 hover:bg-slate-50 disabled:opacity-40"
@@ -914,7 +921,7 @@ export default function BranchesPage() {
               )}
               <button
                 type="button"
-                aria-label="Trang sau"
+                aria-label={t("common.nextPage")}
                 onClick={() => setPage(Math.min(pageCount, currentPage + 1))}
                 disabled={currentPage === pageCount}
                 className="rounded-lg border border-slate-200 bg-surface p-2 text-slate-500 hover:bg-slate-50 disabled:opacity-40"
@@ -937,16 +944,15 @@ export default function BranchesPage() {
                 <div>
                   <h2 className="font-bold text-slate-900">
                     {modal.mode === "create"
-                      ? "Thêm mới Chi nhánh hoạt động"
-                      : "Cập nhật Chi nhánh"}
+                      ? t("branches.modalCreate")
+                      : t("branches.modalEdit")}
                   </h2>
                   <p className="mt-1 text-xs text-slate-500">
-                    Cấu hình thông tin cơ sở và vùng bán kính chấm công định vị
-                    tinh GPS.
+                    {t("branches.subtitle")}
                   </p>
                 </div>
               </div>
-              <button type="button" aria-label="Đóng" onClick={closeModal}>
+              <button type="button" aria-label={t("common.close")} onClick={closeModal}>
                 <X size={18} className="text-slate-400" />
               </button>
             </div>
@@ -954,24 +960,24 @@ export default function BranchesPage() {
             <div className="mt-5 space-y-4">
               {modal.mode === "edit" && (
                 <p className="rounded-lg bg-slate-50 px-3 py-2 text-[11px] font-normal text-slate-600">
-                  Mã tài sản của chi nhánh này bắt đầu bằng{" "}
+                  {t("branches.assetHintLead")}{" "}
                   <span className="font-semibold">
                     {firstAssetCode(modal.branch)}
                   </span>
                   {modal.branch.asset_prefix
-                    ? " — số thứ tự được cấp khi chi nhánh được tạo và không đổi khi đổi tên."
-                    : " — chi nhánh này chưa có số thứ tự, chạy SCRUM-67 để cấp."}
+                    ? t("branches.assetHintNumbered")
+                    : t("branches.assetHintUnnumbered")}
                 </p>
               )}
               <label className="block text-xs font-semibold text-slate-600">
-                Tên chi nhánh <span className="text-rose-500">*</span>
+                {t("branches.nameLabel")} <span className="text-rose-500">*</span>
                 <input
                   value={form.name}
                   onChange={(event) =>
                     setForm((value) => ({ ...value, name: event.target.value }))
                   }
                   maxLength={120}
-                  placeholder="Chi nhánh Quận 1 - Flagship Bến Thành"
+                  placeholder={t("branches.namePlaceholder")}
                   className="mt-1 w-full rounded-lg border border-slate-200 p-2.5 text-sm font-normal outline-none focus:border-blue-500"
                 />
               </label>
@@ -979,7 +985,7 @@ export default function BranchesPage() {
               <div>
                 <div className="mb-1 flex items-center justify-between gap-2">
                   <p className="text-xs font-semibold text-slate-600">
-                    Địa chỉ đầy đủ
+                    {t("branches.addressLabel")}
                   </p>
                   <button
                     type="button"
@@ -992,7 +998,9 @@ export default function BranchesPage() {
                     ) : (
                       <MapPinned size={12} />
                     )}
-                    {locatingAddress ? "Đang tra cứu..." : "Lấy địa chỉ từ toạ độ"}
+                    {locatingAddress
+                      ? t("branches.lookupBusy")
+                      : t("branches.lookupButton")}
                   </button>
                 </div>
                 <input
@@ -1004,13 +1012,12 @@ export default function BranchesPage() {
                     }))
                   }
                   maxLength={300}
-                  placeholder="128 Lê Lợi, Phường Bến Thành, Quận 1, TP. Hồ Chí Minh"
+                  placeholder={t("branches.addressPlaceholder")}
                   className="w-full rounded-lg border border-slate-200 p-2.5 text-sm font-normal outline-none focus:border-blue-500"
                 />
                 {/* Reverse geocoding fills this field whenever the pin moves; a typed address stays editable. */}
                 <p className="mt-1 text-[11px] text-slate-400">
-                  Chọn vị trí trên bản đồ hoặc “Lấy vị trí hiện tại” để hệ thống
-                  tự điền địa chỉ theo toạ độ.
+                  {t("branches.addressHint")}
                 </p>
                 {addressNotice && (
                   <p className="mt-1 text-[11px] font-semibold text-emerald-600">
@@ -1025,7 +1032,7 @@ export default function BranchesPage() {
               </div>
 
               <label className="block text-xs font-semibold text-slate-600">
-                Chi nhánh trưởng
+                {t("branches.headLabel")}
                 <select
                   value={form.managerId}
                   onChange={(event) =>
@@ -1037,30 +1044,28 @@ export default function BranchesPage() {
                   disabled={staffLoading || !staffAllowed || !can("branch:manage")}
                   className="mt-1 w-full rounded-lg border border-slate-200 bg-surface p-2.5 text-sm font-normal outline-none focus:border-blue-500 disabled:text-slate-400"
                 >
-                  <option value="">— Chưa gán —</option>
+                  <option value="">{t("branches.headPlaceholder")}</option>
                   {managerOptions.map((member) => (
                     <option key={member.id} value={member.id}>
-                      {member.full_name} — {roleLabel(member.role)}
-                      {member.is_active ? "" : " (đã nghỉ)"}
+                      {member.full_name} — {roleLabel(member.role, t)}
+                      {member.is_active ? "" : ` ${t("common.inactiveTag")}`}
                     </option>
                   ))}
                 </select>
                 <span className="mt-1 block text-[11px] font-normal text-slate-400">
                   {!can("branch:manage")
-                    ? "Chỉ chủ sở hữu mới đổi được chi nhánh trưởng; bạn sửa được thông tin của chi nhánh mình phụ trách."
+                    ? t("branches.headHintOwnerOnly")
                     : staffLoading
-                      ? "Đang tải danh sách nhân sự..."
+                      ? t("branches.headHintLoading")
                       : staffAllowed
-                        ? "Người phụ trách chi nhánh — chỉ tài khoản quản lý chi nhánh; có thể để trống. Chủ sở hữu đứng trên mọi chi nhánh nên không phụ trách một chi nhánh cụ thể."
-                        : "Chỉ chủ sở hữu/quản lý mới xem được danh sách nhân sự để gán chi nhánh trưởng."}
+                        ? t("branches.headHint")
+                        : t("branches.headHintForbidden")}
                 </span>
                 {modal.mode === "edit" &&
                   modal.branch.manager_id !== null &&
                   !hasValidHead(modal.branch) && (
                     <span className="mt-1 block text-[11px] font-normal text-amber-600">
-                      Chi nhánh trưởng hiện tại là chủ sở hữu hoặc một tài khoản không thể phụ
-                      trách chi nhánh, nên ô này đã được để trống — chọn một quản lý chi nhánh
-                      rồi lưu lại.
+                      {t("branches.headInvalidWarning")}
                     </span>
                   )}
               </label>
@@ -1068,19 +1073,19 @@ export default function BranchesPage() {
               <div>
                 <div className="mb-1 flex items-center justify-between">
                   <p className="text-xs font-semibold text-slate-600">
-                    Toạ độ định vị GPS <span className="text-rose-500">*</span>
+                    {t("branches.gpsLabel")} <span className="text-rose-500">*</span>
                   </p>
                   <button
                     type="button"
                     onClick={applyCurrentLocation}
                     className="inline-flex items-center gap-1 text-[11px] font-semibold text-primary"
                   >
-                    <MapPin size={12} /> Lấy vị trí hiện tại
+                    <MapPin size={12} /> {t("branches.useCurrentLocation")}
                   </button>
                 </div>
                 <div className="grid gap-3 sm:grid-cols-2">
                   <label className="block text-[10px] font-semibold uppercase tracking-wide text-slate-400">
-                    Vĩ độ (Lat)
+                    {t("branches.latitude")}
                     <input
                       value={form.latitude}
                       onChange={(event) =>
@@ -1095,7 +1100,7 @@ export default function BranchesPage() {
                     />
                   </label>
                   <label className="block text-[10px] font-semibold uppercase tracking-wide text-slate-400">
-                    Kinh độ (Long)
+                    {t("branches.longitude")}
                     <input
                       value={form.longitude}
                       onChange={(event) =>
@@ -1115,19 +1120,20 @@ export default function BranchesPage() {
               <div>
                 <div className="mb-1 flex items-center justify-between">
                   <p className="text-xs font-semibold text-slate-600">
-                    Bán kính chấm công cho phép (Geo-Fence)
+                    {t("branches.radiusLabel")}
                   </p>
                   <p className="text-[11px] font-semibold text-primary">
-                    {radiusFormatter.format(
+                    {formatNumber(
                       Number.isFinite(previewRadius) ? previewRadius : 0,
+                      locale,
                     )}{" "}
-                    mét
+                    {t("branches.radiusUnit")}
                   </p>
                 </div>
                 <div className="flex items-center gap-3">
                   <input
                     type="number"
-                    aria-label="Bán kính chấm công (mét)"
+                    aria-label={t("branches.radiusAria")}
                     min={MIN_RADIUS}
                     max={MAX_RADIUS}
                     step={10}
@@ -1142,7 +1148,7 @@ export default function BranchesPage() {
                   />
                   <input
                     type="range"
-                    aria-label="Bán kính chấm công"
+                    aria-label={t("branches.columnRadius")}
                     min={MIN_RADIUS}
                     max={MAX_RADIUS}
                     step={10}
@@ -1159,18 +1165,18 @@ export default function BranchesPage() {
                   />
                 </div>
                 <p className="mt-2 rounded-lg border border-slate-100 bg-app p-2.5 text-[11px] text-slate-500">
-                  Ngoài bán kính{" "}
-                  {radiusFormatter.format(
-                    Number.isFinite(previewRadius) ? previewRadius : 0,
-                  )}
-                  m tính từ tâm chi nhánh, hệ thống sẽ không ghi nhận chấm công
-                  GPS.
+                  {t("branches.radiusNote", {
+                    radius: formatNumber(
+                      Number.isFinite(previewRadius) ? previewRadius : 0,
+                      locale,
+                    ),
+                  })}
                 </p>
               </div>
 
               <div>
                 <p className="mb-1 text-xs font-semibold text-slate-600">
-                  Vị trí chi nhánh và vùng chấm công
+                  {t("branches.mapLabel")}
                 </p>
                 <LocationPickerMap
                   latitude={previewLatitude}
@@ -1202,7 +1208,7 @@ export default function BranchesPage() {
                 onClick={closeModal}
                 className="rounded-lg border border-slate-200 px-4 py-2 text-xs font-semibold"
               >
-                Hủy bỏ
+                {t("common.cancel")}
               </button>
               <button
                 type="button"
@@ -1211,7 +1217,7 @@ export default function BranchesPage() {
                 className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-xs font-semibold text-white shadow-sm transition-colors hover:bg-primary-strong disabled:opacity-50"
               >
                 {saving && <Loader2 size={13} className="animate-spin" />}
-                {saving ? "Đang lưu..." : "Lưu thông tin chi nhánh"}
+                {saving ? t("common.saving") : t("branches.save")}
               </button>
             </div>
           </div>

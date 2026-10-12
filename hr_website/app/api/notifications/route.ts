@@ -57,7 +57,7 @@
  *       400:
  *         description: A query parameter is invalid (a non-positive page size or an unknown `type`).
  *       401:
- *         description: Authentication is required.
+ *         description: Bạn cần đăng nhập để thực hiện thao tác này.
  *       500:
  *         description: An unexpected server error occurred.
  */
@@ -82,7 +82,7 @@ export async function GET(request: NextRequest) {
 
     if (authError || !user) {
       return NextResponse.json(
-        { error: "Authentication is required." },
+        { error: "Bạn cần đăng nhập để thực hiện thao tác này." },
         { status: 401 },
       );
     }
@@ -97,7 +97,7 @@ export async function GET(request: NextRequest) {
 
     if (isNaN(page) || page < 1 || isNaN(pageSize) || pageSize < 1) {
       return NextResponse.json(
-        { error: "page and page_size must be positive integers." },
+        { error: "page và page_size phải là số nguyên dương." },
         { status: 400 },
       );
     }
@@ -113,7 +113,7 @@ export async function GET(request: NextRequest) {
       unreadParam !== "false"
     ) {
       return NextResponse.json(
-        { error: "unread must be true or false." },
+        { error: "unread phải là true hoặc false." },
         { status: 400 },
       );
     }
@@ -124,14 +124,14 @@ export async function GET(request: NextRequest) {
       readParam !== "false"
     ) {
       return NextResponse.json(
-        { error: "read must be true or false." },
+        { error: "read phải là true hoặc false." },
         { status: 400 },
       );
     }
 
     if (unreadParam === "true" && readParam === "true") {
       return NextResponse.json(
-        { error: "unread and read cannot both be true." },
+        { error: "unread và read không thể cùng bằng true." },
         { status: 400 },
       );
     }
@@ -162,7 +162,7 @@ export async function GET(request: NextRequest) {
   } catch (error) {
     console.error("Failed to get notifications", error);
     return NextResponse.json(
-      { error: "Unable to retrieve notifications." },
+      { error: "Không thể tải thông báo." },
       { status: 500 },
     );
   }

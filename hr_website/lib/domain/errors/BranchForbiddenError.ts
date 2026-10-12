@@ -7,7 +7,7 @@
  */
 export class BranchForbiddenError extends Error {
   constructor() {
-    super("You may only manage the branch you are the chi nhánh trưởng of.");
+    super("Bạn chỉ quản lý được chi nhánh mình phụ trách.");
     this.name = "BranchForbiddenError";
   }
 }

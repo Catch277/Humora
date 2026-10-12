@@ -15,14 +15,20 @@ import { StaffProvisioningRateLimitedError } from "@/lib/domain/errors/StaffProv
 import { StaffProvisioningUnavailableError } from "@/lib/domain/errors/StaffProvisioningUnavailableError";
 import { TooManyJoinAttemptsError } from "@/lib/domain/errors/TooManyJoinAttemptsError";
 
-/** Field-validation messages the organization use cases produce (`<field> must …`). */
+/**
+ * Field-validation messages the organization use cases produce, by their leading token: the sentences
+ * are Vietnamese now (`Tên phải có từ 2 đến 120 ký tự.`), so each prefix is the field name or the
+ * Vietnamese phrase the message starts with. Keep it in step with the `throw new Error(...)` below it —
+ * a prefix that no longer matches turns a `400` into a `500`.
+ */
 const VALIDATION_PREFIXES = [
-  "name must",
-  "code must",
-  "email must",
-  "role must",
-  "full_name must",
-  "password must",
+  "Tên ",
+  "Mã tham gia ",
+  "email ",
+  "role ",
+  "full_name ",
+  "password ",
+  "Mật khẩu ",
 ];
 
 /**

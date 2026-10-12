@@ -191,7 +191,7 @@ the header gets its room back. Everything below it has to be usable with one thu
 | Touch | No hover-only affordance: the schedule cell's `+ Thêm` is `opacity-100` below `md` and revealed on hover/focus from `md` up. Anything that only exists on `group-hover` is invisible *and* tappable on a phone. |
 | Forms | Safari zooms the page when a focused field is below 16px, so `app/globals.css` forces `16px` on `input/select/textarea` under `max-width: 767px`. The rule sits **outside** every `@layer` so it outranks Tailwind's `text-xs`/`text-sm` utilities. |
 | Modals | `max-h-[85dvh]` (not `92vh`: the iOS toolbar eats into `vh`), `p-4 sm:p-6`, and the wrapper is `items-end sm:items-center`, so a dialog rises from the bottom like a sheet on a phone and stays centred on a desktop. |
-| Tables | Unchanged in shape: `overflow-x-auto` + `min-w-[…]`, so a phone swipes sideways. The first column is the row's identity (employee, ca, mã) — the place a sticky column would go if a screen needs it. |
+| Tables | Unchanged in shape: `overflow-x-auto` + `min-w-[…]`, so a phone swipes sideways. A cell whose content must not break carries `whitespace-nowrap` — the `/organization` invites table is the reference: without it the `Chờ vào tổ chức` pill wraps over three lines at 393px and stretches every row (header cells wrap too, so they need it as well). The first column is the row's identity (employee, ca, mã) — the place a sticky column would go if a screen needs it. |
 | Map | `LocationPickerMap` keeps Leaflet's defaults: `h-64 w-full`, wheel zoom on a desktop, and on a phone one-finger drag pans the *map* and pinch zooms it — so a swipe over the map does not scroll the page (the fields and the modal around it do). That is the normal trade-off for a picker; the pin is placed by tapping, not by dragging it. |
 
 ---
@@ -535,10 +535,51 @@ screen never composes a notification — it labels, groups and links what it fin
 
 - **Copy is Vietnamese.** Labels are short, verb-first and sentence case except the uppercase eyebrows:
   `Xem bảng công`, `Quản lý duyệt đơn nghỉ phép`, `Đánh dấu tất cả đã đọc`, `Lưu thay đổi`.
-- **Currency:** `new Intl.NumberFormat("vi-VN").format(amount)` → `24.850.000`, suffixed with ` ₫`
-  (`Nghỉ`/`0 ₫` for zero variance, `+50.000 ₫` / `-150.000 ₫` with an explicit sign for deltas).
-- **Dates & times:** `vi-VN` — shift labels `T2 05/10`, ranges `28/10 – 29/10`,
-  clock `14:00 – 23:00`, timestamps `09:24 AM`, relative times `25 phút trước` / `Hôm qua`.
+- **Two languages, one source of truth (vi / en).** The copy lives in `lib/i18n/messages/vi.ts` (the source
+  language) and `messages/en.ts`, both shaped by `Translations` = `Record<MessageKey, string>`, so a key added
+  on one side and forgotten on the other fails `npx tsc --noEmit`. Components read it with
+  `const { t } = useLocale()` (`components/LocaleProvider.tsx`) and `t("header.signOut")`;
+  `components/navigation.ts` stores a `labelKey`, never a label. The active locale is the `humora-locale`
+  cookie — `app/layout.tsx` reads it on the server so `<html lang>` and the first paint are already right —
+  and `components/LanguageToggle.tsx` switches it (both buttons from `md` up, one cycling button below
+  `md`, like the theme switch). A screen that has not been migrated yet keeps its Vietnamese literals and
+  renders exactly as before: migrate screen by screen, never in one sweep. A **public** screen carries the
+  switch itself — `/login` and `/register` render `LanguageToggle` in their card, because `Header` returns
+  `null` on a public path and a visitor who has never signed in must still be able to reach English.
+- **Migrating a screen (the recipe `/organization` established).** The screen reads
+  `const { locale, t } = useLocale()`, every literal becomes `t("organization.…")`, and the module-level
+  helpers (`accountErrorMessage`, `actionErrorMessage`, `provisioningNote`) take `t` as their last argument,
+  because a function outside the component has no hook. `formatDateTime(value, locale)` follows the reader's
+  language while the business time zone stays `Asia/Bangkok`. A literal used as an attribute value needs
+  `aria-label={t("…")}`, and JSX copy needs braces *and* its own indentation (`{t("…")}`) — a bare `t(…)` in
+  a text position does not compile. A migrated screen has no Vietnamese line left at all.
+- **Shared labels.** A vocabulary several screens render — a role, a notification category or type code, an
+  attendance / shift / employee / request status, a passkey failure — is a **dictionary key** held by
+  `lib/i18n/labels.ts`, `roleLabel()` (`lib/accessPolicy.ts`), `notificationTypeLabel()` /
+  `notificationCategoryLabel()` (`lib/domain/notificationCatalog.ts`) and `passkeyErrorMessage()`
+  (`lib/domain/passkeyMessages.ts`). Each helper takes `t` as its **last, optional** argument and defaults to
+  the Vietnamese source, so nothing renders differently until the screen that calls it opts in, and a code the
+  vocabulary does not know renders itself instead of a blank pill. `requests.request_type` is stored *as* its
+  label: the display is translated, the value that is sent and filtered on never is.
+- **Server sentences are Vietnamese.** Anything a caller can see — an `error` payload, a domain error's
+  message, the Edge Function's answers — is Vietnamese, because the app is Vietnamese-first and the screen
+  often shows that sentence verbatim. Repository/`console.error` diagnostics (`Unable to load …: ${error.message}`)
+  deliberately stay English: they sit in the log next to Postgres' own English text and never reach a caller.
+  A route that decides a status by matching a message has to match a token that survives translation — the
+  field name (`startsWith("status")`) or the Vietnamese phrase — and both sides change in the same commit
+  (`app/api/organizations/_lib/organizationErrorResponse.ts` is the reference).
+- **Currency:** `formatCurrency(amount, locale)` from `lib/i18n/format.ts` → `24.850.000 ₫` (`vi`) /
+  `24,850,000 ₫` (`en`); never a new `new Intl.NumberFormat("vi-VN")` in a screen. Zero variance reads
+  `0 ₫`, and a delta carries an explicit sign (`+50.000 ₫` / `-150.000 ₫` from `formatSignedCurrency`).
+- **Dates & times:** `lib/i18n/format.ts` — shift labels `T2 05/10` / `Mon 05/10`, ranges `28/10 – 29/10`,
+  clock `14:00 – 23:00` (24-hour in both languages), timestamps `09:24`. English formats as **`en-GB`** so a
+  date never turns into "May 10th", the zone is always `Asia/Bangkok` whatever the reader's language is, and
+  `formatDayMonth` joins the `YYYY-MM-DD` string instead of using `Intl`, whose `vi-VN` short date is `05-10`.
+- **English glossary (one wording per term, across every screen):** chi nhánh → *branch*; ca (làm việc) →
+  *shift*; bảng công → *timesheet*; chấm công → *attendance* (the `/check-in` screen is *Check-in*); giờ công
+  → *worked hours*; đơn từ → *request*; khiếu nại → *complaint*; doanh thu → *revenue*; đối soát →
+  *reconciliation*; nghỉ phép → *leave*; nhân sự → *staff*; thiết bị → *facility*; tổ chức → *organization*;
+  chủ sở hữu → *owner*; quản lý chi nhánh → *branch manager*; nhân viên → *employee*.
 - **Percentages** use a comma decimal separator: `+4,2%`, `Đạt 108% KPI`.
 - **Code, identifiers, comments and file names stay English** (see `AGENTS.md`). The only exception is
   the Chat AI module, which is documented in Vietnamese.
@@ -668,8 +709,10 @@ it: a manager and the owner track the organization here, and their own ca must b
 1. `app/<segment>/page.tsx`, default export, `"use client"` only if it has state/effects/browser APIs.
 2. Root `<div className="space-y-5">` + §7.1 header (eyebrow with the SCRUM id, H1, description, actions).
 3. Sections as §7.2 panels; filters as §7.4 pills; empty/loading/error states as §7.10.
-4. Vietnamese copy, `vi-VN` numbers/dates, badges from §7.6.
-5. Register in `components/Sidebar.tsx` (icon + label).
+4. Vietnamese copy, `vi-VN` numbers/dates, badges from §7.6 — or a `t()` key (§8) when the screen is being
+   migrated to the second language.
+5. Register the screen in `components/navigation.ts` (icon + Vietnamese `labelKey`) — never in `Sidebar` or
+   `MobileNav` directly, since both render that one list.
 6. Wire to `/api/*` (never a demo array), handle `401`/`403`/`400` with a rose banner.
 7. If you added a route: JSDoc `@swagger` block + shared schema in `lib/swagger.ts`.
 8. Verify: `npx tsc --noEmit`, `npx eslint <files you touched>`, then open the page and `/api-docs`.
@@ -683,6 +726,8 @@ it: a manager and the owner track the organization here, and their own ca must b
 | Colour tokens, font wiring | `app/globals.css` (`:root` + `@theme inline`) |
 | Font loading, shell, `max-w-[1440px]` | `app/layout.tsx` |
 | Navigation, brand block, branch footer card | `components/Sidebar.tsx` |
+| Navigation list (one source), phone drawer | `components/navigation.ts`, `components/MobileNav.tsx` |
+| Locale, dictionaries, `t()`, language switch | `lib/i18n/**`, `components/LocaleProvider.tsx`, `components/LanguageToggle.tsx` |
 | Global search, notification bell, user card | `components/Header.tsx` |
 | `text-[10px]` eyebrow convention | every `app/*/page.tsx` |
 

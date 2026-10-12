@@ -22,6 +22,7 @@ import {
 import Link from "next/link";
 import { useEffect, useState } from "react";
 
+import { useLocale } from "@/components/LocaleProvider";
 import { useProfile } from "@/components/ProfileProvider";
 import { asArray, asArrayField } from "@/lib/asArray";
 import { canAccessScreen } from "@/lib/accessPolicy";
@@ -31,14 +32,17 @@ import type {
 } from "@/lib/domain/entities/Notification";
 import type { NotificationSetting } from "@/lib/domain/entities/NotificationSetting";
 import {
-  CATEGORY_LABELS,
+  CATEGORY_KEYS,
   NOTIFICATION_CATEGORIES,
   notificationCategory,
+  notificationCategoryLabel,
   notificationHref,
   notificationTypeLabel,
   notificationTypesOfCategory,
   type NotificationCategory,
 } from "@/lib/domain/notificationCatalog";
+import { formatDateTime } from "@/lib/i18n/format";
+import type { MessageKey, Translate } from "@/lib/i18n/translate";
 
 const PAGE_SIZE = 20;
 
@@ -49,10 +53,10 @@ const PAGE_SIZE = 20;
  */
 const POLL_INTERVAL_MS = 30_000;
 
-const CHANNEL_LABELS: Record<string, string> = {
-  in_app: "Trong ứng dụng",
-  email: "Email",
-  push: "Thông báo đẩy (mobile)",
+const CHANNEL_LABEL_KEYS: Record<string, MessageKey> = {
+  in_app: "notificationChannel.inApp",
+  email: "notificationChannel.email",
+  push: "notificationChannel.push",
 };
 
 /**
@@ -60,11 +64,23 @@ const CHANNEL_LABELS: Record<string, string> = {
  * other two are switches without a service behind them, and saying so is the point — the drawer used
  * to imply a delivery that never happened.
  */
-const CHANNEL_NOTES: Record<string, string> = {
-  in_app: "Thông báo hiện trong chuông của ứng dụng. Tắt là ngừng nhận.",
-  email: "Chưa được cấu hình: hệ thống chưa có dịch vụ gửi email.",
-  push: "Chưa được cấu hình: hệ thống chưa có dịch vụ thông báo đẩy.",
+const CHANNEL_NOTE_KEYS: Record<string, MessageKey> = {
+  in_app: "notificationChannel.note.inApp",
+  email: "notificationChannel.note.email",
+  push: "notificationChannel.note.push",
 };
+
+/** The label of a channel; a channel this build does not know renders its raw code. */
+function channelLabel(channel: string, t: Translate): string {
+  const key = CHANNEL_LABEL_KEYS[channel];
+
+  return key ? t(key) : channel;
+}
+
+/** What a switch actually does; a channel with no note of its own gets the neutral sentence. */
+function channelNote(channel: string, t: Translate): string {
+  return t(CHANNEL_NOTE_KEYS[channel] ?? "notificationChannel.note.unknown");
+}
 
 /** The icon of a notification group — the same family the sidebar uses for the matching screen. */
 const CATEGORY_ICONS: Record<NotificationCategory, typeof Bell> = {
@@ -78,33 +94,20 @@ const CATEGORY_ICONS: Record<NotificationCategory, typeof Bell> = {
   organization: Store,
 };
 
-function formatDateTime(value: string): string {
-  const parsed = new Date(value);
-
-  if (Number.isNaN(parsed.getTime())) {
-    return "—";
-  }
-
-  return new Intl.DateTimeFormat("vi-VN", {
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-    timeZone: "Asia/Bangkok",
-  }).format(parsed);
-}
-
-function statusMessage(status: number, serverMessage?: string): string {
+function statusMessage(
+  status: number,
+  serverMessage: string | undefined,
+  t: Translate,
+): string {
   if (status === 401) {
-    return "Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.";
+    return t("error.sessionExpired");
   }
 
   if (status === 404) {
-    return "Thông báo này không còn tồn tại.";
+    return t("notifications.error.notFound");
   }
 
-  return serverMessage ?? "Không thực hiện được thao tác. Vui lòng thử lại.";
+  return serverMessage ?? t("error.generic");
 }
 
 type ChannelToggle = { channel: string; enabled: boolean };
@@ -128,6 +131,7 @@ export default function NotificationsPage() {
   // The shell already knows the role (SCRUM-59); the inbox uses it to decide where a row links — an
   // employee may not open `/attendance`, so their timesheet rows open `/check-in` (SCRUM-68).
   const { profile } = useProfile();
+  const { locale, t } = useLocale();
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
@@ -184,7 +188,7 @@ export default function NotificationsPage() {
         return {
           data: [],
           total: 0,
-          error: statusMessage(response.status, data?.error),
+          error: statusMessage(response.status, data?.error, t),
         };
       }
 
@@ -217,14 +221,14 @@ export default function NotificationsPage() {
 
         setNotifications([]);
         setTotal(0);
-        setPageError("Không thể kết nối tới máy chủ. Vui lòng thử lại.");
+        setPageError(t("error.network"));
         setLoading(false);
       });
 
     return () => {
       cancelled = true;
     };
-  }, [page, tab, typeFilter, reloadToken]);
+  }, [page, tab, typeFilter, reloadToken, t]);
 
   // A live inbox: the producers (SCRUM-70/71/72) write rows while this screen is open — a ca is
   // assigned, a khiếu nại arrives — so the list is refetched quietly on an interval. It is not a
@@ -288,7 +292,7 @@ export default function NotificationsPage() {
 
         return {
           settings: [],
-          error: statusMessage(response.status, data?.error),
+          error: statusMessage(response.status, data?.error, t),
         };
       }
 
@@ -312,14 +316,14 @@ export default function NotificationsPage() {
           return;
         }
 
-        setSettingsError("Không thể kết nối tới máy chủ. Vui lòng thử lại.");
+        setSettingsError(t("error.network"));
         setSettingsLoading(false);
       });
 
     return () => {
       cancelled = true;
     };
-  }, [settingsOpen]);
+  }, [settingsOpen, t]);
 
   async function markRead(notification: Notification) {
     if (notification.is_read || busyId) {
@@ -339,7 +343,7 @@ export default function NotificationsPage() {
         const data = (await response.json().catch(() => null)) as {
           error?: string;
         } | null;
-        setPageError(statusMessage(response.status, data?.error));
+        setPageError(statusMessage(response.status, data?.error, t));
         return;
       }
 
@@ -349,7 +353,7 @@ export default function NotificationsPage() {
         ),
       );
     } catch {
-      setPageError("Không thể kết nối tới máy chủ. Vui lòng thử lại.");
+      setPageError(t("error.network"));
     } finally {
       setBusyId("");
     }
@@ -381,13 +385,13 @@ export default function NotificationsPage() {
         const data = (await response.json().catch(() => null)) as {
           error?: string;
         } | null;
-        setPageError(statusMessage(response.status, data?.error));
+        setPageError(statusMessage(response.status, data?.error, t));
         return;
       }
 
       refresh();
     } catch {
-      setPageError("Không thể kết nối tới máy chủ. Vui lòng thử lại.");
+      setPageError(t("error.network"));
     } finally {
       setMarkingAll(false);
     }
@@ -413,13 +417,13 @@ export default function NotificationsPage() {
         const data = (await response.json().catch(() => null)) as {
           error?: string;
         } | null;
-        setSettingsError(statusMessage(response.status, data?.error));
+        setSettingsError(statusMessage(response.status, data?.error, t));
         return;
       }
 
       setSettingsSaved(true);
     } catch {
-      setSettingsError("Không thể kết nối tới máy chủ. Vui lòng thử lại.");
+      setSettingsError(t("error.network"));
     }
   }
 
@@ -433,14 +437,13 @@ export default function NotificationsPage() {
       <section className="flex flex-col justify-between gap-4 rounded-xl border border-slate-200/80 bg-surface p-5 shadow-sm lg:flex-row lg:items-center">
         <div>
           <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-slate-400">
-            Hệ thống / SCRUM-48 · SCRUM-70
+            {t("notifications.eyebrow")}
           </p>
-          <h1 className="text-2xl font-bold tracking-tight text-slate-900">Thông báo</h1>
+          <h1 className="text-2xl font-bold tracking-tight text-slate-900">
+            {t("nav.notifications")}
+          </h1>
           <p className="mt-1 max-w-2xl text-xs leading-relaxed text-slate-500">
-            Hộp thư của chính tài khoản đang đăng nhập, theo vai trò. Nhân viên nhận ca làm việc, đơn
-            từ và bảng công của mình; quản lý chi nhánh nhận việc cần duyệt và các bất thường chấm
-            công; chủ sở hữu nhận toàn tổ chức. Bộ lọc chạy trên máy chủ, nên số trang và bộ đếm
-            luôn khớp với danh sách.
+            {t("notifications.subtitle")}
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -451,14 +454,14 @@ export default function NotificationsPage() {
             className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-surface px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
           >
             <RefreshCw size={14} className={loading ? "animate-spin" : ""} />
-            Tải lại
+            {t("common.reload")}
           </button>
           <button
             type="button"
             onClick={openSettings}
             className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-surface px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50"
           >
-            <Settings2 size={14} /> Cài đặt kênh nhận
+            <Settings2 size={14} /> {t("notifications.settingsButton")}
           </button>
           <button
             type="button"
@@ -472,8 +475,10 @@ export default function NotificationsPage() {
               <CheckCheck size={14} />
             )}
             {category === "all"
-              ? "Đánh dấu tất cả đã đọc"
-              : `Đánh dấu nhóm ${CATEGORY_LABELS[category]} đã đọc`}
+              ? t("notifications.markAll")
+              : t("notifications.markGroup", {
+                  group: t(CATEGORY_KEYS[category]),
+                })}
           </button>
         </div>
       </section>
@@ -490,9 +495,9 @@ export default function NotificationsPage() {
           <div className="flex flex-wrap items-center gap-2">
             {(
               [
-                { value: "all", label: "Tất cả" },
-                { value: "unread", label: "Chưa đọc" },
-                { value: "read", label: "Đã đọc" },
+                { value: "all", labelKey: "notifications.tab.all" },
+                { value: "unread", labelKey: "notifications.tab.unread" },
+                { value: "read", labelKey: "notifications.tab.read" },
               ] as const
             ).map((option) => (
               <button
@@ -506,11 +511,11 @@ export default function NotificationsPage() {
                     : "bg-slate-100 text-slate-600 hover:bg-slate-200"
                 }`}
               >
-                {option.label}
+                {t(option.labelKey)}
               </button>
             ))}
             <span className="ml-auto text-[10px] text-slate-500">
-              Trang {page}/{lastPage} · {total} thông báo khớp bộ lọc
+              {t("notifications.pageInfo", { page, lastPage, total })}
             </span>
           </div>
 
@@ -520,7 +525,7 @@ export default function NotificationsPage() {
           <div
             className="flex flex-wrap items-center gap-2"
             role="group"
-            aria-label="Nhóm thông báo"
+            aria-label={t("notifications.groupAria")}
           >
             <button
               type="button"
@@ -532,7 +537,7 @@ export default function NotificationsPage() {
                   : "border-slate-200 text-slate-600 hover:bg-slate-50"
               }`}
             >
-              Tất cả nhóm
+              {t("notifications.allGroups")}
             </button>
             {NOTIFICATION_CATEGORIES.map((value) => {
               const Icon = CATEGORY_ICONS[value];
@@ -550,7 +555,7 @@ export default function NotificationsPage() {
                   }`}
                 >
                   <Icon size={12} />
-                  {CATEGORY_LABELS[value]}
+                  {notificationCategoryLabel(value, t)}
                 </button>
               );
             })}
@@ -560,13 +565,13 @@ export default function NotificationsPage() {
         {loading ? (
           <div className="flex items-center justify-center gap-2 py-12 text-sm text-slate-500">
             <Loader2 size={16} className="animate-spin" />
-            Đang tải thông báo...
+            {t("notifications.loading")}
           </div>
         ) : visible.length === 0 ? (
           <p className="px-5 py-12 text-center text-xs text-slate-400">
             {category !== "all" || tab !== "all"
-              ? "Không có thông báo nào khớp bộ lọc này."
-              : "Chưa có thông báo nào. Hộp thư chỉ ghi việc thật sự xảy ra: đơn từ được gửi hoặc được duyệt, doanh thu mở/chốt ca (kể cả khi lệch), ca làm việc được xếp hoặc đổi, chấm công bất thường (đi muộn, ngoài vùng, về sớm, vào ca lại, khiếu nại), và các thay đổi về nhân sự, chi nhánh, thiết bị."}
+              ? t("notifications.emptyFiltered")
+              : t("notifications.emptyAll")}
           </p>
         ) : (
           <ul className="divide-y divide-slate-100">
@@ -609,10 +614,10 @@ export default function NotificationsPage() {
                       {item.body}
                     </p>
                     <p className="mt-1 text-[10px] text-slate-400">
-                      {formatDateTime(item.created_at)}
+                      {formatDateTime(item.created_at, locale)}
                       {group
-                        ? ` · ${CATEGORY_LABELS[group]}`
-                        : ` · ${notificationTypeLabel(item.type)}`}
+                        ? ` · ${notificationCategoryLabel(group, t)}`
+                        : ` · ${notificationTypeLabel(item.type, t)}`}
                     </p>
                   </div>
 
@@ -624,7 +629,7 @@ export default function NotificationsPage() {
                         className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-2.5 py-1.5 text-[10px] font-semibold text-primary hover:bg-blue-50"
                       >
                         <ExternalLink size={12} />
-                        Xem
+                        {t("notifications.view")}
                       </Link>
                     )}
                     {!item.is_read && (
@@ -639,7 +644,7 @@ export default function NotificationsPage() {
                         ) : (
                           <Check size={12} />
                         )}
-                        Đã đọc
+                        {t("notifications.markRead")}
                       </button>
                     )}
                   </div>
@@ -652,8 +657,12 @@ export default function NotificationsPage() {
         <div className="flex items-center justify-between border-t border-slate-100 px-4 py-3">
           <span className="text-[10px] text-slate-500">
             {total === 0
-              ? "Không có thông báo"
-              : `Hiển thị ${(page - 1) * PAGE_SIZE + 1}–${(page - 1) * PAGE_SIZE + notifications.length} trên tổng ${total}`}
+              ? t("notifications.none")
+              : t("notifications.showing", {
+                  from: (page - 1) * PAGE_SIZE + 1,
+                  to: (page - 1) * PAGE_SIZE + notifications.length,
+                  total,
+                })}
           </span>
           <div className="flex items-center gap-1">
             <button
@@ -665,7 +674,7 @@ export default function NotificationsPage() {
               disabled={page <= 1 || loading}
               className="rounded-md px-2 py-1 text-xs text-slate-600 hover:bg-slate-100 disabled:opacity-40"
             >
-              ‹ Trước
+              {t("common.previousPage")}
             </button>
             <button
               type="button"
@@ -676,7 +685,7 @@ export default function NotificationsPage() {
               disabled={page >= lastPage || loading}
               className="rounded-md px-2 py-1 text-xs text-slate-600 hover:bg-slate-100 disabled:opacity-40"
             >
-              Sau ›
+              {t("common.nextPage")}
             </button>
           </div>
         </div>
@@ -687,21 +696,23 @@ export default function NotificationsPage() {
           className="fixed inset-0 z-50 flex justify-end bg-slate-900/40"
           role="dialog"
           aria-modal="true"
-          aria-label="Cài đặt kênh nhận thông báo"
+          aria-label={t("notifications.settingsAria")}
         >
           <div className="flex h-full w-full max-w-sm flex-col bg-surface shadow-xl">
             <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
               <div>
-                <h2 className="text-sm font-bold text-slate-900">Kênh nhận thông báo</h2>
+                <h2 className="text-sm font-bold text-slate-900">
+                  {t("notifications.settingsTitle")}
+                </h2>
                 <p className="mt-0.5 text-[10px] text-slate-500">
-                  Áp dụng cho tài khoản đang đăng nhập.
+                  {t("notifications.settingsSubtitle")}
                 </p>
               </div>
               <button
                 type="button"
                 onClick={() => setSettingsOpen(false)}
                 className="rounded-lg p-1.5 text-slate-500 hover:bg-slate-100"
-                aria-label="Đóng"
+                aria-label={t("common.close")}
               >
                 <X size={16} />
               </button>
@@ -711,7 +722,7 @@ export default function NotificationsPage() {
               {settingsLoading ? (
                 <div className="flex items-center justify-center gap-2 py-10 text-sm text-slate-500">
                   <Loader2 size={16} className="animate-spin" />
-                  Đang tải cài đặt...
+                  {t("notifications.settingsLoading")}
                 </div>
               ) : (
                 channels.map((item) => (
@@ -721,11 +732,10 @@ export default function NotificationsPage() {
                   >
                     <span>
                       <span className="block text-xs font-semibold text-slate-800">
-                        {CHANNEL_LABELS[item.channel] ?? item.channel}
+                        {channelLabel(item.channel, t)}
                       </span>
                       <span className="mt-0.5 block text-[10px] text-slate-500">
-                        {CHANNEL_NOTES[item.channel] ??
-                          "Bật/tắt sẽ tạo hoặc cập nhật cấu hình cho kênh này."}
+                        {channelNote(item.channel, t)}
                       </span>
                     </span>
                     <input
@@ -750,8 +760,9 @@ export default function NotificationsPage() {
                 (item) => item.channel === "in_app" && !item.enabled,
               ) && (
                 <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] text-amber-700">
-                  Kênh &quot;Trong ứng dụng&quot; đang tắt nên bạn sẽ không nhận thông báo nào. Bật
-                  lại để nhận thông báo mới.
+                  {t("notifications.masterOffWarning", {
+                    channel: t("notificationChannel.inApp"),
+                  })}
                 </div>
               )}
 
@@ -765,15 +776,15 @@ export default function NotificationsPage() {
               {settingsSaved && (
                 <div className="flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-[11px] text-emerald-700">
                   <Check size={14} />
-                  Đã lưu cài đặt kênh nhận.
+                  {t("notifications.settingsSaved")}
                 </div>
               )}
             </div>
 
             <div className="border-t border-slate-100 px-5 py-3 text-[10px] text-slate-500">
-              Thay đổi được lưu ngay khi gạt công tắc. Chỉ kênh &quot;Trong ứng dụng&quot; đang hoạt
-              động: tắt nó thì hộp thư ngừng nhận thông báo mới (các thông báo cũ vẫn còn). Email và
-              thông báo đẩy cần một dịch vụ gửi mà hệ thống chưa cấu hình.
+              {t("notifications.settingsFooter", {
+                channel: t("notificationChannel.inApp"),
+              })}
             </div>
           </div>
         </div>

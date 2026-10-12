@@ -5,7 +5,7 @@
  */
 export class RequestBranchForbiddenError extends Error {
   constructor() {
-    super("A request may only be filed for the branch your account belongs to.");
+    super("Bạn chỉ gửi được đơn cho chi nhánh mà tài khoản của bạn thuộc về.");
     this.name = "RequestBranchForbiddenError";
   }
 }

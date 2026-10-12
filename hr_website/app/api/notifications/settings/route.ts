@@ -16,7 +16,7 @@
  *               items:
  *                 $ref: '#/components/schemas/NotificationSetting'
  *       401:
- *         description: Authentication is required.
+ *         description: Bạn cần đăng nhập để thực hiện thao tác này.
  *       500:
  *         description: An unexpected server error occurred.
  *   put:
@@ -59,7 +59,7 @@
  *       400:
  *         description: The request body is invalid.
  *       401:
- *         description: Authentication is required.
+ *         description: Bạn cần đăng nhập để thực hiện thao tác này.
  *       500:
  *         description: An unexpected server error occurred.
  */
@@ -84,7 +84,7 @@ export async function GET() {
 
     if (authError || !user) {
       return NextResponse.json(
-        { error: "Authentication is required." },
+        { error: "Bạn cần đăng nhập để thực hiện thao tác này." },
         { status: 401 },
       );
     }
@@ -98,7 +98,7 @@ export async function GET() {
   } catch (error) {
     console.error("Failed to get notification settings", error);
     return NextResponse.json(
-      { error: "Unable to retrieve notification settings." },
+      { error: "Không thể tải cài đặt thông báo." },
       { status: 500 },
     );
   }
@@ -110,7 +110,7 @@ export async function PUT(request: Request) {
   try {
     body = await request.json();
   } catch {
-    return NextResponse.json({ error: "Invalid JSON body." }, { status: 400 });
+    return NextResponse.json({ error: "Nội dung yêu cầu phải là JSON hợp lệ." }, { status: 400 });
   }
 
   if (
@@ -145,7 +145,7 @@ export async function PUT(request: Request) {
 
     if (authError || !user) {
       return NextResponse.json(
-        { error: "Authentication is required." },
+        { error: "Bạn cần đăng nhập để thực hiện thao tác này." },
         { status: 401 },
       );
     }
@@ -162,7 +162,7 @@ export async function PUT(request: Request) {
   } catch (error) {
     console.error("Failed to update notification settings", error);
     return NextResponse.json(
-      { error: "Unable to update notification settings." },
+      { error: "Không thể cập nhật cài đặt thông báo." },
       { status: 500 },
     );
   }

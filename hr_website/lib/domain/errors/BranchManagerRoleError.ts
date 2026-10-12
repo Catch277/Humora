@@ -10,7 +10,7 @@
  */
 export class BranchManagerRoleError extends Error {
   constructor() {
-    super("manager_id must reference a MANAGER account.");
+    super("manager_id phải trỏ tới một tài khoản MANAGER.");
     this.name = "BranchManagerRoleError";
   }
 }

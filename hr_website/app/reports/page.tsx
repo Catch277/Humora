@@ -14,44 +14,43 @@ import {
 } from "lucide-react";
 
 import { asArray } from "@/lib/asArray";
+import { useLocale } from "@/components/LocaleProvider";
 import type { Branch } from "@/lib/domain/entities/Branch";
 import type {
   RevenueReportPeriod,
   RevenueReportPoint,
   RevenueReportResult,
 } from "@/lib/domain/entities/RevenueReport";
+import {
+  formatCurrency,
+  formatPercent,
+  formatSignedCurrency,
+} from "@/lib/i18n/format";
+import { errorMessageFor } from "@/lib/i18n/serverMessages";
+import type { MessageKey } from "@/lib/i18n/translate";
 import { getBusinessDay } from "@/lib/usecases/businessDay";
 
-const PERIOD_OPTIONS: { value: RevenueReportPeriod; label: string }[] = [
-  { value: "day", label: "Hôm nay" },
-  { value: "week", label: "Tuần này" },
-  { value: "month", label: "Tháng này" },
-  { value: "quarter", label: "Quý này" },
-  { value: "year", label: "Năm nay" },
+/** The period tabs, in reading order, and the sentence each one renders. */
+const PERIODS: readonly RevenueReportPeriod[] = [
+  "day",
+  "week",
+  "month",
+  "quarter",
+  "year",
 ];
+
+const PERIOD_KEYS: Record<RevenueReportPeriod, MessageKey> = {
+  day: "common.today",
+  week: "period.thisWeek",
+  month: "period.thisMonth",
+  quarter: "period.thisQuarter",
+  year: "period.thisYear",
+};
 
 const ALL_BRANCHES = "all";
 
-const currency = new Intl.NumberFormat("vi-VN");
-
-function formatCurrency(value: number): string {
-  return `${currency.format(Math.round(value))} ₫`;
-}
-
-/** Signed delta, so a shortage reads as a minus rather than as a smaller positive number. */
-function formatDelta(value: number): string {
-  return `${value > 0 ? "+" : ""}${currency.format(Math.round(value))} ₫`;
-}
-
-function formatPercent(value: number | null): string {
-  if (value === null || !Number.isFinite(value)) {
-    return "chưa có kỳ so sánh";
-  }
-
-  return `${value > 0 ? "+" : ""}${value.toFixed(1).replace(".", ",")}%`;
-}
-
 export default function ReportsPage() {
+  const { locale, t } = useLocale();
   const [period, setPeriod] = useState<RevenueReportPeriod>("month");
   const [branchId, setBranchId] = useState<string>(ALL_BRANCHES);
   const [date, setDate] = useState<string>(() => getBusinessDay(new Date()));
@@ -103,10 +102,7 @@ export default function ReportsPage() {
 
         return {
           report: null,
-          error:
-            response.status === 401
-              ? "Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại."
-              : (data?.error ?? "Không tải được báo cáo doanh thu."),
+          error: errorMessageFor(response.status, data, t),
         };
       }
 
@@ -132,14 +128,14 @@ export default function ReportsPage() {
         }
 
         setReport(null);
-        setPageError("Không thể kết nối tới máy chủ. Vui lòng thử lại.");
+        setPageError(t("error.network"));
         setLoading(false);
       });
 
     return () => {
       cancelled = true;
     };
-  }, [period, branchId, date, reloadToken]);
+  }, [period, branchId, date, reloadToken, t]);
 
   function refresh() {
     setLoading(true);
@@ -158,27 +154,35 @@ export default function ReportsPage() {
     series.length > 0
       ? (summary?.total_revenue_amount ?? 0) / series.length
       : 0;
+  const periodLabel = t(PERIOD_KEYS[period]);
+  // A period with nothing before it has no percentage at all (`null` from the RPC), which is a sentence
+  // rather than a number: the shared formatter takes a number and must not be handed a hole.
+  const percentageChange = comparison?.percentage_change ?? null;
+  const comparisonLabel =
+    percentageChange === null || !Number.isFinite(percentageChange)
+      ? t("reports.noComparison")
+      : formatPercent(percentageChange, locale);
   const branchLabel =
     branchId === ALL_BRANCHES
-      ? "Tất cả chi nhánh"
+      ? t("common.allBranches")
       : (branches.find((branch) => branch.id === branchId)?.name ??
-        "Chi nhánh đã chọn");
+        t("reports.branchPicked"));
 
   return (
     <div className="space-y-5">
       <section className="flex flex-col justify-between gap-4 rounded-xl border border-slate-200/80 bg-surface p-5 shadow-sm lg:flex-row lg:items-center">
         <div>
           <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-slate-400">
-            Tài chính &amp; thu / SCRUM-44
+            {t("reports.eyebrow")}
           </p>
           <h1 className="text-2xl font-bold tracking-tight text-slate-900">
-            Báo cáo &amp; Phân tích Doanh thu
+            {t("reports.title")}
           </h1>
           <p className="mt-1 max-w-2xl text-xs leading-relaxed text-slate-500">
-            Doanh thu của các ca <b>đã chốt</b> (tiền cuối ca trừ tiền đầu ca), theo ngày kinh doanh
-            Asia/Bangkok và so với kỳ liền trước. Số liệu do RPC{" "}
-            <code className="rounded bg-slate-100 px-1">get_revenue_report</code> tổng hợp trong
-            database, không phải dữ liệu mẫu.
+            {t("reports.subtitleLead")}{" "}
+            <b>{t("reports.subtitleSettled")}</b> {t("reports.subtitleTail")}{" "}
+            <code className="rounded bg-slate-100 px-1">get_revenue_report</code>{" "}
+            {t("reports.subtitleEnd")}
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -189,35 +193,35 @@ export default function ReportsPage() {
             className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-surface px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
           >
             <RefreshCw size={14} className={loading ? "animate-spin" : ""} />
-            Tải lại
+            {t("common.reload")}
           </button>
           <button
             type="button"
             onClick={() => window.print()}
             className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-surface px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50"
           >
-            <Printer size={14} /> In sổ sách
+            <Printer size={14} /> {t("reports.print")}
           </button>
         </div>
       </section>
 
       <section className="rounded-xl border border-slate-200/80 bg-surface p-4 shadow-sm">
         <div className="flex flex-wrap items-center gap-2">
-          {PERIOD_OPTIONS.map((option) => (
+          {PERIODS.map((value) => (
             <button
-              key={option.value}
+              key={value}
               type="button"
               onClick={() => {
                 setLoading(true);
-                setPeriod(option.value);
+                setPeriod(value);
               }}
               className={`rounded-full px-3 py-1.5 text-xs font-semibold transition-colors ${
-                period === option.value
+                period === value
                   ? "bg-primary text-white"
                   : "bg-slate-100 text-slate-600 hover:bg-slate-200"
               }`}
             >
-              {option.label}
+              {t(PERIOD_KEYS[value])}
             </button>
           ))}
 
@@ -230,9 +234,9 @@ export default function ReportsPage() {
               setBranchId(event.target.value);
             }}
             className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs outline-none focus:border-primary"
-            aria-label="Chi nhánh"
+            aria-label={t("common.branch")}
           >
-            <option value={ALL_BRANCHES}>Tất cả chi nhánh</option>
+            <option value={ALL_BRANCHES}>{t("common.allBranches")}</option>
             {branches.map((branch) => (
               <option key={branch.id} value={branch.id}>
                 {branch.name}
@@ -248,11 +252,11 @@ export default function ReportsPage() {
               setDate(event.target.value || getBusinessDay(new Date()));
             }}
             className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs outline-none focus:border-primary"
-            aria-label="Ngày trong kỳ"
+            aria-label={t("reports.dateAria")}
           />
 
           <span className="ml-auto text-[10px] text-slate-500">
-            {branchLabel} · kỳ {period}
+            {t("reports.periodSummary", { branch: branchLabel, period: periodLabel })}
           </span>
         </div>
       </section>
@@ -267,7 +271,7 @@ export default function ReportsPage() {
       {loading && !report ? (
         <div className="flex items-center justify-center gap-2 py-16 text-sm text-slate-500">
           <Loader2 size={16} className="animate-spin" />
-          Đang tổng hợp doanh thu...
+          {t("reports.loading")}
         </div>
       ) : (
         <>
@@ -275,58 +279,58 @@ export default function ReportsPage() {
             <div className="rounded-xl border border-slate-200/80 bg-surface p-4 shadow-sm">
               <div className="flex items-center justify-between">
                 <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">
-                  Tổng tiền đầu ca
+                  {t("reports.totalOpen")}
                 </p>
                 <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-50 text-primary">
                   <Wallet size={16} />
                 </span>
               </div>
               <p className="mt-2 text-2xl font-bold tabular-nums text-slate-900">
-                {formatCurrency(summary?.total_open_amount ?? 0)}
+                {formatCurrency(summary?.total_open_amount ?? 0, locale)}
               </p>
               <p className="mt-1 text-[10px] text-slate-500">
-                Tiền mặt khai báo khi mở mỗi ca
+                {t("reports.totalOpenNote")}
               </p>
             </div>
 
             <div className="rounded-xl border border-slate-200/80 bg-surface p-4 shadow-sm">
               <div className="flex items-center justify-between">
                 <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">
-                  Tổng tiền cuối ca
+                  {t("reports.totalClose")}
                 </p>
                 <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-50 text-emerald-600">
                   <CircleDollarSign size={16} />
                 </span>
               </div>
               <p className="mt-2 text-2xl font-bold tabular-nums text-slate-900">
-                {formatCurrency(summary?.total_close_amount ?? 0)}
+                {formatCurrency(summary?.total_close_amount ?? 0, locale)}
               </p>
               <p className="mt-1 text-[10px] text-slate-500">
-                Do {summary?.record_count ?? 0} ca đã chốt báo cáo
+                {t("reports.totalCloseNote", { count: summary?.record_count ?? 0 })}
               </p>
             </div>
 
             <div className="rounded-xl border border-slate-200/80 bg-surface p-4 shadow-sm">
               <div className="flex items-center justify-between">
                 <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">
-                  Doanh thu thuần
+                  {t("reports.netRevenue")}
                 </p>
                 <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-50 text-indigo-600">
                   <TrendingUp size={16} />
                 </span>
               </div>
               <p className="mt-2 text-2xl font-bold tabular-nums text-slate-900">
-                {formatCurrency(summary?.total_revenue_amount ?? 0)}
+                {formatCurrency(summary?.total_revenue_amount ?? 0, locale)}
               </p>
               <p className="mt-1 text-[10px] text-slate-500">
-                Bình quân {formatCurrency(averagePerBucket)} mỗi mốc thời gian
+                {t("reports.averageNote", { amount: formatCurrency(averagePerBucket, locale) })}
               </p>
             </div>
 
             <div className="rounded-xl border border-slate-200/80 bg-surface p-4 shadow-sm">
               <div className="flex items-center justify-between">
                 <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">
-                  So với kỳ trước
+                  {t("reports.comparison")}
                 </p>
                 <span
                   className={`flex h-8 w-8 items-center justify-center rounded-lg ${
@@ -349,11 +353,16 @@ export default function ReportsPage() {
                     : "text-emerald-600"
                 }`}
               >
-                {formatDelta(comparison?.difference ?? 0)}
+                {formatSignedCurrency(comparison?.difference ?? 0, locale)}
               </p>
               <p className="mt-1 text-[10px] text-slate-500">
-                {formatPercent(comparison?.percentage_change ?? null)} · kỳ trước{" "}
-                {formatCurrency(comparison?.previous_total_revenue_amount ?? 0)}
+                {t("reports.comparisonNote", {
+                  percent: comparisonLabel,
+                  amount: formatCurrency(
+                    comparison?.previous_total_revenue_amount ?? 0,
+                    locale,
+                  ),
+                })}
               </p>
             </div>
           </div>
@@ -361,17 +370,19 @@ export default function ReportsPage() {
           <section className="rounded-xl border border-slate-200/80 bg-surface p-5 shadow-sm">
             <div className="flex items-center justify-between">
               <h2 className="text-sm font-bold text-slate-900">
-                Doanh thu theo {period === "year" ? "tháng" : "ngày"}
+                {t("reports.chartTitle", {
+                  unit:
+                    period === "year" ? t("reports.unitMonth") : t("reports.unitDay"),
+                })}
               </h2>
               <span className="text-[10px] text-slate-500">
-                {series.length} mốc thời gian có doanh thu
+                {t("reports.seriesCount", { count: series.length })}
               </span>
             </div>
 
             {series.length === 0 ? (
               <p className="py-12 text-center text-xs text-slate-400">
-                Kỳ này chưa có ca nào được chốt. Doanh thu chỉ xuất hiện sau khi ca được chốt trong
-                mục Doanh thu.
+                {t("reports.emptyChart")}
               </p>
             ) : (
               <div className="mt-4 flex h-52 items-end gap-1">
@@ -389,7 +400,11 @@ export default function ReportsPage() {
                   return (
                     <div
                       key={point.bucket_start}
-                      title={`${point.bucket_start}: ${formatCurrency(point.total_revenue_amount)} (${point.record_count} ca)`}
+                      title={t("reports.barTitle", {
+                        bucket: point.bucket_start,
+                        amount: formatCurrency(point.total_revenue_amount, locale),
+                        count: point.record_count,
+                      })}
                       className="flex-1 rounded-t bg-primary/80 transition-colors hover:bg-primary"
                       style={{ height: `${height}%` }}
                     />
@@ -401,27 +416,32 @@ export default function ReportsPage() {
 
           <section className="overflow-hidden rounded-xl border border-slate-200/80 bg-surface shadow-sm">
             <div className="border-b border-slate-100 px-5 py-4">
-              <h2 className="text-sm font-bold text-slate-900">Chi tiết theo mốc thời gian</h2>
+              <h2 className="text-sm font-bold text-slate-900">{t("reports.detailTitle")}</h2>
               <p className="mt-0.5 text-[10px] text-slate-500">
-                {branchLabel} · từ {report?.range.start_at?.slice(0, 10)} đến{" "}
-                {report?.range.end_at?.slice(0, 10)} (UTC)
+                {t("reports.detailNote", {
+                  branch: branchLabel,
+                  from: report?.range.start_at?.slice(0, 10) ?? "—",
+                  to: report?.range.end_at?.slice(0, 10) ?? "—",
+                })}
               </p>
             </div>
 
             {series.length === 0 ? (
               <p className="px-5 py-10 text-center text-xs text-slate-400">
-                Không có dữ liệu để hiển thị.
+                {t("reports.emptyTable")}
               </p>
             ) : (
               <div className="overflow-x-auto">
                 <table className="w-full min-w-[720px] text-left text-sm">
                   <thead className="bg-slate-50 text-[11px] uppercase tracking-wider text-slate-500">
                     <tr>
-                      <th className="px-4 py-3 font-semibold">Mốc thời gian</th>
-                      <th className="px-4 py-3 text-right font-semibold">Tiền đầu ca</th>
-                      <th className="px-4 py-3 text-right font-semibold">Tiền cuối ca</th>
-                      <th className="px-4 py-3 text-right font-semibold">Doanh thu</th>
-                      <th className="px-4 py-3 text-right font-semibold">Số ca</th>
+                      <th className="px-4 py-3 font-semibold">{t("reports.columnPeriod")}</th>
+                      <th className="px-4 py-3 text-right font-semibold">{t("revenue.openAmount")}</th>
+                      <th className="px-4 py-3 text-right font-semibold">{t("revenue.closeAmount")}</th>
+                      <th className="px-4 py-3 text-right font-semibold">
+                        {t("revenue.revenue")}
+                      </th>
+                      <th className="px-4 py-3 text-right font-semibold">{t("reports.columnShifts")}</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
@@ -434,13 +454,13 @@ export default function ReportsPage() {
                           {point.bucket_start}
                         </td>
                         <td className="whitespace-nowrap px-4 py-3 text-right tabular-nums text-slate-600">
-                          {formatCurrency(point.total_open_amount)}
+                          {formatCurrency(point.total_open_amount, locale)}
                         </td>
                         <td className="whitespace-nowrap px-4 py-3 text-right tabular-nums text-slate-600">
-                          {formatCurrency(point.total_close_amount)}
+                          {formatCurrency(point.total_close_amount, locale)}
                         </td>
                         <td className="whitespace-nowrap px-4 py-3 text-right font-semibold tabular-nums text-primary">
-                          {formatCurrency(point.total_revenue_amount)}
+                          {formatCurrency(point.total_revenue_amount, locale)}
                         </td>
                         <td className="whitespace-nowrap px-4 py-3 text-right tabular-nums text-slate-600">
                           {point.record_count}
@@ -453,8 +473,11 @@ export default function ReportsPage() {
             )}
 
             <div className="border-t border-slate-100 px-4 py-3 text-[10px] text-slate-500">
-              {series.length} mốc thời gian · {summary?.record_count ?? 0} ca đã chốt · tổng doanh
-              thu {formatCurrency(summary?.total_revenue_amount ?? 0)}
+              {t("reports.tableFooter", {
+                periods: series.length,
+                shifts: summary?.record_count ?? 0,
+                amount: formatCurrency(summary?.total_revenue_amount ?? 0, locale),
+              })}
             </div>
           </section>
         </>

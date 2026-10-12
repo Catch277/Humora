@@ -61,7 +61,7 @@
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  *       401:
- *         description: Authentication is required.
+ *         description: Bạn cần đăng nhập để thực hiện thao tác này.
  *         content:
  *           application/json:
  *             schema:
@@ -127,7 +127,7 @@ export async function PATCH(
 
   if (!UUID_PATTERN.test(id)) {
     return NextResponse.json(
-      { error: "The attendance id must be a UUID." },
+      { error: "ID bảng công phải là UUID." },
       { status: 400 },
     );
   }
@@ -137,7 +137,7 @@ export async function PATCH(
   try {
     body = await request.json();
   } catch {
-    return NextResponse.json({ error: "Invalid JSON body." }, { status: 400 });
+    return NextResponse.json({ error: "Nội dung yêu cầu phải là JSON hợp lệ." }, { status: 400 });
   }
 
   if (
@@ -145,7 +145,7 @@ export async function PATCH(
     !isOptionalTimestamp(body.check_out_at)
   ) {
     return NextResponse.json(
-      { error: "check_in_at and check_out_at must be ISO timestamps or null." },
+      { error: "check_in_at và check_out_at phải là mốc thời gian ISO hoặc null." },
       { status: 400 },
     );
   }
@@ -154,7 +154,7 @@ export async function PATCH(
 
   if (typeof status !== "string" || !STATUS_SET.has(status)) {
     return NextResponse.json(
-      { error: `status must be one of ${ATTENDANCE_STATUSES.join(", ")}.` },
+      { error: `status phải là một trong: ${ATTENDANCE_STATUSES.join(", ")}.` },
       { status: 400 },
     );
   }
@@ -165,14 +165,14 @@ export async function PATCH(
     (typeof body.note !== "string" || body.note.length > 500)
   ) {
     return NextResponse.json(
-      { error: "note must be a string of at most 500 characters." },
+      { error: "note tối đa 500 ký tự." },
       { status: 400 },
     );
   }
 
   if (typeof body.correction_reason !== "string") {
     return NextResponse.json(
-      { error: "correction_reason is required and must be a string." },
+      { error: "correction_reason là bắt buộc và phải là chuỗi." },
       { status: 400 },
     );
   }
@@ -222,16 +222,16 @@ export async function PATCH(
 
     if (
       error instanceof Error &&
-      (error.message.startsWith("correction_reason must") ||
-        error.message.startsWith("status must") ||
-        error.message.startsWith("check_out_at must"))
+      (error.message.startsWith("correction_reason") ||
+        error.message.startsWith("status") ||
+        error.message.startsWith("check_out_at"))
     ) {
       return NextResponse.json({ error: error.message }, { status: 400 });
     }
 
     console.error("Failed to correct attendance", error);
     return NextResponse.json(
-      { error: "Unable to correct the attendance record." },
+      { error: "Không thể sửa bản ghi chấm công." },
       { status: 500 },
     );
   }

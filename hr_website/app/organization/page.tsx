@@ -16,9 +16,12 @@ import {
   Users,
 } from "lucide-react";
 
+import { useLocale } from "@/components/LocaleProvider";
 import { roleLabel } from "@/lib/accessPolicy";
 import { INVITE_ROLES } from "@/lib/domain/entities/OrganizationInvite";
-import { MEMBER_CONFLICT_MARKER } from "@/lib/domain/errors/StaffAccountEmailTakenError";
+import { isMemberConflictMessage } from "@/lib/domain/errors/StaffAccountEmailTakenError";
+import type { Locale } from "@/lib/i18n/locales";
+import type { Translate } from "@/lib/i18n/translate";
 
 type OrganizationSummary = {
   organization: { id: string; name: string; created_at: string } | null;
@@ -45,34 +48,57 @@ const INVITE_ROLE_OPTIONS = INVITE_ROLES;
 const MIN_PASSWORD_LENGTH = 8;
 
 /**
- * The provisioning form's own copy. `409` covers two different conflicts and the fix differs, so
- * the API forwards the Edge Function's own sentence — `StaffAccountEmailTakenError` documents both
- * cases and exports the marker below. With the marker the address is already a member and there is
- * nothing left to create; without it the address merely has its own Supabase Auth login, which is
- * *not* necessarily visible in `public.users` (a `createUser` that ran while the SCRUM-50 trigger was
- * missing leaves an auth account with no profile row), hence the copy names where to look.
+ * The provisioning form's own copy. `409` covers two different conflicts and the fix differs, so the API
+ * forwards the Edge Function's own sentence and `StaffAccountEmailTakenError` owns the test that tells them
+ * apart. A member conflict has nothing left to create; the other case is an address that merely has its own
+ * Supabase Auth login, which is *not* necessarily visible in `public.users` (a `createUser` that ran while
+ * the SCRUM-50 trigger was missing leaves an auth account with no profile row), hence the copy names where
+ * to look.
  */
-function accountErrorMessage(status: number, serverMessage?: string): string {
+/**
+ * The signature of an **older deployment** of the `staff-account` Edge Function: the revision that predates
+ * SCRUM-59 only knows the role spelling `CHU`, so it rejects the `MANAGER` this app sends with
+ * `role must be EMPLOYEE or CHU.` — and no form value can satisfy it.
+ *
+ * It gets its own sentence because the caller's next step is an *operator* task (paste the current
+ * `supabase/functions/staff-account/index.ts` into Dashboard → Edge Functions → staff-account → Deploy), not
+ * a correction to the form. Telling them "the data is invalid" would send them round the same loop again.
+ */
+const STALE_ROLE_REJECTION = /role must be .*chu/i;
+
+function accountErrorMessage(
+  status: number,
+  serverMessage: string | undefined,
+  t: Translate,
+): string {
   if (status === 409) {
-    if (serverMessage?.includes(MEMBER_CONFLICT_MARKER)) {
-      return "Email này đã là thành viên của tổ chức (xem danh sách bên dưới) — không cần tạo lại.";
+    if (isMemberConflictMessage(serverMessage)) {
+      return t("organization.error.memberConflict");
     }
 
-    return "Email này đã có tài khoản đăng nhập trong Supabase nhưng chưa vào tổ chức, nên không tạo mới được. Hãy để người này đăng nhập bằng chính tài khoản đó rồi vào tổ chức bằng mã tham gia ở trên — nếu email chưa có trong danh sách bên dưới, hãy bấm \"Thêm vào danh sách\" trước. Nếu họ không đăng nhập được vì lần tạo trước bị bỏ dở, hãy mở Authentication → Users trong Supabase, xóa tài khoản còn sót của email này rồi tạo lại.";
+    return t("organization.error.emailTaken");
+  }
+
+  if (STALE_ROLE_REJECTION.test(serverMessage ?? "")) {
+    return t("organization.error.staleFunction");
+  }
+
+  if (status === 400 || status === 422) {
+    return t("organization.error.invalid");
   }
 
   if (status === 429) {
-    return "Tổ chức đã tạo quá nhiều tài khoản trong một giờ. Vui lòng thử lại sau.";
+    return t("organization.error.tooMany");
   }
 
   if (status === 503) {
-    return "Chức năng tạo tài khoản chưa được bật: cần triển khai Edge Function `staff-account` (xem README). Trong lúc đó hãy dùng \"Thêm vào danh sách\".";
+    return t("organization.error.notDeployed");
   }
 
-  return actionErrorMessage(status, serverMessage);
+  return actionErrorMessage(status, serverMessage, t);
 }
 
-function formatDateTime(value: string | null): string {
+function formatDateTime(value: string | null, locale: Locale): string {
   if (!value) {
     return "—";
   }
@@ -83,7 +109,9 @@ function formatDateTime(value: string | null): string {
     return "—";
   }
 
-  return new Intl.DateTimeFormat("vi-VN", {
+  // The date *style* follows the reader's language; the time zone does not — a business day stays
+  // Asia/Bangkok whatever the locale is.
+  return new Intl.DateTimeFormat(locale === "en" ? "en-GB" : "vi-VN", {
     day: "2-digit",
     month: "2-digit",
     year: "numeric",
@@ -91,28 +119,32 @@ function formatDateTime(value: string | null): string {
   }).format(parsed);
 }
 
-function actionErrorMessage(status: number, serverMessage?: string): string {
+function actionErrorMessage(
+  status: number,
+  serverMessage: string | undefined,
+  t: Translate,
+): string {
   if (status === 401) {
-    return "Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.";
+    return t("organization.error.sessionExpired");
   }
 
   if (status === 403) {
-    return "Chỉ chủ sở hữu (OWNER) mới thực hiện được thao tác này.";
+    return t("organization.error.ownerOnly");
   }
 
   if (status === 404) {
-    return "Không tìm thấy dữ liệu cần thao tác.";
+    return t("organization.error.notFound");
   }
 
   if (status === 409) {
-    return "Email này đã có trong danh sách của tổ chức.";
+    return t("organization.error.alreadyListed");
   }
 
   if (status === 400) {
-    return serverMessage ?? "Thông tin chưa hợp lệ.";
+    return serverMessage ?? t("organization.error.invalidShort");
   }
 
-  return serverMessage ?? "Không thực hiện được thao tác. Vui lòng thử lại.";
+  return serverMessage ?? t("organization.error.generic");
 }
 
 type StaffProvisioningAvailability = {
@@ -122,26 +154,29 @@ type StaffProvisioningAvailability = {
 };
 
 /**
- * Vietnamese copy for the reason the probe reported (SCRUM-52). "Not deployed" is something the
- * operator fixes, "not allowed" is a role problem and "misconfigured" means the function is there but
- * failing — three different actions, so they must not share one sentence.
+ * Copy for the reason the probe reported (SCRUM-52). "Not deployed" is something the operator fixes,
+ * "not allowed" is a role problem and "misconfigured" means the function is there but failing — three
+ * different actions, so they must not share one sentence.
  */
 function provisioningNote(
   availability: StaffProvisioningAvailability | null,
+  t: Translate,
 ): string {
   switch (availability?.reason) {
     case "not_allowed":
-      return "Tài khoản của bạn cần thuộc một tổ chức với vai trò chủ sở hữu (OWNER) mới tạo được tài khoản cho nhân viên.";
+      return t("organization.ownerRequired");
     case "unauthenticated":
-      return "Edge Function đã từ chối phiên đăng nhập. Kiểm tra lại function `staff-account`: phải bật \"Verify JWT\" và không được tắt xác thực token.";
+      return t("organization.provision.sessionRejected");
     case "misconfigured":
-      return `Edge Function đã deploy nhưng đang báo lỗi${
-        availability?.detail ? `: ${availability.detail}` : "."
-      } Kiểm tra secrets của function (SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY) và log của nó.`;
+      return availability.detail
+        ? t("organization.provision.misconfiguredDetail", {
+            detail: availability.detail,
+          })
+        : t("organization.provision.misconfigured");
     case "ready":
       return "";
     default:
-      return "Chưa kết nối được Edge Function `staff-account`. Hãy deploy nó trong Supabase: Edge Functions → Create a new function → tên chính xác là `staff-account` → dán nội dung supabase/functions/staff-account/index.ts → Deploy (giữ Verify JWT bật), rồi tải lại trang này.";
+      return t("organization.functionMissing");
   }
 }
 
@@ -149,6 +184,7 @@ const inputClassName =
   "w-full rounded-lg border border-slate-200 p-2.5 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-blue-500/15";
 
 export default function OrganizationPage() {
+  const { locale, t } = useLocale();
   const [summary, setSummary] = useState<OrganizationSummary | null>(null);
   const [invites, setInvites] = useState<OrganizationInvite[]>([]);
   const [loading, setLoading] = useState(true);
@@ -198,7 +234,7 @@ export default function OrganizationPage() {
           summary: null,
           invites: [],
           provisioning: null,
-          error: actionErrorMessage(summaryResponse.status, data?.error),
+          error: actionErrorMessage(summaryResponse.status, data?.error, t),
         };
       }
 
@@ -215,7 +251,7 @@ export default function OrganizationPage() {
         };
       }
 
-      // SCRUM-52: the "Tạo tài khoản" form is only offered when the Edge Function can actually be
+      // SCRUM-52: the account-provisioning form is only offered when the Edge Function can actually be
       // used, and the probe says *why* when it cannot (not deployed / not allowed / misconfigured).
       const availabilityResponse = await fetch("/api/organizations/accounts", {
         cache: "no-store",
@@ -237,7 +273,7 @@ export default function OrganizationPage() {
           summary: summaryData,
           invites: [],
           provisioning,
-          error: actionErrorMessage(invitesResponse.status, data?.error),
+          error: actionErrorMessage(invitesResponse.status, data?.error, t),
         };
       }
 
@@ -269,14 +305,16 @@ export default function OrganizationPage() {
 
         setSummary(null);
         setInvites([]);
-        setPageError("Không thể kết nối tới máy chủ. Vui lòng thử lại.");
+        setPageError(t("organization.networkError"));
         setLoading(false);
       });
 
     return () => {
       cancelled = true;
     };
-  }, [reloadToken]);
+    // `t` is in the deps on purpose: it is stable per locale, and a language switch has to re-run this load
+    // so an error banner that was already stored in state is re-rendered in the new language.
+  }, [reloadToken, t]);
 
   function refresh() {
     setLoading(true);
@@ -297,9 +335,9 @@ export default function OrganizationPage() {
     try {
       await navigator.clipboard.writeText(summary.code);
       setCopied(true);
-      setNote("Đã sao chép mã tham gia.");
+      setNote(t("organization.copyCodeDone"));
     } catch {
-      setNote("Trình duyệt không cho phép sao chép tự động — hãy chọn mã và sao chép thủ công.");
+      setNote(t("organization.copyFailed"));
     }
   }
 
@@ -323,14 +361,14 @@ export default function OrganizationPage() {
         const data = (await response.json().catch(() => null)) as {
           error?: string;
         } | null;
-        setPageError(actionErrorMessage(response.status, data?.error));
+        setPageError(actionErrorMessage(response.status, data?.error, t));
         return;
       }
 
-      setNote("Đã lưu tên tổ chức.");
+      setNote(t("organization.saveNameDone"));
       refresh();
     } catch {
-      setPageError("Không thể kết nối tới máy chủ. Vui lòng thử lại.");
+      setPageError(t("organization.networkError"));
     } finally {
       setBusy("");
     }
@@ -356,14 +394,14 @@ export default function OrganizationPage() {
         const data = (await response.json().catch(() => null)) as {
           error?: string;
         } | null;
-        setPageError(actionErrorMessage(response.status, data?.error));
+        setPageError(actionErrorMessage(response.status, data?.error, t));
         return;
       }
 
-      setNote("Đã đổi mã tham gia. Mã cũ không còn hiệu lực.");
+      setNote(t("organization.rotateCodeDone"));
       refresh();
     } catch {
-      setPageError("Không thể kết nối tới máy chủ. Vui lòng thử lại.");
+      setPageError(t("organization.networkError"));
     } finally {
       setBusy("");
     }
@@ -393,17 +431,17 @@ export default function OrganizationPage() {
         const data = (await response.json().catch(() => null)) as {
           error?: string;
         } | null;
-        setPageError(actionErrorMessage(response.status, data?.error));
+        setPageError(actionErrorMessage(response.status, data?.error, t));
         return;
       }
 
       setInviteEmail("");
       setInviteFullName("");
       setInviteRole("EMPLOYEE");
-      setNote("Đã thêm vào danh sách. Người này dùng mã tham gia để vào tổ chức.");
+      setNote(t("organization.inviteAdded"));
       refresh();
     } catch {
-      setPageError("Không thể kết nối tới máy chủ. Vui lòng thử lại.");
+      setPageError(t("organization.networkError"));
     } finally {
       setBusy("");
     }
@@ -427,14 +465,14 @@ export default function OrganizationPage() {
         const data = (await response.json().catch(() => null)) as {
           error?: string;
         } | null;
-        setPageError(actionErrorMessage(response.status, data?.error));
+        setPageError(actionErrorMessage(response.status, data?.error, t));
         return;
       }
 
-      setNote("Đã hủy lời mời.");
+      setNote(t("organization.inviteRevoked"));
       refresh();
     } catch {
-      setPageError("Không thể kết nối tới máy chủ. Vui lòng thử lại.");
+      setPageError(t("organization.networkError"));
     } finally {
       setBusy("");
     }
@@ -471,12 +509,12 @@ export default function OrganizationPage() {
         const data = (await response.json().catch(() => null)) as {
           error?: string;
         } | null;
-        setAccountError(accountErrorMessage(response.status, data?.error));
+        setAccountError(accountErrorMessage(response.status, data?.error, t));
         return;
       }
 
       setAccountNote(
-        `Đã tạo tài khoản cho ${accountEmail.trim()}. Hãy trao email và mật khẩu tạm cho nhân viên — hệ thống không lưu lại mật khẩu này.`,
+        t("organization.accountCreated", { email: accountEmail.trim() }),
       );
       setAccountEmail("");
       setAccountFullName("");
@@ -485,7 +523,7 @@ export default function OrganizationPage() {
       setAccountPasswordVisible(false);
       refresh();
     } catch {
-      setAccountError("Không thể kết nối tới máy chủ. Vui lòng thử lại.");
+      setAccountError(t("organization.networkError"));
     } finally {
       setBusy("");
     }
@@ -495,7 +533,7 @@ export default function OrganizationPage() {
     return (
       <div className="flex items-center justify-center gap-2 py-20 text-sm text-slate-500">
         <Loader2 size={16} className="animate-spin" />
-        Đang tải thông tin tổ chức...
+        {t("organization.loading")}
       </div>
     );
   }
@@ -504,13 +542,13 @@ export default function OrganizationPage() {
     <div className="space-y-6">
       <div>
         <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">
-          Tổ chức / SCRUM-51
+          {t("organization.eyebrow")}
         </p>
         <h1 className="mt-1 text-2xl font-bold text-slate-900">
-          {organizationName || "Tổ chức"}
+          {organizationName || t("organization.heading")}
         </h1>
         <p className="mt-1 text-sm text-slate-500">
-          Mã tham gia, danh sách tài khoản đã đăng ký và vai trò của thành viên trong tổ chức.
+          {t("organization.subtitle")}
         </p>
       </div>
 
@@ -530,10 +568,9 @@ export default function OrganizationPage() {
 
       {!summary?.organization ? (
         <div className="rounded-2xl border border-slate-200/80 bg-surface p-6 text-sm text-slate-600 shadow-sm">
-          <p className="font-semibold text-slate-800">Bạn chưa thuộc tổ chức nào</p>
+          <p className="font-semibold text-slate-800">{t("organization.noOrganization")}</p>
           <p className="mt-1">
-            Hãy tạo tổ chức mới hoặc tham gia bằng mã tham gia. Hệ thống sẽ tự đưa bạn tới màn hình
-            bắt đầu sau khi đăng nhập lại.
+            {t("organization.emptyHint")}
           </p>
         </div>
       ) : (
@@ -542,7 +579,7 @@ export default function OrganizationPage() {
             <div className="rounded-xl border border-slate-200/80 bg-surface p-4 shadow-sm">
               <div className="flex items-center justify-between">
                 <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">
-                  Thành viên
+                  {t("organization.membersCard")}
                 </p>
                 <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-50 text-primary">
                   <Users size={16} />
@@ -552,14 +589,14 @@ export default function OrganizationPage() {
                 {summary.member_count}
               </p>
               <p className="mt-1 text-[10px] text-slate-500">
-                Tài khoản đã vào tổ chức (kể cả đã nghỉ việc)
+                {t("organization.membersHint")}
               </p>
             </div>
 
             <div className="rounded-xl border border-slate-200/80 bg-surface p-4 shadow-sm">
               <div className="flex items-center justify-between">
                 <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">
-                  Lời mời chờ
+                  {t("organization.pendingInvites")}
                 </p>
                 <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-amber-50 text-amber-600">
                   <Mail size={16} />
@@ -569,26 +606,26 @@ export default function OrganizationPage() {
                 {summary.pending_invite_count}
               </p>
               <p className="mt-1 text-[10px] text-amber-600">
-                Chưa dùng mã tham gia để vào tổ chức
+                {t("organization.pendingHint")}
               </p>
             </div>
 
             <div className="rounded-xl border border-slate-200/80 bg-surface p-4 shadow-sm">
               <div className="flex items-center justify-between">
                 <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">
-                  Vai trò của bạn
+                  {t("organization.yourRole")}
                 </p>
                 <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-50 text-emerald-600">
                   <ShieldCheck size={16} />
                 </span>
               </div>
               <p className="mt-2 text-lg font-bold text-slate-900">
-                {canManage ? "Quản lý tổ chức" : "Thành viên"}
+                {canManage ? t("organization.manageHeading") : t("organization.membersTab")}
               </p>
               <p className="mt-1 text-[10px] text-slate-500">
                 {canManage
-                  ? "Xem được mã tham gia và danh sách tài khoản"
-                  : "Liên hệ chủ sở hữu nếu cần thêm nhân viên"}
+                  ? t("organization.ownerOnlyTab")
+                  : t("organization.memberOnlyTab")}
               </p>
             </div>
           </div>
@@ -600,9 +637,9 @@ export default function OrganizationPage() {
                   <Landmark size={18} />
                 </span>
                 <div>
-                  <h2 className="font-bold text-slate-900">Tên tổ chức</h2>
+                  <h2 className="font-bold text-slate-900">{t("organization.nameLabel")}</h2>
                   <p className="mt-1 text-xs text-slate-500">
-                    Tên hiển thị trên thanh điều hướng và trong các báo cáo nội bộ.
+                    {t("organization.nameHint")}
                   </p>
                 </div>
               </div>
@@ -614,7 +651,7 @@ export default function OrganizationPage() {
                   value={nameDraft}
                   onChange={(event) => setNameDraft(event.target.value)}
                   className={inputClassName}
-                  aria-label="Tên tổ chức"
+                  aria-label={t("organization.nameLabel")}
                 />
                 <button
                   type="button"
@@ -631,7 +668,7 @@ export default function OrganizationPage() {
                   ) : (
                     <Check size={15} />
                   )}
-                  Lưu tên
+                  {t("organization.saveName")}
                 </button>
               </div>
             ) : (
@@ -650,10 +687,9 @@ export default function OrganizationPage() {
                     <KeyRound size={18} />
                   </span>
                   <div>
-                    <h2 className="font-bold text-slate-900">Mã tham gia</h2>
+                    <h2 className="font-bold text-slate-900">{t("organization.joinCodeLabel")}</h2>
                     <p className="mt-1 text-xs text-slate-500">
-                      Chia sẻ mã này cho nhân viên đã có tên trong danh sách bên dưới. Người ngoài
-                      biết mã vẫn không vào được.
+                      {t("organization.codeHint")}
                     </p>
                   </div>
                 </div>
@@ -669,7 +705,7 @@ export default function OrganizationPage() {
                   className="inline-flex shrink-0 items-center justify-center gap-2 rounded-lg border border-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-700 transition-colors hover:bg-slate-50"
                 >
                   {copied ? <Check size={15} /> : <Copy size={15} />}
-                  {copied ? "Đã sao chép" : "Sao chép"}
+                  {copied ? t("organization.copied") : t("organization.copy")}
                 </button>
                 <button
                   type="button"
@@ -682,11 +718,11 @@ export default function OrganizationPage() {
                   ) : (
                     <RefreshCw size={15} />
                   )}
-                  Đổi mã
+                  {t("organization.rotateCode")}
                 </button>
               </div>
               <p className="mt-2 text-[11px] text-slate-500">
-                Đổi mã chỉ ảnh hưởng người chưa vào tổ chức — thành viên đã vào vẫn giữ nguyên.
+                {t("organization.rotateHint")}
               </p>
             </section>
 
@@ -697,11 +733,10 @@ export default function OrganizationPage() {
                 </span>
                 <div>
                   <h2 className="font-bold text-slate-900">
-                    Tạo tài khoản cho nhân viên (mật khẩu tạm)
+                    {t("organization.provisionTitle")}
                   </h2>
                   <p className="mt-1 text-xs text-slate-500">
-                    Dành cho nhân viên chưa có tài khoản. Bạn đặt mật khẩu tạm, trao tận tay cho
-                    họ; họ đăng nhập, đổi mật khẩu rồi dùng mã tham gia để vào tổ chức.
+                    {t("organization.provisionHint")}
                   </p>
                 </div>
               </div>
@@ -720,16 +755,16 @@ export default function OrganizationPage() {
                       />
                     </label>
                     <label className="block text-xs font-semibold text-slate-600">
-                      Họ tên
+                      {t("organization.fullNameLabel")}
                       <input
                         value={accountFullName}
                         onChange={(event) => setAccountFullName(event.target.value)}
-                        placeholder="Nguyễn Văn A"
+                        placeholder={t("organization.fullNamePlaceholder")}
                         className={`mt-1 ${inputClassName}`}
                       />
                     </label>
                     <label className="block text-xs font-semibold text-slate-600">
-                      Vai trò khi vào tổ chức
+                      {t("organization.inviteRoleLabel")}
                       <select
                         value={accountRole}
                         onChange={(event) => setAccountRole(event.target.value)}
@@ -737,13 +772,13 @@ export default function OrganizationPage() {
                       >
                         {INVITE_ROLE_OPTIONS.map((role) => (
                           <option key={role} value={role}>
-                            {roleLabel(role)}
+                            {roleLabel(role, t)}
                           </option>
                         ))}
                       </select>
                     </label>
                     <label className="block text-xs font-semibold text-slate-600">
-                      Mật khẩu tạm (tối thiểu {MIN_PASSWORD_LENGTH} ký tự)
+                      {t("organization.passwordLabel", { count: MIN_PASSWORD_LENGTH })}
                       <span className="mt-1 flex items-center gap-2">
                         <input
                           type={accountPasswordVisible ? "text" : "password"}
@@ -759,7 +794,7 @@ export default function OrganizationPage() {
                           }
                           className="shrink-0 rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-50"
                         >
-                          {accountPasswordVisible ? "Ẩn" : "Hiện"}
+                          {accountPasswordVisible ? t("organization.hidePassword") : t("organization.showPassword")}
                         </button>
                       </span>
                     </label>
@@ -797,18 +832,17 @@ export default function OrganizationPage() {
                     ) : (
                       <KeyRound size={15} />
                     )}
-                    Tạo tài khoản
+                    {t("organization.createAccountButton")}
                   </button>
 
                   <p className="mt-2 text-[11px] text-slate-500">
-                    Hệ thống không lưu mật khẩu tạm. Nếu quên, hãy đặt lại mật khẩu cho tài khoản
-                    đó ở bước sau.
+                    {t("organization.passwordHint")}
                   </p>
                 </>
               ) : (
                 <div className="mt-4 flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
                   <AlertTriangle size={14} className="mt-0.5 shrink-0" />
-                  <span>{provisioningNote(provisioning)}</span>
+                  <span>{provisioningNote(provisioning, t)}</span>
                 </div>
               )}
             </section>
@@ -824,11 +858,10 @@ export default function OrganizationPage() {
                   </span>
                   <div>
                     <h2 className="font-bold text-slate-900">
-                      Tài khoản đã đăng ký trong tổ chức
+                      {t("organization.inviteTitle")}
                     </h2>
                     <p className="mt-1 text-xs text-slate-500">
-                      Thêm email của nhân viên đã có tài khoản. Họ giữ mật khẩu riêng và dùng mã
-                      tham gia ở trên để vào tổ chức. Vai trò tối đa là quản lý chi nhánh.
+                      {t("organization.inviteHint")}
                     </p>
                   </div>
                 </div>
@@ -845,16 +878,16 @@ export default function OrganizationPage() {
                     />
                   </label>
                   <label className="block text-xs font-semibold text-slate-600">
-                    Họ tên (không bắt buộc)
+                    {t("organization.fullNameOptional")}
                     <input
                       value={inviteFullName}
                       onChange={(event) => setInviteFullName(event.target.value)}
-                      placeholder="Nguyễn Văn A"
+                      placeholder={t("organization.fullNamePlaceholder")}
                       className={`mt-1 ${inputClassName}`}
                     />
                   </label>
                   <label className="block text-xs font-semibold text-slate-600">
-                    Vai trò khi vào tổ chức
+                    {t("organization.inviteRoleLabel")}
                     <select
                       value={inviteRole}
                       onChange={(event) => setInviteRole(event.target.value)}
@@ -862,7 +895,7 @@ export default function OrganizationPage() {
                     >
                       {INVITE_ROLE_OPTIONS.map((role) => (
                         <option key={role} value={role}>
-                          {roleLabel(role)}
+                          {roleLabel(role, t)}
                         </option>
                       ))}
                     </select>
@@ -880,26 +913,25 @@ export default function OrganizationPage() {
                   ) : (
                     <UserPlus size={15} />
                   )}
-                  Thêm vào danh sách
+                  {t("organization.inviteSubmit")}
                 </button>
               </div>
 
               {invites.length === 0 ? (
                 <p className="p-6 text-center text-sm text-slate-400">
-                  Chưa có tài khoản nào trong danh sách. Nhân viên tự đăng ký ở trang Đăng ký, sau
-                  đó bạn thêm email của họ ở đây.
+                  {t("organization.invitesEmpty")}
                 </p>
               ) : (
                 <div className="overflow-x-auto">
                   <table className="w-full min-w-[720px] text-left text-sm">
                     <thead className="bg-slate-50 text-[11px] uppercase tracking-wider text-slate-500">
                       <tr>
-                        <th className="px-4 py-3 font-semibold">Email</th>
-                        <th className="px-4 py-3 font-semibold">Họ tên</th>
-                        <th className="px-4 py-3 font-semibold">Vai trò</th>
-                        <th className="px-4 py-3 font-semibold">Trạng thái</th>
-                        <th className="px-4 py-3 font-semibold">Thêm lúc</th>
-                        <th className="px-4 py-3 font-semibold">Hành động</th>
+                        <th className="px-4 py-3 font-semibold">{t("organization.columnEmail")}</th>
+                        <th className="px-4 py-3 font-semibold">{t("organization.columnFullName")}</th>
+                        <th className="px-4 py-3 font-semibold">{t("organization.columnRole")}</th>
+                        <th className="px-4 py-3 font-semibold">{t("organization.columnStatus")}</th>
+                        <th className="px-4 py-3 font-semibold">{t("organization.columnAddedAt")}</th>
+                        <th className="px-4 py-3 font-semibold">{t("organization.columnActions")}</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
@@ -912,7 +944,7 @@ export default function OrganizationPage() {
                             {invite.full_name ?? "—"}
                           </td>
                           <td className="px-4 py-3 text-xs text-slate-600">
-                            {roleLabel(invite.role)}
+                            {roleLabel(invite.role, t)}
                           </td>
                           <td className="px-4 py-3">
                             <span
@@ -922,15 +954,15 @@ export default function OrganizationPage() {
                                   : "bg-amber-50 text-amber-700"
                               }`}
                             >
-                              {invite.claimed_by ? "Đã vào tổ chức" : "Chờ vào tổ chức"}
+                              {invite.claimed_by ? t("organization.statusJoined") : t("organization.statusPending")}
                             </span>
                           </td>
                           <td className="px-4 py-3 text-xs text-slate-600">
-                            {formatDateTime(invite.created_at)}
+                            {formatDateTime(invite.created_at, locale)}
                           </td>
                           <td className="px-4 py-3">
                             {invite.claimed_by ? (
-                              <span className="text-[11px] text-slate-400">Đã dùng</span>
+                              <span className="text-[11px] text-slate-400">{t("organization.used")}</span>
                             ) : (
                               <button
                                 type="button"
@@ -939,7 +971,7 @@ export default function OrganizationPage() {
                                 className="inline-flex items-center gap-1.5 rounded-lg border border-rose-200 px-3 py-1.5 text-[11px] font-semibold text-rose-600 transition-colors hover:bg-rose-50 disabled:opacity-50"
                               >
                                 <Trash2 size={13} />
-                                Hủy
+                                {t("organization.revoke")}
                               </button>
                             )}
                           </td>
@@ -955,11 +987,10 @@ export default function OrganizationPage() {
               <ShieldCheck size={18} className="mt-0.5 shrink-0 text-primary" />
               <div className="text-xs text-slate-600">
                 <p className="font-semibold text-slate-800">
-                  Danh sách tài khoản chỉ hiển thị cho quản lý
+                  {t("organization.ownerOnlyNotice")}
                 </p>
                 <p className="mt-1">
-                  Bạn đang là thành viên của tổ chức. Ai cần thêm nhân viên hãy liên hệ chủ sở hữu
-                  hoặc quản lý chi nhánh.
+                  {t("organization.memberNotice")}
                 </p>
               </div>
             </div>

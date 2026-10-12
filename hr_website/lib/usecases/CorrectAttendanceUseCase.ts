@@ -41,7 +41,7 @@ export class CorrectAttendanceUseCase {
     }
 
     if (!STATUS_SET.has(input.status)) {
-      throw new Error(`status must be one of ${ATTENDANCE_STATUSES.join(", ")}.`);
+      throw new Error(`status phải là một trong: ${ATTENDANCE_STATUSES.join(", ")}.`);
     }
 
     // The database enforces the same rule (attendance_period_check), but a 400 with the reason
@@ -51,7 +51,7 @@ export class CorrectAttendanceUseCase {
       input.checkOutAt &&
       new Date(input.checkOutAt).getTime() < new Date(input.checkInAt).getTime()
     ) {
-      throw new Error("check_out_at must not be earlier than check_in_at.");
+      throw new Error("Giờ ra không được sớm hơn giờ vào.");
     }
 
     // SCRUM-61: correcting a timesheet is a branch action, and the record says which branch. Read

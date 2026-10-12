@@ -4,7 +4,7 @@
  */
 export class FacilityCategoryExistsError extends Error {
   constructor() {
-    super("A facility category with this name already exists.");
+    super("Nhóm thiết bị này đã tồn tại.");
     this.name = "FacilityCategoryExistsError";
   }
 }

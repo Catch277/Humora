@@ -44,13 +44,13 @@ export class CreateOrganizationInviteUseCase {
     }
 
     if (!ROLE_SET.has(input.role)) {
-      throw new Error(`role must be one of ${INVITE_ROLES.join(", ")}.`);
+      throw new Error(`role phải là một trong: ${INVITE_ROLES.join(", ")}.`);
     }
 
     const fullName = input.fullName?.trim() ?? "";
 
     if (fullName.length > MAX_NAME_LENGTH) {
-      throw new Error(`full_name must be at most ${MAX_NAME_LENGTH} characters.`);
+      throw new Error(`full_name tối đa ${MAX_NAME_LENGTH} ký tự.`);
     }
 
     const organization = await this.organizationRepository.findCurrent();

@@ -73,7 +73,7 @@ Deno.serve(async (request: Request) => {
 
   if (!supabaseUrl || !serviceRoleKey) {
     return json(
-      { error: "SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY must be set as function secrets." },
+      { error: "Cần đặt SUPABASE_URL và SUPABASE_SERVICE_ROLE_KEY trong secrets của hàm." },
       500,
     );
   }
@@ -86,13 +86,13 @@ Deno.serve(async (request: Request) => {
   const token = (request.headers.get("Authorization") ?? "").replace(/^Bearer\s+/i, "");
 
   if (!token) {
-    return json({ error: "Authentication is required." }, 401);
+    return json({ error: "Bạn cần đăng nhập để thực hiện thao tác này." }, 401);
   }
 
   const { data: authData, error: authError } = await admin.auth.getUser(token);
 
   if (authError || !authData.user) {
-    return json({ error: "Authentication is required." }, 401);
+    return json({ error: "Bạn cần đăng nhập để thực hiện thao tác này." }, 401);
   }
 
   const callerId = authData.user.id;
@@ -104,23 +104,23 @@ Deno.serve(async (request: Request) => {
     .maybeSingle();
 
   if (callerError) {
-    return json({ error: `Unable to read the caller profile: ${callerError.message}` }, 500);
+    return json({ error: `Không thể đọc hồ sơ người gọi: ${callerError.message}` }, 500);
   }
 
   if (!caller) {
-    return json({ error: "The account has no user profile." }, 403);
+    return json({ error: "Tài khoản chưa có hồ sơ người dùng." }, 403);
   }
 
   const callerRole = String(caller.role ?? "").toUpperCase();
   const organizationId = (caller.organization_id as string | null) ?? null;
 
   if (!organizationId) {
-    return json({ error: "The caller does not belong to an organization." }, 403);
+    return json({ error: "Tài khoản này chưa thuộc tổ chức nào." }, 403);
   }
 
   if (callerRole !== "OWNER") {
     return json(
-      { error: "Only the owner of the organization may manage staff accounts." },
+      { error: "Chỉ chủ sở hữu tổ chức mới quản lý được tài khoản nhân viên." },
       403,
     );
   }
@@ -132,7 +132,7 @@ Deno.serve(async (request: Request) => {
   }
 
   if (request.method !== "POST") {
-    return json({ error: "Method not allowed." }, 405);
+    return json({ error: "Phương thức không được hỗ trợ." }, 405);
   }
 
   let body: Body;
@@ -140,7 +140,7 @@ Deno.serve(async (request: Request) => {
   try {
     body = await request.json();
   } catch {
-    return json({ error: "Invalid JSON body." }, 400);
+    return json({ error: "Nội dung yêu cầu phải là JSON hợp lệ." }, 400);
   }
 
   const action = typeof body.action === "string" ? body.action : "create";
@@ -150,7 +150,7 @@ Deno.serve(async (request: Request) => {
   }
 
   if (action !== "create") {
-    return json({ error: "action must be create or reset_password." }, 400);
+    return json({ error: "`action` phải là `create` hoặc `reset_password`." }, 400);
   }
 
   return await createAccount(admin, body, { callerId, organizationId });
@@ -175,25 +175,25 @@ function fieldError(
   const role = rawRole === "CHU" ? "MANAGER" : rawRole;
 
   if (!EMAIL_PATTERN.test(email) || email.length > 160) {
-    return json({ error: "email must be a valid email address." }, 422);
+    return json({ error: "Email không hợp lệ." }, 422);
   }
 
   if (password.length < MIN_PASSWORD_LENGTH) {
     return json(
-      { error: `password must be at least ${MIN_PASSWORD_LENGTH} characters.` },
+      { error: `Mật khẩu phải có ít nhất ${MIN_PASSWORD_LENGTH} ký tự.` },
       422,
     );
   }
 
   if (fullName.length > MAX_FULL_NAME_LENGTH) {
     return json(
-      { error: `full_name must be at most ${MAX_FULL_NAME_LENGTH} characters.` },
+      { error: `Họ tên tối đa ${MAX_FULL_NAME_LENGTH} ký tự.` },
       422,
     );
   }
 
   if (!INVITE_ROLES.has(role)) {
-    return json({ error: "role must be EMPLOYEE or MANAGER." }, 422);
+    return json({ error: "Vai trò phải là EMPLOYEE (nhân viên) hoặc MANAGER (quản lý chi nhánh)." }, 422);
   }
 
   return { email, password, fullName, role };
@@ -221,12 +221,12 @@ async function createAccount(
     .gte("created_at", since);
 
   if (countError) {
-    return json({ error: `Unable to check the rate limit: ${countError.message}` }, 500);
+    return json({ error: `Không thể kiểm tra giới hạn tạo tài khoản: ${countError.message}` }, 500);
   }
 
   if ((count ?? 0) >= MAX_PROVISIONED_PER_HOUR) {
     return json(
-      { error: "Too many accounts were created for this organization in the last hour." },
+      { error: "Tổ chức đã tạo quá nhiều tài khoản trong một giờ qua. Vui lòng thử lại sau." },
       429,
     );
   }
@@ -240,12 +240,12 @@ async function createAccount(
     .maybeSingle();
 
   if (existingError) {
-    return json({ error: `Unable to read the register: ${existingError.message}` }, 500);
+    return json({ error: `Không thể đọc danh sách chờ: ${existingError.message}` }, 500);
   }
 
   if (existing?.claimed_by) {
     return json(
-      { error: "This account is already a member of the organization." },
+      { error: "Tài khoản này đã là thành viên của tổ chức." },
       409,
     );
   }
@@ -262,10 +262,10 @@ async function createAccount(
     const message = createError?.message ?? "unknown error";
 
     if (/exist|registered/i.test(message)) {
-      return json({ error: "An account already exists for this email address." }, 409);
+      return json({ error: "Email này đã có tài khoản đăng nhập." }, 409);
     }
 
-    return json({ error: `Unable to create the account: ${message}` }, 500);
+    return json({ error: `Không thể tạo tài khoản: ${message}` }, 500);
   }
 
   const userId = created.user.id;
@@ -280,14 +280,14 @@ async function createAccount(
     .maybeSingle();
 
   if (profileError) {
-    return json({ error: `Unable to read the new profile: ${profileError.message}` }, 500);
+    return json({ error: `Không thể đọc hồ sơ vừa tạo: ${profileError.message}` }, 500);
   }
 
   if (!profile) {
     return json(
       {
         error:
-          "The account was created but has no profile row: the `on_auth_user_created` trigger from SCRUM-50_user_registration.sql is missing. Apply that script, then delete the auth user and retry.",
+          "Tài khoản đã được tạo nhưng không có dòng hồ sơ: trigger `on_auth_user_created` của SCRUM-50_user_registration.sql chưa được cài. Hãy chạy script đó, xóa tài khoản auth còn sót rồi tạo lại.",
       },
       500,
     );
@@ -300,7 +300,7 @@ async function createAccount(
     .eq("id", userId);
 
   if (flagError) {
-    return json({ error: `Unable to flag the account: ${flagError.message}` }, 500);
+    return json({ error: `Không thể đặt cờ đổi mật khẩu: ${flagError.message}` }, 500);
   }
 
   if (existing) {
@@ -315,7 +315,7 @@ async function createAccount(
       .eq("id", existing.id);
 
     if (updateError) {
-      return json({ error: `Unable to update the register: ${updateError.message}` }, 500);
+      return json({ error: `Không thể cập nhật danh sách chờ: ${updateError.message}` }, 500);
     }
   } else {
     const { error: insertError } = await admin.from("organization_invites").insert({
@@ -329,7 +329,7 @@ async function createAccount(
 
     if (insertError) {
       return json(
-        { error: `Unable to add the account to the register: ${insertError.message}` },
+        { error: `Không thể thêm tài khoản vào danh sách chờ: ${insertError.message}` },
         500,
       );
     }
@@ -347,12 +347,12 @@ async function resetPassword(
   const password = typeof body.password === "string" ? body.password : "";
 
   if (!UUID_PATTERN.test(userId)) {
-    return json({ error: "user_id must be a UUID." }, 422);
+    return json({ error: "`user_id` phải là UUID." }, 422);
   }
 
   if (password.length < MIN_PASSWORD_LENGTH) {
     return json(
-      { error: `password must be at least ${MIN_PASSWORD_LENGTH} characters.` },
+      { error: `Mật khẩu phải có ít nhất ${MIN_PASSWORD_LENGTH} ký tự.` },
       422,
     );
   }
@@ -365,11 +365,11 @@ async function resetPassword(
     .maybeSingle();
 
   if (targetError) {
-    return json({ error: `Unable to read the account: ${targetError.message}` }, 500);
+    return json({ error: `Không thể đọc tài khoản: ${targetError.message}` }, 500);
   }
 
   if (!target || target.organization_id !== organizationId) {
-    return json({ error: "That account does not belong to your organization." }, 403);
+    return json({ error: "Tài khoản đó không thuộc tổ chức của bạn." }, 403);
   }
 
   const { error: updateError } = await admin.auth.admin.updateUserById(userId, {
@@ -377,7 +377,7 @@ async function resetPassword(
   });
 
   if (updateError) {
-    return json({ error: `Unable to reset the password: ${updateError.message}` }, 500);
+    return json({ error: `Không thể đặt lại mật khẩu: ${updateError.message}` }, 500);
   }
 
   const { error: flagError } = await admin
@@ -386,7 +386,7 @@ async function resetPassword(
     .eq("id", userId);
 
   if (flagError) {
-    return json({ error: `Unable to flag the account: ${flagError.message}` }, 500);
+    return json({ error: `Không thể đặt cờ đổi mật khẩu: ${flagError.message}` }, 500);
   }
 
   return json({ user_id: userId, must_change_password: true }, 200);

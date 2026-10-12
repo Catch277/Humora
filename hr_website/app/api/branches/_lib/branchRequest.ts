@@ -51,7 +51,7 @@ function parseCoordinate(
 
 export function parseBranchRequest(payload: unknown): BranchRequestResult {
   if (typeof payload !== "object" || payload === null) {
-    return { ok: false, error: "The request body must be a JSON object." };
+    return { ok: false, error: "Nội dung yêu cầu phải là một đối tượng JSON." };
   }
 
   const body = payload as Record<string, unknown>;
@@ -60,7 +60,7 @@ export function parseBranchRequest(payload: unknown): BranchRequestResult {
   if (typeof name !== "string" || name.trim().length === 0 || name.trim().length > 120) {
     return {
       ok: false,
-      error: "name is required and must be a non-empty string of at most 120 characters.",
+      error: "name là bắt buộc, không được rỗng và tối đa 120 ký tự.",
     };
   }
 
@@ -69,28 +69,28 @@ export function parseBranchRequest(payload: unknown): BranchRequestResult {
     body.address !== null &&
     (typeof body.address !== "string" || body.address.length > 300)
   ) {
-    return { ok: false, error: "address must be a string of at most 300 characters." };
+    return { ok: false, error: "address tối đa 300 ký tự." };
   }
 
   if (!isOptionalUuid(body.manager_id)) {
-    return { ok: false, error: "manager_id must be a UUID or null." };
+    return { ok: false, error: "manager_id phải là UUID hoặc null." };
   }
 
   const latitude = parseCoordinate(body.latitude, 90);
   const longitude = parseCoordinate(body.longitude, 180);
 
   if (!latitude.ok) {
-    return { ok: false, error: "latitude must be a number between -90 and 90 or null." };
+    return { ok: false, error: "latitude phải là số trong khoảng -90 đến 90 hoặc null." };
   }
 
   if (!longitude.ok) {
-    return { ok: false, error: "longitude must be a number between -180 and 180 or null." };
+    return { ok: false, error: "longitude phải là số trong khoảng -180 đến 180 hoặc null." };
   }
 
   // A geofence without both coordinates is meaningless, so the pair is all-or-nothing —
   // the same rule the `branches_geofence_coordinates_check` constraint enforces.
   if ((latitude.value === null) !== (longitude.value === null)) {
-    return { ok: false, error: "latitude and longitude must be provided together." };
+    return { ok: false, error: "latitude và longitude phải gửi cùng nhau." };
   }
 
   // The attendance geofence is only meaningful inside the country the app operates in, and the
@@ -116,7 +116,7 @@ export function parseBranchRequest(payload: unknown): BranchRequestResult {
   ) {
     return {
       ok: false,
-      error: `attendance_radius must be a whole number of metres between ${MIN_ATTENDANCE_RADIUS} and ${MAX_ATTENDANCE_RADIUS}.`,
+      error: `attendance_radius phải là số nguyên (mét) trong khoảng ${MIN_ATTENDANCE_RADIUS} đến ${MAX_ATTENDANCE_RADIUS}.`,
     };
   }
 

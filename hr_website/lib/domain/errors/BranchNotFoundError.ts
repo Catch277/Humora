@@ -1,6 +1,6 @@
 export class BranchNotFoundError extends Error {
   constructor() {
-    super("Branch not found.");
+    super("Không tìm thấy chi nhánh.");
     this.name = "BranchNotFoundError";
   }
 }

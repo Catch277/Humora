@@ -1,4 +1,6 @@
 import { normalizeRole } from "@/lib/domain/roles";
+import type { MessageKey, Translate } from "@/lib/i18n/translate";
+import { translateVi } from "@/lib/i18n/translate";
 
 /**
  * What a role is allowed to do, and which screen that ability belongs to (SCRUM-59).
@@ -187,15 +189,31 @@ export function firstAccessiblePath(role: string | null | undefined): string {
   return screen?.path ?? "/";
 }
 
-/** Vietnamese labels for `users.role`; the single copy the header, the pages and the search use. */
-export const ROLE_LABELS: Readonly<Record<string, string>> = {
-  OWNER: "Chủ sở hữu",
-  MANAGER: "Quản lý chi nhánh",
-  EMPLOYEE: "Nhân viên",
+/**
+ * The dictionary keys of `users.role`; the single copy the header, the pages and the search render. The
+ * copy itself lives in `lib/i18n/messages/*`, because three screens plus quick search show the same three
+ * labels and a second hand-written table is what drifts.
+ */
+export const ROLE_KEYS: Readonly<Record<string, MessageKey>> = {
+  OWNER: "role.owner",
+  MANAGER: "role.manager",
+  EMPLOYEE: "role.employee",
 };
 
-export function roleLabel(role: string | null | undefined): string {
+/**
+ * The label of a role.
+ *
+ * `t` is optional and **last**, the shape every shared label helper uses: a component passes
+ * `useLocale().t`, while a caller without a provider — or a screen that has not been migrated yet —
+ * receives the Vietnamese wording from the dictionary's source locale, exactly what this function
+ * returned before the label moved into `lib/i18n/messages/*`.
+ */
+export function roleLabel(
+  role: string | null | undefined,
+  t: Translate = translateVi,
+): string {
   const normalized = normalizeRole(role);
+  const key = ROLE_KEYS[normalized];
 
-  return ROLE_LABELS[normalized] ?? (normalized || "—");
+  return key ? t(key) : normalized || "—";
 }

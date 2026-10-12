@@ -48,7 +48,7 @@ function translate(error: RpcFailure): Error {
 
   if (message.includes("ORGANIZATION_NAME_INVALID")) {
     // Worded like the other field validations, so the route maps it to a 400 by its prefix.
-    return new Error("name must be between 2 and 120 characters.");
+    return new Error("Tên phải có từ 2 đến 120 ký tự.");
   }
 
   return new Error(

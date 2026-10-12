@@ -42,7 +42,7 @@
  *       400:
  *         description: One or more query parameters are invalid.
  *       401:
- *         description: Authentication is required.
+ *         description: Bạn cần đăng nhập để thực hiện thao tác này.
  *       403:
  *         description: The caller has no user profile, or their role may not read the report (SCRUM-59).
  *       500:
@@ -121,13 +121,13 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json(report);
   } catch (error) {
-    if (error instanceof Error && error.message.startsWith("date must")) {
+    if (error instanceof Error && error.message.startsWith("Ngày")) {
       return NextResponse.json({ error: error.message }, { status: 400 });
     }
 
     console.error("Failed to generate revenue report", error);
     return NextResponse.json(
-      { error: "Unable to generate revenue report." },
+      { error: "Không thể tạo báo cáo doanh thu." },
       { status: 500 },
     );
   }

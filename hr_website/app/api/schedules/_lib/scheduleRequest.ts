@@ -48,27 +48,27 @@ export function isCalendarDate(value: string): boolean {
 
 export function parseScheduleRequest(payload: unknown): ScheduleRequestResult {
   if (typeof payload !== "object" || payload === null) {
-    return { ok: false, error: "The request body must be a JSON object." };
+    return { ok: false, error: "Nội dung yêu cầu phải là một đối tượng JSON." };
   }
 
   const body = payload as Record<string, unknown>;
 
   if (typeof body.employee_id !== "string" || !UUID_PATTERN.test(body.employee_id)) {
-    return { ok: false, error: "employee_id is required and must be a UUID." };
+    return { ok: false, error: "employee_id là bắt buộc và phải là UUID." };
   }
 
   if (typeof body.branch_id !== "string" || !UUID_PATTERN.test(body.branch_id)) {
-    return { ok: false, error: "branch_id is required and must be a UUID." };
+    return { ok: false, error: "branch_id là bắt buộc và phải là UUID." };
   }
 
   if (typeof body.shift_id !== "string" || !UUID_PATTERN.test(body.shift_id)) {
-    return { ok: false, error: "shift_id is required and must be a UUID." };
+    return { ok: false, error: "shift_id là bắt buộc và phải là UUID." };
   }
 
   if (typeof body.work_date !== "string" || !isCalendarDate(body.work_date)) {
     return {
       ok: false,
-      error: "work_date is required and must be a calendar date (YYYY-MM-DD).",
+      error: "work_date là bắt buộc và phải là ngày dạng YYYY-MM-DD.",
     };
   }
 
@@ -77,7 +77,7 @@ export function parseScheduleRequest(payload: unknown): ScheduleRequestResult {
   if (typeof rawStatus !== "string" || !STATUS_SET.has(rawStatus)) {
     return {
       ok: false,
-      error: `status must be one of ${SHIFT_ASSIGNMENT_STATUSES.join(", ")}.`,
+      error: `status phải là một trong: ${SHIFT_ASSIGNMENT_STATUSES.join(", ")}.`,
     };
   }
 
@@ -86,7 +86,7 @@ export function parseScheduleRequest(payload: unknown): ScheduleRequestResult {
     body.note !== null &&
     (typeof body.note !== "string" || body.note.length > 500)
   ) {
-    return { ok: false, error: "note must be a string of at most 500 characters." };
+    return { ok: false, error: "note tối đa 500 ký tự." };
   }
 
   return {

@@ -38,7 +38,7 @@
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  *       401:
- *         description: Authentication is required.
+ *         description: Bạn cần đăng nhập để thực hiện thao tác này.
  *         content:
  *           application/json:
  *             schema:
@@ -85,26 +85,26 @@ export async function POST(request: Request) {
   try {
     body = await request.json();
   } catch {
-    return NextResponse.json({ error: "Invalid JSON body." }, { status: 400 });
+    return NextResponse.json({ error: "Nội dung yêu cầu phải là JSON hợp lệ." }, { status: 400 });
   }
 
   if (typeof body.user_id !== "string" || !UUID_PATTERN.test(body.user_id)) {
     return NextResponse.json(
-      { error: "user_id must be a UUID." },
+      { error: "user_id phải là UUID." },
       { status: 400 },
     );
   }
 
   if (typeof body.password !== "string") {
     return NextResponse.json(
-      { error: "password is required and must be a string." },
+      { error: "password là bắt buộc và phải là chuỗi." },
       { status: 400 },
     );
   }
 
   if (body.password.length < MIN_PASSWORD_LENGTH) {
     return NextResponse.json(
-      { error: `password must be at least ${MIN_PASSWORD_LENGTH} characters.` },
+      { error: `Mật khẩu phải có ít nhất ${MIN_PASSWORD_LENGTH} ký tự.` },
       { status: 400 },
     );
   }
@@ -133,7 +133,7 @@ export async function POST(request: Request) {
     }
 
     return NextResponse.json(
-      { error: "Unable to reset the password." },
+      { error: "Không thể đặt lại mật khẩu." },
       { status: 500 },
     );
   }

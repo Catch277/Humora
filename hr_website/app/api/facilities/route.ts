@@ -29,7 +29,7 @@
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  *       401:
- *         description: Authentication is required.
+ *         description: Bạn cần đăng nhập để thực hiện thao tác này.
  *         content:
  *           application/json:
  *             schema:
@@ -71,7 +71,7 @@
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  *       401:
- *         description: Authentication is required.
+ *         description: Bạn cần đăng nhập để thực hiện thao tác này.
  *         content:
  *           application/json:
  *             schema:
@@ -115,7 +115,7 @@ export async function GET(request: NextRequest) {
 
   if (branchId && !UUID_PATTERN.test(branchId)) {
     return NextResponse.json(
-      { error: "branch_id must be a UUID." },
+      { error: "branch_id phải là UUID." },
       { status: 400 },
     );
   }
@@ -138,7 +138,7 @@ export async function GET(request: NextRequest) {
   } catch (error) {
     console.error("Failed to list facilities", error);
     return NextResponse.json(
-      { error: "Unable to retrieve facilities." },
+      { error: "Không thể tải danh sách thiết bị." },
       { status: 500 },
     );
   }
@@ -150,7 +150,7 @@ export async function POST(request: Request) {
   try {
     body = await request.json();
   } catch {
-    return NextResponse.json({ error: "Invalid JSON body." }, { status: 400 });
+    return NextResponse.json({ error: "Nội dung yêu cầu phải là JSON hợp lệ." }, { status: 400 });
   }
 
   const parsed = parseFacilityRequest(body);
@@ -202,7 +202,7 @@ export async function POST(request: Request) {
 
     console.error("Failed to create facility", error);
     return NextResponse.json(
-      { error: "Unable to create facility." },
+      { error: "Không thể tạo thiết bị." },
       { status: 500 },
     );
   }

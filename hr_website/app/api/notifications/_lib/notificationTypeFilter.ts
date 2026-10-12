@@ -21,7 +21,7 @@ export function parseNotificationTypes(value: unknown): ParsedNotificationTypes 
 
   if (Array.isArray(value)) {
     if (!value.every((entry) => typeof entry === "string")) {
-      return { ok: false, error: "types must be an array of strings." };
+      return { ok: false, error: "types phải là mảng chuỗi." };
     }
 
     codes = value.map((entry) => (entry as string).trim());
@@ -29,7 +29,7 @@ export function parseNotificationTypes(value: unknown): ParsedNotificationTypes 
     // The query string carries `?type=A,B`, because a chip stands for a whole category.
     codes = value.split(",").map((entry) => entry.trim());
   } else {
-    return { ok: false, error: "types must be a comma-separated string or an array." };
+    return { ok: false, error: "types phải là chuỗi phân tách bằng dấu phẩy hoặc mảng." };
   }
 
   codes = [...new Set(codes.filter((code) => code !== ""))];
@@ -43,7 +43,7 @@ export function parseNotificationTypes(value: unknown): ParsedNotificationTypes 
   if (unknown.length > 0) {
     return {
       ok: false,
-      error: `Unknown notification type(s): ${unknown.join(", ")}.`,
+      error: `Loại thông báo không hợp lệ: ${unknown.join(", ")}.`,
     };
   }
 

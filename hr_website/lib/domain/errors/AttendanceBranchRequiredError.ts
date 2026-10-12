@@ -6,7 +6,7 @@
  */
 export class AttendanceBranchRequiredError extends Error {
   constructor() {
-    super("branch_id is required when a manager checks in.");
+    super("Quản lý vào ca phải chọn chi nhánh.");
     this.name = "AttendanceBranchRequiredError";
   }
 }

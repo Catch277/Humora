@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
+import { useLocale } from "@/components/LocaleProvider";
 import { useProfile } from "@/components/ProfileProvider";
 import { canManageBranch, viewerFromRole } from "@/lib/domain/branchScope";
 import { isEmployeeRole, isManagerRole } from "@/lib/domain/roles";
@@ -27,6 +28,8 @@ import {
   type ShiftAssignment,
   type ShiftAssignmentStatus,
 } from "@/lib/domain/entities/Shift";
+import { formatClockTime, formatDayMonth, weekdayLong } from "@/lib/i18n/format";
+import { shiftAssignmentStatusLabel } from "@/lib/i18n/labels";
 import { normalizeForSearch } from "@/lib/searchText";
 
 // SCRUM-61 needs `manager_id`: it is what says whether the caller heads the branch.
@@ -68,12 +71,6 @@ type LoadResult = {
   error: string | null;
 };
 
-const STATUS_LABELS: Record<ShiftAssignmentStatus, string> = {
-  SCHEDULED: "Đi làm",
-  LEAVE: "Nghỉ phép",
-  CANCELLED: "Đã huỷ",
-};
-
 const STATUS_BADGES: Record<ShiftAssignmentStatus, string> = {
   SCHEDULED: "bg-emerald-50 text-emerald-700",
   LEAVE: "bg-blue-50 text-blue-700",
@@ -89,16 +86,6 @@ const STATUS_SURFACES: Record<ShiftAssignmentStatus, string> = {
   LEAVE: "border-blue-200/70 bg-blue-50/60",
   CANCELLED: "border-slate-200 bg-slate-100/60",
 };
-
-const WEEKDAYS = [
-  "Thứ 2",
-  "Thứ 3",
-  "Thứ 4",
-  "Thứ 5",
-  "Thứ 6",
-  "Thứ 7",
-  "Chủ nhật",
-];
 
 const ALL = "all";
 
@@ -132,26 +119,9 @@ function startOfWeek(date: string): string {
   return addDays(date, -offset);
 }
 
-function formatDay(date: string): string {
-  const [, month, day] = date.split("-");
-
-  return `${day}/${month}`;
-}
-
+/** The week header reads `28/10 – 03/11`: two business dates, formatted for the reader. */
 function formatWeekRange(weekStart: string): string {
-  return `${formatDay(weekStart)} – ${formatDay(addDays(weekStart, 6))}`;
-}
-
-function weekdayLabel(date: string): string {
-  const [year, month, day] = date.split("-").map(Number);
-  const weekday = new Date(Date.UTC(year, month - 1, day)).getUTCDay();
-
-  // getUTCDay(): 0 = Sunday, so Monday (index 0 of WEEKDAYS) is (weekday + 6) % 7.
-  return WEEKDAYS[(weekday + 6) % 7];
-}
-
-function formatHours(time: string | null): string {
-  return time ? time.slice(0, 5) : "--:--";
+  return `${formatDayMonth(weekStart)} – ${formatDayMonth(addDays(weekStart, 6))}`;
 }
 
 /**
@@ -180,8 +150,8 @@ function compareShiftsByStartTime(first: Shift, second: Shift): number {
     return firstIsDayOff ? 1 : -1;
   }
 
-  const startComparison = formatHours(first.start_time).localeCompare(
-    formatHours(second.start_time),
+  const startComparison = formatClockTime(first.start_time, "--:--").localeCompare(
+    formatClockTime(second.start_time, "--:--"),
   );
 
   return startComparison !== 0
@@ -208,6 +178,7 @@ export default function SchedulesPage() {
   // action — and only for the branch they head. An employee sees the plan without the controls, and a
   // manager sees another branch's shifts without "Sửa / Xoá".
   const { profile, can } = useProfile();
+  const { locale, t } = useLocale();
   // SCRUM-61: the screen and the use cases must answer "who manages which branch" the same way, so
   // this is exactly the `BranchViewer` the API builds (`viewerFromRole`) and not a capability standing
   // in for the `OWNER` role — deriving it from `branch:manage` meant the schedule silently fell into
@@ -292,7 +263,7 @@ export default function SchedulesPage() {
           assignments: [],
           shifts: [],
           branches: [],
-          error: data?.error ?? "Không thể tải lịch làm việc.",
+          error: data?.error ?? t("schedules.error.load"),
         };
       }
 
@@ -311,9 +282,9 @@ export default function SchedulesPage() {
           ? []
           : ((await branchesResponse.json()) as Branch[]),
         error: shiftsFailed
-          ? "Không thể tải danh mục ca làm việc."
+          ? t("schedules.error.catalogue")
           : branchesFailed
-            ? "Không thể tải danh sách chi nhánh, nên chưa xếp ca được. Vui lòng tải lại."
+            ? t("schedules.error.branches")
             : null,
       };
     }
@@ -336,14 +307,14 @@ export default function SchedulesPage() {
         }
 
         setAssignments([]);
-        setPageError("Không thể kết nối tới máy chủ. Vui lòng thử lại.");
+        setPageError(t("error.network"));
         setLoading(false);
       });
 
     return () => {
       cancelled = true;
     };
-  }, [weekStart, weekEnd, reloadToken]);
+  }, [weekStart, weekEnd, reloadToken, t]);
 
   useEffect(() => {
     let cancelled = false;
@@ -649,7 +620,7 @@ export default function SchedulesPage() {
       status: assignment.status,
       note: assignment.note ?? "",
     });
-    setEmployeeName(assignment.employee?.full_name ?? "Nhân viên đã xoá");
+    setEmployeeName(assignment.employee?.full_name ?? t("schedules.deletedEmployee"));
     setEmployeeQuery("");
     setEmployeeDropdownOpen(false);
     setFormError("");
@@ -727,7 +698,7 @@ export default function SchedulesPage() {
         const data = (await response.json().catch(() => null)) as {
           error?: string;
         } | null;
-        setAssignError(data?.error ?? "Không gán được chi nhánh. Vui lòng thử lại.");
+        setAssignError(data?.error ?? t("schedules.error.assignBranch"));
         return;
       }
 
@@ -745,7 +716,7 @@ export default function SchedulesPage() {
         shiftId: value.branchId === assignBranchId ? value.shiftId : "",
       }));
     } catch {
-      setAssignError("Không thể kết nối tới máy chủ. Vui lòng thử lại.");
+      setAssignError(t("error.network"));
     } finally {
       setAssigningBranch(false);
     }
@@ -753,24 +724,22 @@ export default function SchedulesPage() {
 
   async function submit() {
     if (!form.employeeId) {
-      setFormError("Vui lòng chọn nhân viên được xếp ca.");
+      setFormError(t("schedules.error.employeeRequired"));
       return;
     }
 
     if (!form.branchId) {
-      setFormError(
-        "Nhân viên này chưa được gán chi nhánh. Vui lòng gán chi nhánh ở trang Quản lý nhân sự trước khi xếp ca.",
-      );
+      setFormError(t("schedules.error.branchRequired"));
       return;
     }
 
     if (!form.shiftId) {
-      setFormError("Vui lòng chọn ca làm việc.");
+      setFormError(t("schedules.error.shiftRequired"));
       return;
     }
 
     if (!form.workDate) {
-      setFormError("Vui lòng chọn ngày làm việc.");
+      setFormError(t("schedules.error.dateRequired"));
       return;
     }
 
@@ -797,39 +766,42 @@ export default function SchedulesPage() {
 
       if (!response.ok) {
         if (response.status === 409) {
-          setFormError(
-            "Nhân viên đã có ca trùng giờ trong ngày này. Chọn ca hoặc ngày khác.",
-          );
+          setFormError(t("schedules.error.overlap"));
           return;
         }
 
         if (response.status === 404) {
-          setFormError("Không tìm thấy ca làm việc đã chọn. Tải lại trang và thử lại.");
+          setFormError(t("schedules.error.shiftNotFound"));
           return;
         }
 
         const data = (await response.json().catch(() => null)) as {
           error?: string;
         } | null;
-        setFormError(data?.error ?? "Không thể lưu ca làm việc.");
+        setFormError(data?.error ?? t("schedules.error.saveFailed"));
         return;
       }
 
       closeModal();
       refresh();
     } catch {
-      setFormError("Không thể kết nối tới máy chủ. Vui lòng thử lại.");
+      setFormError(t("error.network"));
     } finally {
       setSaving(false);
     }
   }
 
   async function remove(assignment: ShiftAssignment) {
-    const employeeLabel = assignment.employee?.full_name ?? "nhân viên này";
+    const employeeLabel =
+      assignment.employee?.full_name ?? t("schedules.thisEmployee");
 
     if (
       !window.confirm(
-        `Xoá ca "${assignment.shift?.name ?? "?"}" của ${employeeLabel} ngày ${formatDay(assignment.work_date)}?`,
+        t("schedules.confirmDelete", {
+          shift: assignment.shift?.name ?? "?",
+          name: employeeLabel,
+          day: formatDayMonth(assignment.work_date),
+        }),
       )
     ) {
       return;
@@ -847,13 +819,13 @@ export default function SchedulesPage() {
         const data = (await response.json().catch(() => null)) as {
           error?: string;
         } | null;
-        setPageError(data?.error ?? "Không thể xoá ca làm việc.");
+        setPageError(data?.error ?? t("schedules.error.deleteFailed"));
         return;
       }
 
       refresh();
     } catch {
-      setPageError("Không thể kết nối tới máy chủ. Vui lòng thử lại.");
+      setPageError(t("error.network"));
     } finally {
       setDeletingId("");
     }
@@ -876,14 +848,13 @@ export default function SchedulesPage() {
       <div className="flex flex-col justify-between gap-3 lg:flex-row lg:items-end">
         <div>
           <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-slate-400">
-            Vận hành ca / SCRUM-30
+            {t("schedules.eyebrow")}
           </p>
           <h1 className="text-2xl font-bold tracking-tight text-slate-900">
-            Lịch làm việc
+            {t("nav.schedules")}
           </h1>
           <p className="mt-1 text-xs text-slate-500">
-            Phân ca theo tuần cho từng chi nhánh, kiểm tra trùng giờ và theo dõi ngày nghỉ
-            phép.
+            {t("schedules.subtitle")}
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -894,28 +865,28 @@ export default function SchedulesPage() {
             className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-surface px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
           >
             <RefreshCw size={14} className={loading ? "animate-spin" : undefined} />
-            Làm mới
+            {t("common.reload")}
           </button>
           <button
             type="button"
             onClick={() => setWeekStart(addDays(weekStart, -7))}
-            aria-label="Tuần trước"
+            aria-label={t("schedules.previousWeekAria")}
             className="rounded-lg border border-slate-200 bg-surface p-2 text-slate-600 hover:bg-slate-50"
           >
             <ChevronLeft size={14} />
           </button>
           <span className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-surface px-3 py-2 text-xs font-semibold text-slate-700">
-            Tuần {formatWeekRange(weekStart)}
+            {t("schedules.weekLabel", { range: formatWeekRange(weekStart) })}
             {isCurrentWeek && (
               <span className="rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-semibold text-primary">
-                Tuần này
+                {t("schedules.thisWeekBadge")}
               </span>
             )}
           </span>
           <button
             type="button"
             onClick={() => setWeekStart(addDays(weekStart, 7))}
-            aria-label="Tuần sau"
+            aria-label={t("schedules.nextWeekAria")}
             className="rounded-lg border border-slate-200 bg-surface p-2 text-slate-600 hover:bg-slate-50"
           >
             <ChevronRight size={14} />
@@ -926,7 +897,7 @@ export default function SchedulesPage() {
               onClick={() => setWeekStart(startOfWeek(todayInBangkok()))}
               className="rounded-lg border border-slate-200 bg-surface px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50"
             >
-              Về tuần này
+              {t("schedules.backToThisWeek")}
             </button>
           )}
           {can("schedule:manage") && (
@@ -935,7 +906,7 @@ export default function SchedulesPage() {
               onClick={() => openCreate(isCurrentWeek ? todayInBangkok() : weekStart)}
               className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-xs font-semibold text-white shadow-sm transition-colors hover:bg-primary-strong"
             >
-              <UserPlus size={14} /> Xếp ca
+              <UserPlus size={14} /> {t("schedules.createButton")}
             </button>
           )}
         </div>
@@ -945,7 +916,7 @@ export default function SchedulesPage() {
         <article className="rounded-xl border border-slate-200/80 border-b-2 border-b-blue-200 bg-surface p-4 shadow-sm">
           <div className="flex items-start justify-between gap-3">
             <p className="max-w-44 text-[10px] font-semibold uppercase leading-relaxed tracking-wide text-slate-500">
-              Ca đã xếp trong tuần
+              {t("schedules.kpiShifts")}
             </p>
             <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-blue-50 text-primary">
               <CalendarRange size={16} />
@@ -955,14 +926,14 @@ export default function SchedulesPage() {
             {scheduledCount}
           </p>
           <p className="mt-1 text-[10px] text-slate-500">
-            Không tính ngày nghỉ và ca đã huỷ
+            {t("schedules.kpiShiftsNote")}
           </p>
         </article>
 
         <article className="rounded-xl border border-slate-200/80 border-b-2 border-b-emerald-200 bg-surface p-4 shadow-sm">
           <div className="flex items-start justify-between gap-3">
             <p className="max-w-44 text-[10px] font-semibold uppercase leading-relaxed tracking-wide text-slate-500">
-              Nhân viên được xếp
+              {t("schedules.kpiEmployees")}
             </p>
             <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-emerald-50 text-emerald-600">
               <Users size={16} />
@@ -972,14 +943,14 @@ export default function SchedulesPage() {
             {employeeCount}
           </p>
           <p className="mt-1 text-[10px] text-emerald-600">
-            Có ít nhất một ca trong tuần
+            {t("schedules.kpiEmployeesNote")}
           </p>
         </article>
 
         <article className="rounded-xl border border-slate-200/80 border-b-2 border-b-sky-200 bg-surface p-4 shadow-sm">
           <div className="flex items-start justify-between gap-3">
             <p className="max-w-44 text-[10px] font-semibold uppercase leading-relaxed tracking-wide text-slate-500">
-              Ngày nghỉ phép
+              {t("schedules.kpiLeave")}
             </p>
             <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-sky-50 text-sky-600">
               <CalendarOff size={16} />
@@ -989,14 +960,14 @@ export default function SchedulesPage() {
             {leaveCount}
           </p>
           <p className="mt-1 text-[10px] text-sky-600">
-            Đã ghi nhận trong lịch tuần
+            {t("schedules.kpiLeaveNote")}
           </p>
         </article>
 
         <article className="rounded-xl border border-slate-200/80 border-b-2 border-b-teal-200 bg-surface p-4 shadow-sm">
           <div className="flex items-start justify-between gap-3">
             <p className="max-w-44 text-[10px] font-semibold uppercase leading-relaxed tracking-wide text-slate-500">
-              Chi nhánh có lịch
+              {t("schedules.kpiBranches")}
             </p>
             <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-teal-50 text-teal-600">
               <Building2 size={16} />
@@ -1006,7 +977,7 @@ export default function SchedulesPage() {
             {branchCount}
           </p>
           <p className="mt-1 text-[10px] text-teal-600">
-            Trên tổng số {branches.length} chi nhánh
+            {t("common.outOfBranches", { count: branches.length })}
           </p>
         </article>
       </div>
@@ -1022,21 +993,21 @@ export default function SchedulesPage() {
           <label className="flex items-center gap-2 rounded-lg border border-slate-200 bg-app px-3 py-2 text-xs xl:w-96">
             <Search size={14} className="shrink-0 text-slate-400" />
             <input
-              aria-label="Tìm nhân viên trong lịch"
+              aria-label={t("schedules.searchAria")}
               value={query}
               onChange={(event) => setQuery(event.target.value)}
-              placeholder="Tìm theo tên nhân viên"
+              placeholder={t("schedules.searchPlaceholder")}
               className="w-full bg-transparent outline-none placeholder:text-slate-400"
             />
           </label>
 
           <select
-            aria-label="Lọc theo chi nhánh"
+            aria-label={t("common.filterBranchAria")}
             value={branchFilter}
             onChange={(event) => setBranchFilter(event.target.value)}
             className="rounded-lg border border-slate-200 bg-surface px-3 py-2 text-xs outline-none focus:border-primary"
           >
-            <option value={ALL}>Tất cả chi nhánh</option>
+            <option value={ALL}>{t("common.allBranches")}</option>
             {filterBranches.map((branch) => (
               <option key={branch.id} value={branch.id}>
                 {branch.name}
@@ -1055,7 +1026,7 @@ export default function SchedulesPage() {
                 : "text-slate-500 hover:bg-slate-50"
             }`}
           >
-            Tất cả trạng thái
+            {t("common.allStatuses")}
           </button>
           {SHIFT_ASSIGNMENT_STATUSES.map((status) => (
             <button
@@ -1068,18 +1039,21 @@ export default function SchedulesPage() {
                   : "text-slate-500 hover:bg-slate-50"
               }`}
             >
-              {STATUS_LABELS[status]}
+              {shiftAssignmentStatusLabel(status, t)}
             </button>
           ))}
           <p className="ml-auto text-[10px] text-slate-400">
-            {filtered.length} ca trong tuần {formatWeekRange(weekStart)}
+            {t("schedules.weekCount", {
+              count: filtered.length,
+              range: formatWeekRange(weekStart),
+            })}
           </p>
         </div>
 
         {loading && (
           <p className="flex items-center justify-center gap-2 px-4 py-10 text-xs text-slate-400">
             <Loader2 size={14} className="animate-spin text-primary" />
-            Đang tải lịch làm việc...
+            {t("schedules.loading")}
           </p>
         )}
 
@@ -1088,7 +1062,7 @@ export default function SchedulesPage() {
             <table className="w-full min-w-[1080px] table-fixed border-collapse text-left text-xs">
               <thead className="bg-surface-muted text-[9px] font-semibold uppercase tracking-wide text-slate-500">
                 <tr>
-                  <th className="w-36 px-4 py-3">Ca làm việc</th>
+                  <th className="w-36 px-4 py-3">{t("schedules.columnShift")}</th>
                   {weekDays.map((day) => (
                     <th
                       key={day}
@@ -1097,16 +1071,16 @@ export default function SchedulesPage() {
                       }`}
                     >
                       <span className="flex flex-wrap items-center gap-1.5">
-                        {weekdayLabel(day)} · {formatDay(day)}
+                        {weekdayLong(day, locale)} · {formatDayMonth(day)}
                         <span
                           className="rounded-full bg-slate-100 px-1.5 py-0.5 text-[9px] font-semibold tabular-nums text-slate-500"
-                          title={`${countByDay.get(day) ?? 0} ca trong ngày`}
+                          title={t("schedules.dayCount", { count: countByDay.get(day) ?? 0 })}
                         >
                           {countByDay.get(day) ?? 0}
                         </span>
                         {day === today && (
                           <span className="rounded-full bg-blue-100 px-1.5 py-0.5 text-[9px] font-semibold text-primary">
-                            Hôm nay
+                            {t("schedules.todayBadge")}
                           </span>
                         )}
                       </span>
@@ -1126,8 +1100,7 @@ export default function SchedulesPage() {
                       colSpan={weekDays.length + 1}
                       className="px-4 py-10 text-center text-slate-400"
                     >
-                      Hệ thống chưa có ca làm việc nào. Quản trị viên cần nạp danh mục ca
-                      (supabase/sql/SCRUM-58_shift_catalogue.sql) trước khi xếp ca.
+                      {t("schedules.noCatalogue")}
                     </td>
                   </tr>
                 )}
@@ -1146,13 +1119,13 @@ export default function SchedulesPage() {
                       </p>
                       <p className="mt-0.5 text-[10px] font-normal tabular-nums text-slate-500">
                         {isDayOffTemplate(shift)
-                          ? "Ngày nghỉ"
-                          : `${formatHours(shift.start_time)} – ${formatHours(shift.end_time)}`}
+                          ? t("schedules.dayOff")
+                          : `${formatClockTime(shift.start_time, "--:--")} – ${formatClockTime(shift.end_time, "--:--")}`}
                       </p>
                       {/* A template only some branches use (SCRUM-30 sets `branch_id`) — name it. */}
                       {shift.branch_id !== null && (
                         <p className="mt-0.5 text-[10px] font-normal text-slate-400">
-                          {branchNames.get(shift.branch_id) ?? "Chi nhánh đã xoá"}
+                          {branchNames.get(shift.branch_id) ?? t("common.deletedBranch")}
                         </p>
                       )}
                     </th>
@@ -1180,18 +1153,18 @@ export default function SchedulesPage() {
                                 <div className="min-w-0 flex-1">
                                   <p className="text-[11px] font-semibold text-slate-900">
                                     {assignment.employee?.full_name ??
-                                      "Nhân viên đã xoá"}
+                                      t("schedules.deletedEmployee")}
                                     {inactiveEmployeeIds.has(
                                       assignment.employee_id,
                                     ) && (
                                       <span className="ml-1 font-normal text-amber-600">
-                                        (đã nghỉ)
+                                        {t("common.inactiveTag")}
                                       </span>
                                     )}
                                   </p>
                                   <p className="mt-0.5 truncate text-[10px] text-slate-500">
                                     {branchNames.get(assignment.branch_id) ??
-                                      "Chi nhánh đã xoá"}
+                                      t("common.deletedBranch")}
                                   </p>
                                 </div>
 
@@ -1201,11 +1174,12 @@ export default function SchedulesPage() {
                                       <button
                                         type="button"
                                         onClick={() => openEdit(assignment)}
-                                        title="Sửa ca"
-                                        aria-label={`Sửa ca của ${
-                                          assignment.employee?.full_name ??
-                                          "nhân viên này"
-                                        }`}
+                                        title={t("schedules.editShiftTitle")}
+                                        aria-label={t("schedules.editShiftAria", {
+                                          name:
+                                            assignment.employee?.full_name ??
+                                            t("schedules.thisEmployee"),
+                                        })}
                                         className="rounded p-0.5 text-slate-400 transition-colors hover:bg-surface hover:text-primary"
                                       >
                                         <Pencil size={11} />
@@ -1214,11 +1188,12 @@ export default function SchedulesPage() {
                                         type="button"
                                         onClick={() => void remove(assignment)}
                                         disabled={deletingId === assignment.id}
-                                        title="Xoá ca"
-                                        aria-label={`Xoá ca của ${
-                                          assignment.employee?.full_name ??
-                                          "nhân viên này"
-                                        }`}
+                                        title={t("schedules.deleteShiftTitle")}
+                                        aria-label={t("schedules.deleteShiftAria", {
+                                          name:
+                                            assignment.employee?.full_name ??
+                                            t("schedules.thisEmployee"),
+                                        })}
                                         className="rounded p-0.5 text-slate-400 transition-colors hover:bg-surface hover:text-rose-600 disabled:opacity-50"
                                       >
                                         {deletingId === assignment.id ? (
@@ -1240,7 +1215,7 @@ export default function SchedulesPage() {
                                     STATUS_BADGES[assignment.status]
                                   }`}
                                 >
-                                  {STATUS_LABELS[assignment.status]}
+                                  {shiftAssignmentStatusLabel(assignment.status, t)}
                                 </span>
                               )}
 
@@ -1264,10 +1239,13 @@ export default function SchedulesPage() {
                             <button
                               type="button"
                               onClick={() => openCreate(day)}
-                              aria-label={`Thêm ca ${shift.name} ngày ${formatDay(day)}`}
+                              aria-label={t("schedules.addShiftAria", {
+                                shift: shift.name,
+                                day: formatDayMonth(day),
+                              })}
                               className="flex w-full items-center justify-center gap-1 rounded-lg border border-dashed border-slate-200 py-2 text-[10px] font-semibold text-slate-400 transition-opacity hover:border-primary hover:text-primary focus-visible:opacity-100 md:py-1.5 md:opacity-0 md:group-hover:opacity-100"
                             >
-                              <Plus size={11} /> Thêm
+                              <Plus size={11} /> {t("schedules.addShift")}
                             </button>
                           )}
                         </div>
@@ -1291,14 +1269,16 @@ export default function SchedulesPage() {
                 </span>
                 <div>
                   <h2 className="font-bold text-slate-900">
-                    {modal.mode === "create" ? "Xếp ca làm việc" : "Cập nhật ca"}
+                    {modal.mode === "create"
+                      ? t("schedules.modalCreateTitle")
+                      : t("schedules.modalEditTitle")}
                   </h2>
                   <p className="mt-1 text-xs text-slate-500">
-                    Một nhân viên có thể có nhiều ca trong ngày, miễn là không trùng giờ.
+                    {t("schedules.modalSubtitle")}
                   </p>
                 </div>
               </div>
-              <button type="button" aria-label="Đóng" onClick={closeModal}>
+              <button type="button" aria-label={t("common.close")} onClick={closeModal}>
                 <X size={18} className="text-slate-400" />
               </button>
             </div>
@@ -1306,7 +1286,7 @@ export default function SchedulesPage() {
             <div className="mt-5 space-y-4">
               <div>
                 <p className="text-xs font-semibold text-slate-600">
-                  Nhân viên <span className="text-rose-500">*</span>
+                  {t("schedules.employeeLabel")} <span className="text-rose-500">*</span>
                 </p>
 
                 {form.employeeId ? (
@@ -1315,7 +1295,7 @@ export default function SchedulesPage() {
                       {employeeName}
                       {selectedEmployeeIsActive === false && (
                         <span className="ml-1 text-[11px] font-semibold text-amber-600">
-                          (đã nghỉ)
+                          {t("common.inactiveTag")}
                         </span>
                       )}
                     </span>
@@ -1330,7 +1310,7 @@ export default function SchedulesPage() {
                       }}
                       className="text-[11px] font-semibold text-primary hover:underline"
                     >
-                      Đổi nhân viên
+                      {t("schedules.changeEmployee")}
                     </button>
                   </div>
                 ) : (
@@ -1353,7 +1333,7 @@ export default function SchedulesPage() {
                           selectEmployee(employeeMatches[0]);
                         }
                       }}
-                      placeholder="Bấm để xem danh sách, hoặc gõ tên để lọc"
+                      placeholder={t("schedules.employeePlaceholder")}
                       className="w-full rounded-lg border border-slate-200 p-2.5 text-sm font-normal outline-none focus:border-blue-500"
                     />
 
@@ -1362,13 +1342,13 @@ export default function SchedulesPage() {
                         {staffLoading && (
                           <li className="flex items-center gap-2 px-3 py-2 text-xs text-slate-400">
                             <Loader2 size={13} className="animate-spin" />
-                            Đang tải danh sách nhân sự...
+                            {t("schedules.staffLoading")}
                           </li>
                         )}
 
                         {!staffLoading && !staffAllowed && (
                           <li className="px-3 py-2 text-xs text-slate-500">
-                            Chỉ chủ sở hữu/quản lý mới xem được danh sách nhân sự.
+                            {t("schedules.staffForbidden")}
                           </li>
                         )}
 
@@ -1376,8 +1356,7 @@ export default function SchedulesPage() {
                           staffAllowed &&
                           employeeMatches.length === 0 && (
                             <li className="px-3 py-2 text-xs text-slate-500">
-                              Không có nhân viên nào phù hợp — chỉ nhân viên đang làm việc mới
-                              xếp ca được.
+                              {t("schedules.staffEmpty")}
                             </li>
                           )}
 
@@ -1397,7 +1376,7 @@ export default function SchedulesPage() {
                                   {/* Only employees are listed, so their branch is the useful fact. */}
                                   {member.branch_id
                                     ? (branchNames.get(member.branch_id) ?? "")
-                                    : "Chưa gán chi nhánh"}
+                                    : t("schedules.noBranchShort")}
                                 </span>
                               </button>
                             </li>
@@ -1405,8 +1384,9 @@ export default function SchedulesPage() {
 
                         {employeeMatches.length > EMPLOYEE_RESULT_LIMIT && (
                           <li className="px-3 py-2 text-[10px] text-slate-400">
-                            Còn {employeeMatches.length - EMPLOYEE_RESULT_LIMIT} người
-                            nữa — gõ thêm để thu hẹp danh sách.
+                            {t("schedules.staffMore", {
+                              count: employeeMatches.length - EMPLOYEE_RESULT_LIMIT,
+                            })}
                           </li>
                         )}
                       </ul>
@@ -1414,8 +1394,8 @@ export default function SchedulesPage() {
 
                     <span className="mt-1 block text-[11px] text-slate-400">
                       {managesAllBranches
-                        ? "Danh sách chỉ gồm tài khoản nhân viên đang làm việc; quản lý, chủ sở hữu và tài khoản đã nghỉ không xếp ca được. Chi nhánh lấy theo nhân viên được chọn."
-                        : "Danh sách chỉ gồm nhân viên đang làm việc thuộc chi nhánh bạn phụ trách; quản lý, chủ sở hữu và tài khoản đã nghỉ không xếp ca được. Chi nhánh lấy theo nhân viên được chọn."}
+                        ? t("schedules.staffHintOwner")
+                        : t("schedules.staffHintManager")}
                     </span>
                   </div>
                 )}
@@ -1428,34 +1408,33 @@ export default function SchedulesPage() {
               */}
               <div className="min-w-0">
                 <label className="block text-xs font-semibold text-slate-600">
-                  Chi nhánh <span className="text-rose-500">*</span>
+                  {t("common.branch")} <span className="text-rose-500">*</span>
                   {/* SCRUM-63: the branch is where the chosen employee works, never a free choice, so
                       this is a statement instead of a picker — the API refuses any other branch. */}
                   <span className="mt-1 block rounded-lg border border-slate-200 bg-app px-3 py-2.5 text-sm font-normal text-slate-600">
                     {form.branchId
                       ? (branchNames.get(form.branchId) ?? "—")
                       : form.employeeId
-                        ? "Nhân viên chưa được gán chi nhánh"
-                        : "Chọn nhân viên để xác định chi nhánh"}
+                        ? t("schedules.branchUnassigned")
+                        : t("schedules.branchPickEmployee")}
                   </span>
                   {/* Under the box, not inside it: a two-line box read as a taller field than the
                       "Ca làm việc" select right below it. */}
                   <span className="mt-1 block text-[11px] font-normal text-slate-400">
-                    Chi nhánh lấy theo nhân viên được chọn
+                    {t("schedules.branchNote")}
                   </span>
                   {manageableIds.size === 0 ? (
                     <span className="mt-1 block text-[11px] font-normal text-amber-600">
                       {managesAllBranches
-                        ? "Chưa đọc được danh sách chi nhánh nên chưa xếp ca được — xem băng báo lỗi phía trên rồi tải lại."
-                        : "Bạn chưa phụ trách chi nhánh nào nên chưa xếp ca được — nhờ chủ sở hữu gán bạn làm chi nhánh trưởng ở trang Quản lý chi nhánh."}
+                        ? t("schedules.branchLoadFailed")
+                        : t("schedules.branchNoneManaged")}
                     </span>
                   ) : (
                     form.employeeId &&
                     !form.branchId &&
                     !can("staff:manage") && (
                       <span className="mt-1 block text-[11px] font-normal text-amber-600">
-                        Nhân viên này chưa được gán chi nhánh — gán ở trang Quản lý nhân sự trước khi
-                        xếp ca.
+                        {t("schedules.branchAssignFirst")}
                       </span>
                     )
                   )}
@@ -1473,17 +1452,16 @@ export default function SchedulesPage() {
                   can("staff:manage") && (
                     <div className="mt-1.5 space-y-1.5">
                       <p className="text-[11px] font-normal text-amber-600">
-                        Nhân viên này chưa được gán chi nhánh. Chọn chi nhánh rồi gán để xếp ca được
-                        ngay.
+                        {t("schedules.branchAssignInline")}
                       </p>
                       <div className="flex items-center gap-2">
                         <select
                           value={assignBranchId}
                           onChange={(event) => setAssignBranchId(event.target.value)}
                           className={inputClassName}
-                          aria-label="Chi nhánh gán cho nhân viên"
+                          aria-label={t("schedules.assignBranchAria")}
                         >
-                          <option value="">Chọn chi nhánh</option>
+                          <option value="">{t("schedules.chooseBranch")}</option>
                           {branches.map((branch) => (
                             <option key={branch.id} value={branch.id}>
                               {branch.name}
@@ -1501,7 +1479,7 @@ export default function SchedulesPage() {
                           ) : (
                             <Building2 size={13} />
                           )}
-                          Gán chi nhánh
+                          {t("schedules.assignBranchButton")}
                         </button>
                       </div>
                       {assignError && (
@@ -1513,7 +1491,7 @@ export default function SchedulesPage() {
                   )}
 
                 <label className="block text-xs font-semibold text-slate-600">
-                  Ca làm việc <span className="text-rose-500">*</span>
+                  {t("common.shift")} <span className="text-rose-500">*</span>
                   <select
                     value={form.shiftId}
                     onChange={(event) =>
@@ -1525,11 +1503,11 @@ export default function SchedulesPage() {
                     disabled={selectableShifts.length === 0}
                     className={inputClassName}
                   >
-                    <option value="">Chọn ca</option>
+                    <option value="">{t("schedules.chooseShift")}</option>
                     {selectableShifts.map((shift) => (
                       <option key={shift.id} value={shift.id}>
-                        {shift.name} ({formatHours(shift.start_time)} –{" "}
-                        {formatHours(shift.end_time)})
+                        {shift.name} ({formatClockTime(shift.start_time, "--:--")} –{" "}
+                        {formatClockTime(shift.end_time, "--:--")})
                       </option>
                     ))}
                   </select>
@@ -1540,13 +1518,11 @@ export default function SchedulesPage() {
                   */}
                   {shifts.length === 0 ? (
                     <span className="mt-1 block text-[11px] font-normal text-amber-600">
-                      Hệ thống chưa có ca làm việc nào. Quản trị viên cần nạp danh mục ca
-                      (supabase/sql/SCRUM-58_shift_catalogue.sql) trước khi xếp ca.
+                      {t("schedules.noCatalogue")}
                     </span>
                   ) : form.branchId !== "" && selectableShifts.length === 0 ? (
                     <span className="mt-1 block text-[11px] font-normal text-amber-600">
-                      Chi nhánh này chưa có ca làm việc — mọi ca hiện có đều gắn với
-                      chi nhánh khác.
+                      {t("schedules.shiftNoneForBranch")}
                     </span>
                   ) : null}
                 </label>
@@ -1554,7 +1530,7 @@ export default function SchedulesPage() {
 
               <div className="grid gap-4 sm:grid-cols-2">
                 <label className="block text-xs font-semibold text-slate-600">
-                  Ngày làm việc <span className="text-rose-500">*</span>
+                  {t("schedules.workDateLabel")} <span className="text-rose-500">*</span>
                   <input
                     type="date"
                     value={form.workDate}
@@ -1569,7 +1545,7 @@ export default function SchedulesPage() {
                 </label>
 
                 <label className="block text-xs font-semibold text-slate-600">
-                  Trạng thái
+                  {t("common.status")}
                   <select
                     value={form.status}
                     onChange={(event) =>
@@ -1582,7 +1558,7 @@ export default function SchedulesPage() {
                   >
                     {SHIFT_ASSIGNMENT_STATUSES.map((status) => (
                       <option key={status} value={status}>
-                        {STATUS_LABELS[status]}
+                        {shiftAssignmentStatusLabel(status, t)}
                       </option>
                     ))}
                   </select>
@@ -1590,7 +1566,7 @@ export default function SchedulesPage() {
               </div>
 
               <label className="block text-xs font-semibold text-slate-600">
-                Ghi chú
+                {t("common.note")}
                 <textarea
                   value={form.note}
                   onChange={(event) =>
@@ -1598,7 +1574,7 @@ export default function SchedulesPage() {
                   }
                   maxLength={500}
                   rows={2}
-                  placeholder="Ví dụ: hỗ trợ ca khai trương, đổi ca với chị Ngọc"
+                  placeholder={t("schedules.notePlaceholder")}
                   className={`${inputClassName} resize-none`}
                 />
               </label>
@@ -1616,7 +1592,7 @@ export default function SchedulesPage() {
                 onClick={closeModal}
                 className="rounded-lg border border-slate-200 px-4 py-2 text-xs font-semibold"
               >
-                Hủy bỏ
+                {t("common.cancel")}
               </button>
               <button
                 type="button"
@@ -1627,7 +1603,7 @@ export default function SchedulesPage() {
                 className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-xs font-semibold text-white shadow-sm transition-colors hover:bg-primary-strong disabled:opacity-50"
               >
                 {saving && <Loader2 size={13} className="animate-spin" />}
-                {saving ? "Đang lưu..." : "Lưu ca làm việc"}
+                {saving ? t("common.saving") : t("schedules.saveShift")}
               </button>
             </div>
           </div>

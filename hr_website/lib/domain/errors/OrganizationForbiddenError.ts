@@ -1,6 +1,6 @@
 export class OrganizationForbiddenError extends Error {
   constructor() {
-    super("Only an OWNER of the organization may do that.");
+    super("Chỉ chủ sở hữu tổ chức mới làm được việc này.");
     this.name = "OrganizationForbiddenError";
   }
 }

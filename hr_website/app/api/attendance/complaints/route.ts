@@ -40,7 +40,7 @@
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  *       401:
- *         description: Authentication is required.
+ *         description: Bạn cần đăng nhập để thực hiện thao tác này.
  *         content:
  *           application/json:
  *             schema:
@@ -91,7 +91,7 @@ export async function POST(request: Request) {
   try {
     body = await request.json();
   } catch {
-    return NextResponse.json({ error: "Invalid JSON body." }, { status: 400 });
+    return NextResponse.json({ error: "Nội dung yêu cầu phải là JSON hợp lệ." }, { status: 400 });
   }
 
   if (
@@ -99,14 +99,14 @@ export async function POST(request: Request) {
     !UUID_PATTERN.test(body.attendance_id)
   ) {
     return NextResponse.json(
-      { error: "attendance_id is required and must be a UUID." },
+      { error: "attendance_id là bắt buộc và phải là UUID." },
       { status: 400 },
     );
   }
 
   if (typeof body.complaint !== "string") {
     return NextResponse.json(
-      { error: "complaint must be a string." },
+      { error: "Nội dung khiếu nại phải là chuỗi." },
       { status: 400 },
     );
   }
@@ -120,7 +120,7 @@ export async function POST(request: Request) {
 
     if (authError || !user) {
       return NextResponse.json(
-        { error: "Authentication is required." },
+        { error: "Bạn cần đăng nhập để thực hiện thao tác này." },
         { status: 401 },
       );
     }
@@ -130,7 +130,7 @@ export async function POST(request: Request) {
 
     if (!profile) {
       return NextResponse.json(
-        { error: "The account has no user profile." },
+        { error: "Tài khoản chưa có hồ sơ người dùng." },
         { status: 403 },
       );
     }
@@ -164,13 +164,13 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: error.message }, { status: 404 });
     }
 
-    if (error instanceof Error && error.message.startsWith("complaint must")) {
+    if (error instanceof Error && error.message.startsWith("Nội dung khiếu nại phải")) {
       return NextResponse.json({ error: error.message }, { status: 400 });
     }
 
     console.error("Failed to record attendance complaint", error);
     return NextResponse.json(
-      { error: "Unable to record the complaint." },
+      { error: "Không thể ghi nhận khiếu nại." },
       { status: 500 },
     );
   }

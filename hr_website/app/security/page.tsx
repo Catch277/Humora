@@ -13,9 +13,12 @@ import {
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 
+import { useLocale } from "@/components/LocaleProvider";
 import type { Passkey } from "@/lib/domain/entities/Passkey";
 import { passkeyErrorMessage } from "@/lib/domain/passkeyMessages";
 import { getBrowserSupabaseClient } from "@/lib/infrastructure/browserSupabaseClient";
+import { formatDate } from "@/lib/i18n/format";
+import type { Translate } from "@/lib/i18n/translate";
 
 /** GoTrue's own list shape, where the two optional fields may simply be absent. */
 type PasskeyListItem = {
@@ -35,23 +38,14 @@ function toPasskey(item: PasskeyListItem): Passkey {
   };
 }
 
-const dateFormatter = new Intl.DateTimeFormat("vi-VN", { dateStyle: "medium" });
-
-function formatDate(value: string | null): string {
-  if (!value) {
-    return "—";
-  }
-
-  const parsed = new Date(value);
-
-  return Number.isNaN(parsed.getTime()) ? "—" : dateFormatter.format(parsed);
-}
-
 /**
  * A first guess for the label the operating system picker shows. It only fills the input — the operator
  * can replace it, and GoTrue caps the value at 120 characters.
+ *
+ * `iPhone` / `iPad` / `Mac` are brand names and stay as they are: the operating system's own picker shows
+ * the same strings in either language.
  */
-function suggestedDeviceName(): string {
+function suggestedDeviceName(t: Translate): string {
   if (typeof navigator === "undefined") {
     return "";
   }
@@ -60,11 +54,11 @@ function suggestedDeviceName(): string {
 
   if (/iPhone/i.test(agent)) return "iPhone";
   if (/iPad/i.test(agent)) return "iPad";
-  if (/Android/i.test(agent)) return "Điện thoại Android";
+  if (/Android/i.test(agent)) return t("security.device.android");
   if (/Macintosh/i.test(agent)) return "Mac";
-  if (/Windows/i.test(agent)) return "Máy tính Windows";
+  if (/Windows/i.test(agent)) return t("security.device.windows");
 
-  return "Thiết bị này";
+  return t("security.device.thisDevice");
 }
 
 /** ✓ / ✗ so one screenshot answers what a DevTools console would. */
@@ -88,6 +82,7 @@ const DANGER_BUTTON_CLASS =
   "inline-flex items-center gap-1.5 rounded-lg border border-rose-200 bg-rose-50 px-3 py-1.5 text-[11px] font-semibold text-rose-700 transition-colors hover:bg-rose-100 disabled:cursor-not-allowed disabled:opacity-50";
 
 export default function SecurityPage() {
+  const { locale, t } = useLocale();
   const [passkeys, setPasskeys] = useState<Passkey[] | null>(null);
   /** Whether this browser exposes WebAuthn at all (`false` on plain HTTP, or in an old browser). */
   const [webAuthnAvailable, setWebAuthnAvailable] = useState<boolean | null>(
@@ -115,17 +110,17 @@ export default function SecurityPage() {
         .auth.passkey.list();
 
       if (listError) {
-        setError(passkeyErrorMessage(listError));
+        setError(passkeyErrorMessage(listError, t));
         setPasskeys([]);
         return;
       }
 
       setPasskeys((data ?? []).map(toPasskey));
     } catch (listFailure) {
-      setError(passkeyErrorMessage(listFailure));
+      setError(passkeyErrorMessage(listFailure, t));
       setPasskeys([]);
     }
-  }, []);
+  }, [t]);
 
   /**
    * The first load follows the house pattern (`components/Sidebar.tsx`): the state is set from the promise
@@ -144,7 +139,7 @@ export default function SecurityPage() {
         }
 
         if (listError) {
-          setError(passkeyErrorMessage(listError));
+          setError(passkeyErrorMessage(listError, t));
           setPasskeys([]);
           return;
         }
@@ -156,14 +151,14 @@ export default function SecurityPage() {
           return;
         }
 
-        setError(passkeyErrorMessage(listFailure));
+        setError(passkeyErrorMessage(listFailure, t));
         setPasskeys([]);
       });
 
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [t]);
 
   /**
    * Two advisory answers, and neither one disables the button — that was the bug this replaced: a machine
@@ -186,7 +181,11 @@ export default function SecurityPage() {
         if (!cancelled) {
           setWebAuthnAvailable(false);
           setCeremonyDiagnostics(
-            `Chẩn đoán: ${suggestedDeviceName()} · ${mark(secureContext)} HTTPS · ${mark(false)} WebAuthn`,
+            t("security.diagnostic.noWebAuthn", {
+              device: suggestedDeviceName(t),
+              https: mark(secureContext),
+              webAuthn: mark(false),
+            }),
           );
         }
         return;
@@ -205,7 +204,11 @@ export default function SecurityPage() {
 
           if (!available) {
             setCeremonyDiagnostics(
-              `Chẩn đoán: ${suggestedDeviceName()} · ${mark(true)} WebAuthn · ${mark(false)} Face ID / Windows Hello`,
+              t("security.diagnostic.noPlatform", {
+                device: suggestedDeviceName(t),
+                webAuthn: mark(true),
+                faceId: mark(false),
+              }),
             );
           }
         }
@@ -219,7 +222,7 @@ export default function SecurityPage() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [t]);
 
   // The box starts empty on purpose: a name typed here is the label the credential gets, and a blank one
   // falls back to `suggestedDeviceName()` inside `handleRegister` — the device name only has to be right
@@ -244,13 +247,13 @@ export default function SecurityPage() {
         await supabase.auth.registerPasskey();
 
       if (registerError || !data) {
-        setError(passkeyErrorMessage(registerError));
+        setError(passkeyErrorMessage(registerError, t));
         return;
       }
 
       // A blank box still gets a sensible label: the operating system picker shows the device the passkey
       // was created on.
-      const name = friendlyName.trim() || suggestedDeviceName();
+      const name = friendlyName.trim() || suggestedDeviceName(t);
 
       if (name) {
         // Registration takes no name, so the label is a second, ordinary call — and a failure here is
@@ -261,15 +264,15 @@ export default function SecurityPage() {
         });
 
         if (renameError) {
-          setError(passkeyErrorMessage(renameError));
+          setError(passkeyErrorMessage(renameError, t));
         }
       }
 
       setFriendlyName("");
-      setNotice("Đã bật đăng nhập nhanh trên thiết bị này.");
+      setNotice(t("security.notice.registered"));
       await loadPasskeys();
     } catch (registerFailure) {
-      setError(passkeyErrorMessage(registerFailure));
+      setError(passkeyErrorMessage(registerFailure, t));
     } finally {
       setBusy(null);
     }
@@ -294,15 +297,15 @@ export default function SecurityPage() {
         });
 
       if (renameError) {
-        setError(passkeyErrorMessage(renameError));
+        setError(passkeyErrorMessage(renameError, t));
         return;
       }
 
       setEditingId(null);
-      setNotice("Đã đổi tên thiết bị.");
+      setNotice(t("security.notice.renamed"));
       await loadPasskeys();
     } catch (renameFailure) {
-      setError(passkeyErrorMessage(renameFailure));
+      setError(passkeyErrorMessage(renameFailure, t));
     } finally {
       setBusy(null);
     }
@@ -324,15 +327,15 @@ export default function SecurityPage() {
         });
 
       if (deleteError) {
-        setError(passkeyErrorMessage(deleteError));
+        setError(passkeyErrorMessage(deleteError, t));
         return;
       }
 
       setConfirmingId(null);
-      setNotice("Đã xoá thiết bị. Mật khẩu của bạn vẫn dùng được như trước.");
+      setNotice(t("security.notice.deleted"));
       await loadPasskeys();
     } catch (deleteFailure) {
-      setError(passkeyErrorMessage(deleteFailure));
+      setError(passkeyErrorMessage(deleteFailure, t));
     } finally {
       setBusy(null);
     }
@@ -342,14 +345,13 @@ export default function SecurityPage() {
     <div className="mx-auto flex max-w-3xl flex-col gap-5 py-8">
       <div>
         <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">
-          Bảo mật / SCRUM-79
+          {t("security.eyebrow")}
         </p>
         <h1 className="mt-1 text-2xl font-bold text-slate-900">
-          Bảo mật đăng nhập
+          {t("security.title")}
         </h1>
         <p className="mt-1 text-sm text-slate-500">
-          Bật Face ID / vân tay trên thiết bị này để mở phiên làm việc mà không
-          cần gõ mật khẩu.
+          {t("security.subtitle")}
         </p>
       </div>
 
@@ -375,10 +377,7 @@ export default function SecurityPage() {
           <TriangleAlert size={16} className="mt-0.5 shrink-0" />
           <div>
             <p>
-              Trình duyệt này không cung cấp WebAuthn nên chưa bật đăng nhập nhanh
-              được ở đây: WebAuthn chỉ chạy trên HTTPS (localhost cũng được) và cần
-              một trình duyệt hiện đại, không phải trình duyệt trong ứng dụng hay
-              khung xem trước. Đăng nhập bằng mật khẩu vẫn hoạt động bình thường.
+              {t("security.banner.noWebAuthn")}
             </p>
             {ceremonyDiagnostics && (
               <p className="mt-2 font-semibold">{ceremonyDiagnostics}</p>
@@ -392,12 +391,9 @@ export default function SecurityPage() {
           <ScanFace size={16} className="mt-0.5 shrink-0" />
           <div>
             <p>
-              Máy này không báo có Face ID / Windows Hello — máy để bàn, màn hình
-              ngoài, phiên Remote Desktop và một số máy ảo thường như vậy. Bạn vẫn
-              có thể bấm{" "}
-              <span className="font-semibold">Bật Face ID</span> rồi chọn dùng điện
-              thoại (quét mã QR) hoặc khoá bảo mật; nếu không, hãy mở trang này
-              trên chính điện thoại của bạn.
+              {t("security.banner.noPlatformBefore")}
+              <span className="font-semibold">{t("security.enable")}</span>
+              {t("security.banner.noPlatformAfter")}
             </p>
             {ceremonyDiagnostics && (
               <p className="mt-2 font-semibold">{ceremonyDiagnostics}</p>
@@ -414,28 +410,28 @@ export default function SecurityPage() {
             </div>
             <div>
               <h2 className="text-sm font-bold text-slate-900">
-                Thiết bị đã bật đăng nhập nhanh
+                {t("security.listTitle")}
               </h2>
               <p className="mt-0.5 text-[11px] text-slate-500">
-                Mỗi thiết bị được bật riêng: bật trên điện thoại thì máy tính
-                vẫn cần mật khẩu.
+                {t("security.listHint")}
               </p>
             </div>
           </div>
           <span className="shrink-0 rounded-full bg-blue-50 px-2.5 py-1 text-[10px] font-semibold text-primary">
-            {passkeys === null ? "…" : `${passkeys.length} thiết bị`}
+            {passkeys === null
+              ? "…"
+              : t("security.deviceCount", { count: passkeys.length })}
           </span>
         </div>
 
         {passkeys === null ? (
           <p className="flex items-center gap-2 p-5 text-xs text-slate-500">
-            <Loader2 size={14} className="animate-spin" /> Đang tải danh sách
-            thiết bị...
+            <Loader2 size={14} className="animate-spin" />
+            {t("security.loading")}
           </p>
         ) : passkeys.length === 0 ? (
           <p className="p-5 text-xs text-slate-500">
-            Chưa có thiết bị nào. Bật ở dưới để lần sau chỉ cần Face ID / vân
-            tay.
+            {t("security.empty")}
           </p>
         ) : (
           <ul className="divide-y divide-slate-100">
@@ -459,12 +455,14 @@ export default function SecurityPage() {
                       />
                     ) : (
                       <p className="truncate text-sm font-semibold text-slate-800">
-                        {passkey.friendly_name ?? "Chưa đặt tên"}
+                        {passkey.friendly_name ?? t("security.unnamed")}
                       </p>
                     )}
                     <p className="mt-0.5 text-[11px] text-slate-500">
-                      Đã bật {formatDate(passkey.created_at)} · Dùng gần nhất{" "}
-                      {formatDate(passkey.last_used_at)}
+                      {t("security.meta", {
+                        created: formatDate(passkey.created_at, locale),
+                        used: formatDate(passkey.last_used_at, locale),
+                      })}
                     </p>
                   </div>
                 </div>
@@ -483,20 +481,20 @@ export default function SecurityPage() {
                         ) : (
                           <Check size={13} />
                         )}
-                        Lưu
+                        {t("common.save")}
                       </button>
                       <button
                         type="button"
                         onClick={() => setEditingId(null)}
                         className={SECONDARY_BUTTON_CLASS}
                       >
-                        Huỷ
+                        {t("common.cancel")}
                       </button>
                     </>
                   ) : confirmingId === passkey.id ? (
                     <>
                       <span className="text-[11px] font-semibold text-rose-600">
-                        Xoá thiết bị này?
+                        {t("security.confirmDelete")}
                       </span>
                       <button
                         type="button"
@@ -509,14 +507,14 @@ export default function SecurityPage() {
                         ) : (
                           <Trash2 size={13} />
                         )}
-                        Xoá
+                        {t("common.delete")}
                       </button>
                       <button
                         type="button"
                         onClick={() => setConfirmingId(null)}
                         className={SECONDARY_BUTTON_CLASS}
                       >
-                        Huỷ
+                        {t("common.cancel")}
                       </button>
                     </>
                   ) : (
@@ -531,7 +529,7 @@ export default function SecurityPage() {
                         className={SECONDARY_BUTTON_CLASS}
                       >
                         <Pencil size={13} />
-                        Đổi tên
+                        {t("security.rename")}
                       </button>
                       <button
                         type="button"
@@ -542,7 +540,7 @@ export default function SecurityPage() {
                         className={SECONDARY_BUTTON_CLASS}
                       >
                         <Trash2 size={13} />
-                        Xoá
+                        {t("common.delete")}
                       </button>
                     </>
                   )}
@@ -557,12 +555,12 @@ export default function SecurityPage() {
           className="flex flex-col gap-3 border-t border-slate-100 p-5 sm:flex-row sm:items-end"
         >
           <label className="flex-1 text-xs font-semibold text-slate-600">
-            Tên thiết bị
+            {t("security.deviceNameLabel")}
             <input
               value={friendlyName}
               onChange={(event) => setFriendlyName(event.target.value)}
               maxLength={120}
-              placeholder="Ví dụ: iPhone của An"
+              placeholder={t("security.deviceNamePlaceholder")}
               disabled={busy !== null}
               className={`mt-1 ${INPUT_CLASS}`}
             />
@@ -577,40 +575,28 @@ export default function SecurityPage() {
             ) : (
               <ScanFace size={14} />
             )}
-            {busy === "REGISTER" ? "Đang chờ thiết bị..." : "Bật Face ID"}
+            {busy === "REGISTER" ? t("security.waiting") : t("security.enable")}
           </button>
         </form>
         <p className="border-t border-slate-100 px-5 py-3 text-[11px] text-slate-500">
-          Thiết bị sẽ hỏi Face ID / Windows Hello. Hệ thống không lưu ảnh khuôn
-          mặt hay mẫu vân tay: khoá riêng tư nằm trong thiết bị, Supabase Auth
-          chỉ giữ khoá công khai.
+          {t("security.privacyNote")}
         </p>
       </section>
 
       <section className="flex items-start gap-3 rounded-xl border border-blue-100 bg-surface-accent p-5">
         <ShieldCheck size={18} className="mt-0.5 shrink-0 text-primary" />
         <div className="space-y-2 text-xs text-slate-600">
-          <p className="font-semibold text-slate-700">Cần biết</p>
+          <p className="font-semibold text-slate-700">{t("security.knowTitle")}</p>
+          <p>{t("security.fact1")}</p>
+          <p>{t("security.fact2")}</p>
+          <p>{t("security.fact3")}</p>
           <p>
-            · Lần sau, ở trang đăng nhập, bấm “Đăng nhập bằng Face ID” rồi xác
-            thực trên thiết bị — không cần email hay mật khẩu.
-          </p>
-          <p>
-            · Mất thiết bị thì xoá nó ở đây; mật khẩu vẫn dùng được nên tài
-            khoản không bị khoá.
-          </p>
-          <p>
-            · WebAuthn chỉ chạy trên HTTPS hoặc localhost, và tên miền phải khớp
-            Relying Party ID trong Supabase Dashboard (Authentication →
-            Passkeys).
-          </p>
-          <p>
-            · Đổi mật khẩu vẫn ở{" "}
+            {t("security.fact4Before")}
             <Link
               href="/change-password"
               className="font-semibold text-primary hover:underline"
             >
-              Đổi mật khẩu
+              {t("changePassword.title")}
             </Link>
             .
           </p>

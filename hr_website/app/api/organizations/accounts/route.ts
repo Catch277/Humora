@@ -30,13 +30,13 @@
  *                   nullable: true
  *                   description: Short message from the function (or the transport failure); safe for a manager to read.
  *       401:
- *         description: Authentication is required.
+ *         description: Bạn cần đăng nhập để thực hiện thao tác này.
  *         content:
  *           application/json:
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  *       403:
- *         description: The account has no user profile.
+ *         description: Tài khoản chưa có hồ sơ người dùng.
  *         content:
  *           application/json:
  *             schema:
@@ -88,7 +88,7 @@
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  *       401:
- *         description: Authentication is required.
+ *         description: Bạn cần đăng nhập để thực hiện thao tác này.
  *         content:
  *           application/json:
  *             schema:
@@ -175,12 +175,12 @@ export async function POST(request: Request) {
   try {
     body = await request.json();
   } catch {
-    return NextResponse.json({ error: "Invalid JSON body." }, { status: 400 });
+    return NextResponse.json({ error: "Nội dung yêu cầu phải là JSON hợp lệ." }, { status: 400 });
   }
 
   if (typeof body.email !== "string" || typeof body.password !== "string") {
     return NextResponse.json(
-      { error: "email and password are required and must be strings." },
+      { error: "email và password là bắt buộc và phải là chuỗi." },
       { status: 400 },
     );
   }
@@ -191,7 +191,7 @@ export async function POST(request: Request) {
     typeof body.full_name !== "string"
   ) {
     return NextResponse.json(
-      { error: "full_name must be a string or null." },
+      { error: "full_name phải là chuỗi hoặc null." },
       { status: 400 },
     );
   }
@@ -199,7 +199,7 @@ export async function POST(request: Request) {
   const role = body.role ?? "EMPLOYEE";
 
   if (typeof role !== "string") {
-    return NextResponse.json({ error: "role must be a string." }, { status: 400 });
+    return NextResponse.json({ error: "role phải là chuỗi." }, { status: 400 });
   }
 
   const caller = await requireCapability("organization:manage");
@@ -231,7 +231,7 @@ export async function POST(request: Request) {
     }
 
     return NextResponse.json(
-      { error: "Unable to create the staff account." },
+      { error: "Không thể tạo tài khoản nhân viên." },
       { status: 500 },
     );
   }

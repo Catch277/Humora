@@ -85,7 +85,7 @@ function readCoordinates(
   const missingPair = longitude === undefined || longitude === null;
 
   if (missing !== missingPair) {
-    return { ok: false, error: "latitude and longitude must be provided together." };
+    return { ok: false, error: "latitude và longitude phải gửi cùng nhau." };
   }
 
   if (missing) {
@@ -97,7 +97,7 @@ function readCoordinates(
     !Number.isFinite(latitude) ||
     Math.abs(latitude) > 90
   ) {
-    return { ok: false, error: "latitude must be a number between -90 and 90 or null." };
+    return { ok: false, error: "latitude phải là số trong khoảng -90 đến 90 hoặc null." };
   }
 
   if (
@@ -107,7 +107,7 @@ function readCoordinates(
   ) {
     return {
       ok: false,
-      error: "longitude must be a number between -180 and 180 or null.",
+      error: "longitude phải là số trong khoảng -180 đến 180 hoặc null.",
     };
   }
 
@@ -120,7 +120,7 @@ export function parseCheckInRequest(
   const body = readObject(payload);
 
   if (!body) {
-    return { ok: false, error: "The request body must be a JSON object." };
+    return { ok: false, error: "Nội dung yêu cầu phải là một đối tượng JSON." };
   }
 
   const coordinates = readCoordinates(body);
@@ -134,17 +134,17 @@ export function parseCheckInRequest(
   const note = readOptionalNote(body.note);
 
   if (!branchId.ok) {
-    return { ok: false, error: "branch_id must be a UUID or null." };
+    return { ok: false, error: "branch_id phải là UUID hoặc null." };
   }
 
   if (!shiftId.ok) {
-    return { ok: false, error: "shift_id must be a UUID or null." };
+    return { ok: false, error: "shift_id phải là UUID hoặc null." };
   }
 
   if (!note.ok) {
     return {
       ok: false,
-      error: `note must be a string of at most ${MAX_CHECK_IN_NOTE_LENGTH} characters or null.`,
+      error: `note tối đa ${MAX_CHECK_IN_NOTE_LENGTH} ký tự hoặc null.`,
     };
   }
 
@@ -166,7 +166,7 @@ export function parseCheckOutRequest(
   const body = readObject(payload);
 
   if (!body) {
-    return { ok: false, error: "The request body must be a JSON object." };
+    return { ok: false, error: "Nội dung yêu cầu phải là một đối tượng JSON." };
   }
 
   const coordinates = readCoordinates(body);
@@ -178,7 +178,7 @@ export function parseCheckOutRequest(
   const attendanceId = readOptionalUuid(body.attendance_id);
 
   if (!attendanceId.ok) {
-    return { ok: false, error: "attendance_id must be a UUID or null." };
+    return { ok: false, error: "attendance_id phải là UUID hoặc null." };
   }
 
   return {

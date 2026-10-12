@@ -1,6 +1,6 @@
 export class OrganizationNotFoundError extends Error {
   constructor() {
-    super("The organization was not found.");
+    super("Không tìm thấy tổ chức.");
     this.name = "OrganizationNotFoundError";
   }
 }

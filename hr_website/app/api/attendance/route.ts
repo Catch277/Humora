@@ -57,7 +57,7 @@
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  *       401:
- *         description: Authentication is required.
+ *         description: Bạn cần đăng nhập để thực hiện thao tác này.
  *         content:
  *           application/json:
  *             schema:
@@ -108,35 +108,35 @@ export async function GET(request: NextRequest) {
 
   if (branchId && !UUID_PATTERN.test(branchId)) {
     return NextResponse.json(
-      { error: "branch_id must be a UUID." },
+      { error: "branch_id phải là UUID." },
       { status: 400 },
     );
   }
 
   if (employeeId && !UUID_PATTERN.test(employeeId)) {
     return NextResponse.json(
-      { error: "employee_id must be a UUID." },
+      { error: "employee_id phải là UUID." },
       { status: 400 },
     );
   }
 
   if (status && !STATUS_SET.has(status)) {
     return NextResponse.json(
-      { error: `status must be one of ${ATTENDANCE_STATUSES.join(", ")}.` },
+      { error: `status phải là một trong: ${ATTENDANCE_STATUSES.join(", ")}.` },
       { status: 400 },
     );
   }
 
   if (startDate && !isCalendarDate(startDate)) {
     return NextResponse.json(
-      { error: "start_date must be a calendar date (YYYY-MM-DD)." },
+      { error: "start_date phải là ngày dạng YYYY-MM-DD." },
       { status: 400 },
     );
   }
 
   if (endDate && !isCalendarDate(endDate)) {
     return NextResponse.json(
-      { error: "end_date must be a calendar date (YYYY-MM-DD)." },
+      { error: "end_date phải là ngày dạng YYYY-MM-DD." },
       { status: 400 },
     );
   }
@@ -150,7 +150,7 @@ export async function GET(request: NextRequest) {
 
     if (authError || !user) {
       return NextResponse.json(
-        { error: "Authentication is required." },
+        { error: "Bạn cần đăng nhập để thực hiện thao tác này." },
         { status: 401 },
       );
     }
@@ -170,7 +170,7 @@ export async function GET(request: NextRequest) {
   } catch (error) {
     console.error("Failed to list attendance", error);
     return NextResponse.json(
-      { error: "Unable to retrieve attendance." },
+      { error: "Không thể tải bảng công." },
       { status: 500 },
     );
   }

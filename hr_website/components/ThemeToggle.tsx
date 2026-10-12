@@ -3,6 +3,9 @@
 import { Monitor, Moon, Sun } from "lucide-react";
 import { useEffect, useSyncExternalStore } from "react";
 
+import { useLocale } from "@/components/LocaleProvider";
+import type { MessageKey } from "@/lib/i18n/translate";
+
 /** Khoá lưu lựa chọn giao diện; đọc lại bởi script trong `app/layout.tsx` trước khi vẽ trang. */
 const STORAGE_KEY = "humora-theme";
 /** Sự kiện nội bộ để `useSyncExternalStore` biết lựa chọn vừa đổi trong cùng tab. */
@@ -10,10 +13,10 @@ const CHOICE_EVENT = "humora-theme-change";
 
 type ThemeChoice = "light" | "dark" | "system";
 
-const OPTIONS: { value: ThemeChoice; label: string; Icon: typeof Sun }[] = [
-  { value: "light", label: "Sáng", Icon: Sun },
-  { value: "dark", label: "Tối", Icon: Moon },
-  { value: "system", label: "Theo hệ thống", Icon: Monitor },
+const OPTIONS: { value: ThemeChoice; labelKey: MessageKey; Icon: typeof Sun }[] = [
+  { value: "light", labelKey: "theme.light", Icon: Sun },
+  { value: "dark", labelKey: "theme.dark", Icon: Moon },
+  { value: "system", labelKey: "theme.system", Icon: Monitor },
 ];
 
 /** The cycle the phone button walks through: Sáng → Tối → Theo hệ thống → Sáng. */
@@ -59,6 +62,7 @@ function subscribeToSystemTheme(onChange: () => void): () => void {
  * phía server luôn dùng "system" mà không lệch hydration.
  */
 export default function ThemeToggle() {
+  const { t } = useLocale();
   const choice = useSyncExternalStore(
     subscribeToChoice,
     readChoice,
@@ -101,8 +105,8 @@ export default function ThemeToggle() {
       <button
         type="button"
         onClick={() => choose(NEXT_CHOICE[choice])}
-        aria-label={`Giao diện: ${active.label}. Nhấn để đổi.`}
-        title={`Giao diện: ${active.label}`}
+        aria-label={t("theme.change", { current: t(active.labelKey) })}
+        title={t(active.labelKey)}
         className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-slate-200 bg-surface text-slate-600 transition-colors hover:bg-slate-50 md:hidden"
       >
         <ActiveIcon size={15} />
@@ -110,10 +114,10 @@ export default function ThemeToggle() {
 
       <div
         role="group"
-        aria-label="Chọn giao diện"
+        aria-label={t("theme.group")}
         className="hidden items-center gap-0.5 rounded-lg border border-slate-200 bg-surface-muted p-0.5 md:flex"
       >
-        {OPTIONS.map(({ value, label, Icon }) => {
+        {OPTIONS.map(({ value, labelKey, Icon }) => {
           const isActive = choice === value;
 
           return (
@@ -122,7 +126,7 @@ export default function ThemeToggle() {
               type="button"
               onClick={() => choose(value)}
               aria-pressed={isActive}
-              title={label}
+              title={t(labelKey)}
               className={`rounded-md p-1.5 transition-colors ${
                 isActive
                   ? "bg-surface text-primary shadow-sm"
@@ -130,7 +134,7 @@ export default function ThemeToggle() {
               }`}
             >
               <Icon size={14} />
-              <span className="sr-only">{label}</span>
+              <span className="sr-only">{t(labelKey)}</span>
             </button>
           );
         })}
