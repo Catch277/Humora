@@ -8,7 +8,7 @@ import '../widgets/employee_home/checkin_card.dart';
 import '../widgets/employee_home/performance_card.dart';
 import '../widgets/employee_home/hr_services_grid.dart';
 import '../widgets/employee_home/internal_news_card.dart';
-import 'camera_checkin.dart'; // Màn hình Camera Check-in
+import 'camera_checkin.dart';
 
 class HomeEmployeeScreen extends StatefulWidget {
   const HomeEmployeeScreen({super.key});
@@ -34,7 +34,6 @@ class _HomeEmployeeScreenState extends State<HomeEmployeeScreen> {
   @override
   void initState() {
     super.initState();
-    // Đồng hồ chạy liên tục mỗi 1 giây
     _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
       if (mounted) {
         setState(() {
@@ -83,7 +82,6 @@ class _HomeEmployeeScreenState extends State<HomeEmployeeScreen> {
       ),
     );
 
-    // Khi chụp thành công và nhận dữ liệu trả về từ CameraCheckInScreen
     if (result != null && result is Map<String, String>) {
       final String time = result['time'] ?? '';
       final String ip = result['ip'] ?? '';
@@ -109,7 +107,6 @@ class _HomeEmployeeScreenState extends State<HomeEmployeeScreen> {
       );
       final isLate = now.isAfter(startDateTime);
 
-      // Hiển thị thông báo SnackBar
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Row(
@@ -163,38 +160,54 @@ class _HomeEmployeeScreenState extends State<HomeEmployeeScreen> {
     final period = DateFormat('a').format(_currentTime) == 'AM' ? 'SA' : 'CH';
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF4F6FC),
-      body: SingleChildScrollView(
-        child: Column(
-          children: [
-            HomeHeader(
-              formattedDate: _getFormattedDate(),
-              greeting: _getGreeting(),
+      body: Container(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [
+              Color(0xFF8BB5EA), // Xanh lam sáng phía trên
+              Color(0xFF6B9BD2), // Xanh mờ ở giữa
+              Color(0xFF90BBEA), // Xanh ánh nhạt phía dưới
+            ],
+          ),
+        ),
+        
+        child: SafeArea(
+          bottom: false,
+          child: SingleChildScrollView(
+            child: Column(
+              children: [
+                HomeHeader(
+                  formattedDate: _getFormattedDate(),
+                  greeting: _getGreeting(),
+                ),
+                const SizedBox(height: 16),
+                CheckInCard(
+                  timeFormat: timeFormat,
+                  period: period,
+                  countdownText: _getCountdownToShiftStart(),
+                  onCheckIn: _handleCheckIn,
+                  isCheckedIn: _isCheckedIn,
+                  checkInTime: _checkInTime,
+                ),
+                const SizedBox(height: 20),
+                PerformanceCard(
+                  isSalaryVisible: _isSalaryVisible,
+                  onToggleSalary: () {
+                    setState(() {
+                      _isSalaryVisible = !_isSalaryVisible;
+                    });
+                  },
+                ),
+                const SizedBox(height: 20),
+                const HrServicesGrid(),
+                const SizedBox(height: 20),
+                const InternalNewsCard(),
+                const SizedBox(height: 30),
+              ],
             ),
-            const SizedBox(height: 16),
-            CheckInCard(
-              timeFormat: timeFormat,
-              period: period,
-              countdownText: _getCountdownToShiftStart(),
-              onCheckIn: _handleCheckIn,
-              isCheckedIn: _isCheckedIn,
-              checkInTime: _checkInTime,
-            ),
-            const SizedBox(height: 20),
-            PerformanceCard(
-              isSalaryVisible: _isSalaryVisible,
-              onToggleSalary: () {
-                setState(() {
-                  _isSalaryVisible = !_isSalaryVisible;
-                });
-              },
-            ),
-            const SizedBox(height: 20),
-            const HrServicesGrid(),
-            const SizedBox(height: 20),
-            const InternalNewsCard(),
-            const SizedBox(height: 30),
-          ],
+          ),
         ),
       ),
       bottomNavigationBar: BottomNavBar(

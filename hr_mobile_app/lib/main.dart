@@ -38,6 +38,7 @@ class MyApp extends StatelessWidget {
             cardColor: Colors.white,
             useMaterial3: true,
           ),
+          
           darkTheme: ThemeData(
             brightness: Brightness.dark,
             scaffoldBackgroundColor: const Color(0xFF121212),
