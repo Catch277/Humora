@@ -1,26 +1,108 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
+/* ───────────────────────────────────────────────
+   Humora design tokens (Tailwind v4, CSS-first)
+   ─────────────────────────────────────────────── */
 
+/* Font: biến --font-* do next/font gắn lên <html> → cần "inline" để đọc đúng giá trị */
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  --font-heading: var(--font-jakarta), ui-sans-serif, system-ui, sans-serif;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+@theme {
+  /* Màu thương hiệu */
+  --color-blue-600: #2563eb; /* Humora Blue – ghi đè để bg-blue-600 đúng mã HEX */
+  --color-blue-700: #1d4ed8; /* hover */
+  --color-brand-deep: #1e3a8a; /* Deep Blue – Final CTA, nhấn đậm */
+  --color-brand-mist: #eff6ff; /* Blue Mist – nền section / hover nhẹ */
+  --color-success: #10b981; /* Emerald – thành công, chấm công OK */
+  --color-warning: #f59e0b; /* Amber – cảnh báo, nỗi đau */
+
+  /* Nền & chữ */
+  --color-surface: #f9fafb; /* xám nhạt xen kẽ section */
+  --color-ink: #0f172a; /* chữ chính */
+  --color-body: #475569; /* chữ phụ */
+
+  /* Đổ bóng mềm */
+  --shadow-soft: 0 1px 2px rgb(15 23 42 / 0.04), 0 8px 24px -8px rgb(15 23 42 / 0.1);
+  --shadow-float: 0 28px 56px -20px rgb(30 58 138 / 0.35);
+
+  /* Animation (gọi bằng class: animate-rise, animate-float-a, ...) */
+  --animate-rise: rise 700ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  --animate-float-a: float-a 7s ease-in-out infinite;
+  --animate-float-b: float-b 8s ease-in-out -3s infinite;
+  --animate-scan: scan 3s ease-in-out infinite;
+  --animate-ripple: ripple 3.2s ease-out infinite;
+
+  @keyframes rise {
+    from {
+      opacity: 0;
+      transform: translateY(20px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+  @keyframes float-a {
+    0%,
+    100% {
+      transform: translateY(0);
+    }
+    50% {
+      transform: translateY(-10px);
+    }
+  }
+  @keyframes float-b {
+    0%,
+    100% {
+      transform: translateY(0);
+    }
+    50% {
+      transform: translateY(8px);
+    }
+  }
+  @keyframes scan {
+    0% {
+      transform: translateY(-100%);
+    }
+    100% {
+      transform: translateY(400%);
+    }
+  }
+  @keyframes ripple {
+    0% {
+      transform: scale(0.25);
+      opacity: 0.55;
+    }
+    100% {
+      transform: scale(1);
+      opacity: 0;
+    }
   }
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+@layer base {
+  html {
+    scroll-behavior: smooth;
+    scroll-padding-top: 5rem; /* chừa chỗ cho navbar sticky khi nhảy anchor */
+  }
+  body {
+    background: #ffffff;
+    color: var(--color-ink);
+    font-family: var(--font-sans);
+  }
+  @media (prefers-reduced-motion: reduce) {
+    html {
+      scroll-behavior: auto;
+    }
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
 }
