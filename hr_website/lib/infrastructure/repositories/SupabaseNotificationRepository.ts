@@ -4,7 +4,10 @@ import type {
   UpdateNotificationSettingInput,
 } from "@/lib/domain/entities/NotificationSetting";
 import { NotificationNotFoundError } from "@/lib/domain/errors/NotificationNotFoundError";
-import type { INotificationRepository } from "@/lib/domain/repositories/INotificationRepository";
+import type {
+  INotificationRepository,
+  NotificationQuery,
+} from "@/lib/domain/repositories/INotificationRepository";
 import { createSupabaseServerClient } from "@/lib/infrastructure/supabaseClient";
 
 export class SupabaseNotificationRepository
@@ -14,13 +17,13 @@ export class SupabaseNotificationRepository
     userId: string,
     page: number,
     pageSize: number,
-    unreadOnly = false,
+    query: NotificationQuery = {},
   ): Promise<PaginatedNotifications> {
     const supabase = await createSupabaseServerClient();
     const from = (page - 1) * pageSize;
     const to = from + pageSize - 1;
 
-    let query = supabase
+    let request = supabase
       .from("notifications")
       .select(
         "id, user_id, title, body, type, is_read, related_entity_type, related_entity_id, created_at",
@@ -28,13 +31,21 @@ export class SupabaseNotificationRepository
       )
       .eq("user_id", userId);
 
-    if (unreadOnly) {
+    if (query.unreadOnly) {
       // Counting only the unread rows is what makes the header badge exact: with `unread=true`
       // and `page_size=1`, `count` is the unread total rather than the newest page's tally.
-      query = query.eq("is_read", false);
+      request = request.eq("is_read", false);
+    } else if (query.readOnly) {
+      request = request.eq("is_read", true);
     }
 
-    const { data, error, count } = await query
+    if (query.types && query.types.length > 0) {
+      // The category chips are answered by the database, so the page numbers and the total describe
+      // the same rows the screen shows instead of only the page that happens to be loaded.
+      request = request.in("type", [...query.types]);
+    }
+
+    const { data, error, count } = await request
       .order("created_at", { ascending: false })
       .range(from, to);
 
@@ -70,6 +81,34 @@ export class SupabaseNotificationRepository
     if (!data) {
       throw new NotificationNotFoundError();
     }
+  }
+
+  async markAllAsRead(
+    userId: string,
+    types?: readonly string[],
+  ): Promise<number> {
+    const supabase = await createSupabaseServerClient();
+
+    let request = supabase
+      .from("notifications")
+      .update({ is_read: true })
+      .eq("user_id", userId)
+      .eq("is_read", false);
+
+    if (types && types.length > 0) {
+      request = request.in("type", [...types]);
+    }
+
+    // `select("id")` is what makes PostgREST return the touched rows, so the screen can report how
+    // many moved instead of claiming success blindly; `notifications_update_own` keeps the scope at
+    // `user_id = auth.uid()` in the database.
+    const { data, error } = await request.select("id");
+
+    if (error) {
+      throw new Error(`Unable to mark notifications as read: ${error.message}`);
+    }
+
+    return data?.length ?? 0;
   }
 
   async getSettings(userId: string): Promise<NotificationSetting[]> {

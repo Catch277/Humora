@@ -48,7 +48,7 @@
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  *       401:
- *         description: Authentication is required.
+ *         description: Bạn cần đăng nhập để thực hiện thao tác này.
  *         content:
  *           application/json:
  *             schema:
@@ -101,7 +101,7 @@ export async function PATCH(
 
   if (!UUID_PATTERN.test(id)) {
     return NextResponse.json(
-      { error: "The request id must be a UUID." },
+      { error: "ID đơn từ phải là UUID." },
       { status: 400 },
     );
   }
@@ -111,12 +111,12 @@ export async function PATCH(
   try {
     body = await request.json();
   } catch {
-    return NextResponse.json({ error: "Invalid JSON body." }, { status: 400 });
+    return NextResponse.json({ error: "Nội dung yêu cầu phải là JSON hợp lệ." }, { status: 400 });
   }
 
   if (body.status !== "APPROVED" && body.status !== "REJECTED") {
     return NextResponse.json(
-      { error: "status must be APPROVED or REJECTED." },
+      { error: "status phải là APPROVED hoặc REJECTED." },
       { status: 400 },
     );
   }
@@ -127,7 +127,7 @@ export async function PATCH(
     (typeof body.reject_reason !== "string" || body.reject_reason.length > 500)
   ) {
     return NextResponse.json(
-      { error: "reject_reason must be a string of at most 500 characters." },
+      { error: "reject_reason tối đa 500 ký tự." },
       { status: 400 },
     );
   }
@@ -183,14 +183,14 @@ export async function PATCH(
 
     if (
       error instanceof Error &&
-      error.message.startsWith("reject_reason is required")
+      error.message.startsWith("Cần nêu lý do")
     ) {
       return NextResponse.json({ error: error.message }, { status: 400 });
     }
 
     console.error("Failed to review request", error);
     return NextResponse.json(
-      { error: "Unable to review the request." },
+      { error: "Không thể duyệt đơn từ." },
       { status: 500 },
     );
   }

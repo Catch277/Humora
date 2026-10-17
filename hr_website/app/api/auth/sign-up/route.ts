@@ -26,7 +26,7 @@
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  *       409:
- *         description: An account already exists for this email address.
+ *         description: Email này đã có tài khoản đăng nhập.
  *         content:
  *           application/json:
  *             schema:
@@ -51,7 +51,7 @@ type SignUpRequest = {
 };
 
 /** Message prefixes `SignUpUseCase` produces for field-level validation failures. */
-const VALIDATION_PREFIXES = ["email must", "password must", "full_name must"];
+const VALIDATION_PREFIXES = ["email ", "password ", "full_name "];
 
 export async function POST(request: Request) {
   let body: SignUpRequest;
@@ -59,7 +59,7 @@ export async function POST(request: Request) {
   try {
     body = await request.json();
   } catch {
-    return NextResponse.json({ error: "Invalid JSON body." }, { status: 400 });
+    return NextResponse.json({ error: "Nội dung yêu cầu phải là JSON hợp lệ." }, { status: 400 });
   }
 
   if (
@@ -68,7 +68,7 @@ export async function POST(request: Request) {
     typeof body.full_name !== "string"
   ) {
     return NextResponse.json(
-      { error: "email, password and full_name must be strings." },
+      { error: "email, password và full_name phải là chuỗi." },
       { status: 400 },
     );
   }
@@ -97,7 +97,7 @@ export async function POST(request: Request) {
 
     console.error("Failed to sign up", error);
     return NextResponse.json(
-      { error: "Unable to create the account." },
+      { error: "Không thể tạo tài khoản." },
       { status: 500 },
     );
   }

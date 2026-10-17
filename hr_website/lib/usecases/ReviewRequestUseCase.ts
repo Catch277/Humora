@@ -27,7 +27,7 @@ export class ReviewRequestUseCase {
     }
 
     if (input.status === "REJECTED" && !input.rejectReason?.trim()) {
-      throw new Error("reject_reason is required when rejecting a request.");
+      throw new Error("Cần nêu lý do khi từ chối đơn.");
     }
 
     const request = await this.requestRepository.findById(input.requestId);

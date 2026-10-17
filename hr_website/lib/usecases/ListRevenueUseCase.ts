@@ -32,7 +32,7 @@ export class ListRevenueUseCase {
     const days = input.days ?? DEFAULT_DAYS;
 
     if (!Number.isInteger(days) || days < 1 || days > MAX_DAYS) {
-      throw new Error(`days must be an integer between 1 and ${MAX_DAYS}.`);
+      throw new Error(`days phải là số nguyên từ 1 đến ${MAX_DAYS}.`);
     }
 
     const { start, end } = getBusinessDayRange(this.now());

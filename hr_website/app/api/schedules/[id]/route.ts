@@ -33,7 +33,7 @@
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  *       401:
- *         description: Authentication is required.
+ *         description: Bạn cần đăng nhập để thực hiện thao tác này.
  *         content:
  *           application/json:
  *             schema:
@@ -93,7 +93,7 @@
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  *       401:
- *         description: Authentication is required.
+ *         description: Bạn cần đăng nhập để thực hiện thao tác này.
  *         content:
  *           application/json:
  *             schema:
@@ -143,7 +143,7 @@ export async function PUT(
 
   if (!UUID_PATTERN.test(id)) {
     return NextResponse.json(
-      { error: "The schedule id must be a UUID." },
+      { error: "ID lịch làm việc phải là UUID." },
       { status: 400 },
     );
   }
@@ -153,7 +153,7 @@ export async function PUT(
   try {
     body = await request.json();
   } catch {
-    return NextResponse.json({ error: "Invalid JSON body." }, { status: 400 });
+    return NextResponse.json({ error: "Nội dung yêu cầu phải là JSON hợp lệ." }, { status: 400 });
   }
 
   const parsed = parseScheduleRequest(body);
@@ -204,7 +204,7 @@ export async function PUT(
 
     console.error("Failed to update shift assignment", error);
     return NextResponse.json(
-      { error: "Unable to update the shift assignment." },
+      { error: "Không thể cập nhật ca đã xếp." },
       { status: 500 },
     );
   }
@@ -218,7 +218,7 @@ export async function DELETE(
 
   if (!UUID_PATTERN.test(id)) {
     return NextResponse.json(
-      { error: "The schedule id must be a UUID." },
+      { error: "ID lịch làm việc phải là UUID." },
       { status: 400 },
     );
   }
@@ -256,7 +256,7 @@ export async function DELETE(
 
     console.error("Failed to delete shift assignment", error);
     return NextResponse.json(
-      { error: "Unable to delete the shift assignment." },
+      { error: "Không thể xóa ca đã xếp." },
       { status: 500 },
     );
   }

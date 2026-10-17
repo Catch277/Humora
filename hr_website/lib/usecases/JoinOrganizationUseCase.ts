@@ -17,7 +17,7 @@ export class JoinOrganizationUseCase {
     const code = input.code.replace(/\s+/g, "").toUpperCase();
 
     if (!CODE_PATTERN.test(code)) {
-      throw new Error("code must be the code the organization shared with you.");
+      throw new Error("Mã tham gia phải đúng mã mà tổ chức đã gửi cho bạn.");
     }
 
     // The code alone is not enough: `join_organization` also requires an invite row for the

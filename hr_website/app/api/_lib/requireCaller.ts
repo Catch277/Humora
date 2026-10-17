@@ -30,7 +30,7 @@ export async function requireCaller(): Promise<CallerContext> {
     return {
       ok: false,
       response: NextResponse.json(
-        { error: "Authentication is required." },
+        { error: "Bạn cần đăng nhập để thực hiện thao tác này." },
         { status: 401 },
       ),
     };
@@ -85,7 +85,7 @@ export async function requireCapability(
     return {
       ok: false,
       response: NextResponse.json(
-        { error: "Your role may not perform this action." },
+        { error: "Vai trò của bạn không được phép làm việc này." },
         { status: 403 },
       ),
     };

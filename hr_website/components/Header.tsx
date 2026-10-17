@@ -13,17 +13,51 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
+import LanguageToggle from "@/components/LanguageToggle";
+import MobileNav from "@/components/MobileNav";
 import ThemeToggle from "@/components/ThemeToggle";
+import { useLocale } from "@/components/LocaleProvider";
 import { useProfile } from "@/components/ProfileProvider";
 import { roleLabel } from "@/lib/accessPolicy";
 import type { QuickSearchResult } from "@/lib/domain/entities/QuickSearch";
+import { isBranchHeadRole, isOwnerRole } from "@/lib/domain/roles";
 import { isPublicPath } from "@/lib/publicPaths";
 
 /** `GET /api/search` cần tối thiểu 2 ký tự; dưới ngưỡng đó chỉ hiện gợi ý, không gọi API. */
 const MIN_QUERY_LENGTH = 2;
 const SEARCH_DEBOUNCE_MS = 250;
+
+/**
+ * How often the bell badge is refreshed (SCRUM-70). The producers write rows while the shell is
+ * mounted — a ca is assigned, a đơn is filed — so a route change alone would leave the badge stale on
+ * the screen the user is reading. Cheap: one row, `unread=true&page_size=1` (see the route docs).
+ */
+const UNREAD_POLL_INTERVAL_MS = 30_000;
+
+/**
+ * `null` means "could not read the count" (offline, 401) — the caller keeps the number it already
+ * shows instead of flipping the badge to 0 and back.
+ */
+async function fetchUnreadCount(): Promise<number | null> {
+  try {
+    const response = await fetch(
+      "/api/notifications?page=1&page_size=1&unread=true",
+      { cache: "no-store" },
+    );
+
+    if (!response.ok) {
+      return null;
+    }
+
+    const data = (await response.json()) as { total?: number };
+
+    return typeof data.total === "number" ? data.total : 0;
+  } catch {
+    return null;
+  }
+}
 
 const REQUEST_STATUS_LABELS: Record<string, string> = {
   PENDING: "Chờ duyệt",
@@ -51,6 +85,9 @@ const GROUP_LABELS: Record<SearchHit["group"], string> = {
   requests: "Đơn từ",
   shifts: "Ca làm việc",
 };
+
+/** `GET /api/branches` as the header needs it: the name, and who heads it (SCRUM-61/63). */
+type BranchOption = { id: string; name: string; manager_id: string | null };
 
 function toHits(results: QuickSearchResult | null): SearchHit[] {
   if (!results) {
@@ -88,9 +125,13 @@ function toHits(results: QuickSearchResult | null): SearchHit[] {
 export default function Header() {
   const pathname = usePathname();
   const router = useRouter();
+  const { t } = useLocale();
   // The profile is read once for the whole shell (SCRUM-59); the header only labels it.
   const { profile } = useProfile();
   const [unreadCount, setUnreadCount] = useState(0);
+  // SCRUM-63: the branch line under the name. It comes from the same `branches` list the pickers use,
+  // so the header and the screens cannot disagree about which chi nhánh somebody is in.
+  const [branchOptions, setBranchOptions] = useState<BranchOption[]>([]);
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<QuickSearchResult | null>(null);
   const [isSearching, setIsSearching] = useState(false);
@@ -109,28 +150,95 @@ export default function Header() {
 
     let cancelled = false;
 
-    // `unread=true&page_size=1` makes `total` the exact unread count (see the route docs), so the
-    // badge is a real number instead of a decorative dot. Refetched per route change, which also
-    // refreshes it right after the user reads notifications.
-    fetch("/api/notifications?page=1&page_size=1&unread=true", {
-      cache: "no-store",
-    })
-      .then((response) => (response.ok ? response.json() : null))
-      .then((data: { total?: number } | null) => {
-        if (!cancelled) {
-          setUnreadCount(typeof data?.total === "number" ? data.total : 0);
-        }
-      })
-      .catch(() => {
-        if (!cancelled) {
-          setUnreadCount(0);
-        }
-      });
+    // Refetched per route change, which also refreshes the badge right after the user reads
+    // notifications on `/notifications`.
+    void fetchUnreadCount().then((total) => {
+      if (!cancelled && total !== null) {
+        setUnreadCount(total);
+      }
+    });
 
     return () => {
       cancelled = true;
     };
   }, [pathname]);
+
+  // ...and polled on an interval, because the notification arrives while this screen is open (the
+  // producers run in the database). A hidden tab is skipped.
+  useEffect(() => {
+    if (isPublicPath(pathname)) {
+      return;
+    }
+
+    const timer = window.setInterval(() => {
+      if (document.visibilityState !== "visible") {
+        return;
+      }
+
+      void fetchUnreadCount().then((total) => {
+        if (total !== null) {
+          setUnreadCount(total);
+        }
+      });
+    }, UNREAD_POLL_INTERVAL_MS);
+
+    return () => window.clearInterval(timer);
+  }, [pathname]);
+
+  // The branch line under the name (SCRUM-63): only a manager and an employee have one — the owner
+  // stands above every branch, so the fetch is skipped for them entirely.
+  useEffect(() => {
+    if (!profile || isOwnerRole(profile.role)) {
+      return;
+    }
+
+    let cancelled = false;
+
+    fetch("/api/branches", { cache: "no-store" })
+      .then((response) => (response.ok ? response.json() : []))
+      .then((data: BranchOption[]) => {
+        if (!cancelled) {
+          setBranchOptions(data);
+        }
+      })
+      .catch(() => {
+        // A failed lookup only leaves the sub-line empty; the shell must never break for it.
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [profile]);
+
+  const branchLabel = useMemo(() => {
+    if (!profile || isOwnerRole(profile.role)) {
+      return "";
+    }
+
+    // A manager is described by the chi nhánh they head — that *is* their scope — while an employee is
+    // described by the branch they belong to (`users.branch_id`, SCRUM-60/63).
+    if (isBranchHeadRole(profile.role)) {
+      const headed = branchOptions
+        .filter((branch) => branch.manager_id === profile.id)
+        .map((branch) => branch.name);
+
+      if (headed.length > 0) {
+        return headed.join(", ");
+      }
+
+      // An empty list means "nothing loaded", so it must not claim the manager heads nothing.
+      return branchOptions.length > 0 ? "Chưa phụ trách chi nhánh" : "";
+    }
+
+    if (branchOptions.length === 0) {
+      return "";
+    }
+
+    return (
+      branchOptions.find((branch) => branch.id === profile.branch_id)?.name ??
+      "Chưa gán chi nhánh"
+    );
+  }, [branchOptions, profile]);
 
   // Debounced query → GET /api/search. The in-flight request is aborted when the query changes, so a
   // slow response cannot overwrite the results of a newer one.
@@ -299,10 +407,12 @@ export default function Header() {
   }
 
   return (
-    <header className="sticky top-0 z-10 flex h-16 shrink-0 items-center justify-between gap-3 border-b border-slate-200/80 bg-surface px-4 md:gap-4 md:px-6">
+    <header className="sticky top-0 z-10 flex h-16 shrink-0 items-center gap-2 border-b border-slate-200/80 bg-surface px-4 md:gap-4 md:px-6">
+      <MobileNav />
+
       <div
         ref={searchContainerRef}
-        className="relative w-full max-w-xl md:mx-auto"
+        className="relative min-w-0 flex-1 md:mx-auto md:max-w-xl"
       >
         <div className="group relative">
           <span className="pointer-events-none absolute inset-y-0 left-3 flex items-center">
@@ -318,22 +428,22 @@ export default function Header() {
             onChange={(event) => handleQueryChange(event.target.value)}
             onKeyDown={handleSearchKeyDown}
             onFocus={() => query.trim().length > 0 && setShowDropdown(true)}
-            placeholder="Tìm nhanh nhân viên, đơn từ, mã ca làm..."
-            aria-label="Tìm kiếm nhanh"
+            placeholder={t("header.searchPlaceholder")}
+            aria-label={t("header.searchLabel")}
             aria-expanded={showDropdown}
             aria-controls="quick-search-results"
             role="combobox"
-            className="block w-full rounded-full border border-slate-200 bg-app py-2 pl-9 pr-20 text-sm text-slate-700 outline-none transition-colors placeholder:text-slate-400 focus:border-primary focus:ring-2 focus:ring-blue-500/15"
+            className="block w-full rounded-full border border-slate-200 bg-app py-2 pl-9 pr-9 text-sm text-slate-700 outline-none transition-colors placeholder:text-slate-400 focus:border-primary focus:ring-2 focus:ring-blue-500/15 md:pr-20"
           />
           {query === "" ? (
-            <kbd className="pointer-events-none absolute inset-y-0 right-3 my-auto flex h-5 items-center rounded border border-slate-200 bg-surface px-1.5 text-[10px] font-medium text-slate-500">
+            <kbd className="pointer-events-none absolute inset-y-0 right-3 my-auto hidden h-5 items-center rounded border border-slate-200 bg-surface px-1.5 text-[10px] font-medium text-slate-500 md:flex">
               ⌘K
             </kbd>
           ) : (
             <button
               type="button"
               onClick={clearSearch}
-              title="Xoá tìm kiếm"
+              title={t("header.clearSearch")}
               className="absolute inset-y-0 right-3 my-auto flex h-5 items-center rounded-md px-1.5 text-slate-400 transition-colors hover:text-slate-700"
             >
               <X size={13} />
@@ -349,19 +459,18 @@ export default function Header() {
           >
             {query.trim().length < MIN_QUERY_LENGTH ? (
               <p className="px-4 py-3 text-xs text-slate-500">
-                Nhập ít nhất {MIN_QUERY_LENGTH} ký tự để tìm nhân viên, đơn từ hoặc ca
-                làm việc.
+                {t("header.searchHint", { count: MIN_QUERY_LENGTH })}
               </p>
             ) : isSearching ? (
               <div className="flex items-center gap-2 px-4 py-3 text-xs text-slate-500">
                 <Loader2 size={14} className="animate-spin text-primary" />
-                Đang tìm kiếm...
+                {t("header.searching")}
               </div>
             ) : searchError ? (
               <p className="px-4 py-3 text-xs text-rose-600">{searchError}</p>
             ) : hits.length === 0 ? (
               <p className="px-4 py-3 text-xs text-slate-500">
-                Không tìm thấy kết quả nào cho “{query.trim()}”.
+                {t("header.searchEmpty", { query: query.trim() })}
               </p>
             ) : (
               <>
@@ -419,7 +528,7 @@ export default function Header() {
                   })}
                 </ul>
                 <p className="border-t border-slate-100 px-4 py-2 text-[10px] text-slate-400">
-                  ↑ ↓ để chọn · Enter để mở · Esc để đóng
+                  {t("header.searchKeyboardHint")}
                 </p>
               </>
             )}
@@ -428,14 +537,16 @@ export default function Header() {
       </div>
 
       <div className="flex shrink-0 items-center gap-2">
+        <LanguageToggle />
+
         <ThemeToggle />
 
         <Link
           href="/notifications"
           title={
             unreadCount > 0
-              ? `${unreadCount} thông báo chưa đọc`
-              : "Thông báo"
+              ? t("header.unreadCount", { count: unreadCount })
+              : t("header.notifications")
           }
           className="relative rounded-lg p-2 text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-800"
         >
@@ -453,10 +564,19 @@ export default function Header() {
           </div>
           <div className="leading-tight">
             <p className="text-xs font-semibold text-slate-800">
-              {profile?.full_name ?? "Đang tải..."}
+              {profile?.full_name ?? t("header.loading")}
             </p>
+            {branchLabel && (
+              // 13rem keeps a two-branch manager's line inside the header; the full text stays in the title.
+              <p
+                className="mt-0.5 max-w-[13rem] truncate text-[10px] font-medium text-primary"
+                title={branchLabel}
+              >
+                {branchLabel}
+              </p>
+            )}
             <p className="mt-0.5 text-[10px] text-slate-500">
-              {profile ? roleLabel(profile.role) : "—"}
+              {profile ? roleLabel(profile.role, t) : "—"}
             </p>
           </div>
         </div>
@@ -464,7 +584,7 @@ export default function Header() {
         <button
           type="button"
           onClick={() => void handleSignOut()}
-          title="Đăng xuất"
+          title={t("header.signOut")}
           className="rounded-md p-2 text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-800"
         >
           <LogOut size={15} />

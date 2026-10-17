@@ -4,20 +4,19 @@ import type {
 } from "@/lib/domain/entities/Facility";
 
 /**
- * Trims free text and collapses "blank string" into `null`, so the database never stores `""`
- * for an absent code, note or check date. The route handler has already validated the payload;
- * this only normalises what is persisted.
+ * Trims free text and collapses "blank string" into `null`, so the database never stores `""` for an
+ * absent note or check date. The route handler has already validated the payload; this only normalises
+ * what is persisted. The asset code is not part of the write any more (SCRUM-67) — the use case adds it
+ * after this runs, which is why it is left untouched here.
  */
 export function normalizeFacilityWriteInput<
   T extends CreateFacilityInput | UpdateFacilityInput,
 >(input: T): T {
-  const code = input.code?.trim();
   const note = input.note?.trim().replace(/\s+/g, " ");
 
   return {
     ...input,
     name: input.name.trim(),
-    code: code ? code : null,
     note: note ? note : null,
   };
 }

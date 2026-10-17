@@ -32,7 +32,7 @@
  *       400:
  *         description: The search query or type is invalid.
  *       401:
- *         description: Authentication is required.
+ *         description: Bạn cần đăng nhập để thực hiện thao tác này.
  *       403:
  *         description: The authenticated account has no eligible user profile.
  *       500:
@@ -64,7 +64,7 @@ export async function GET(request: NextRequest) {
     !SEARCH_TYPES.has(type as QuickSearchType)
   ) {
     return NextResponse.json(
-      { error: "q must contain at least 2 characters and type is invalid." },
+      { error: "q phải có ít nhất 2 ký tự và type không hợp lệ." },
       { status: 400 },
     );
   }
@@ -78,7 +78,7 @@ export async function GET(request: NextRequest) {
 
     if (authError || !user) {
       return NextResponse.json(
-        { error: "Authentication is required." },
+        { error: "Bạn cần đăng nhập để thực hiện thao tác này." },
         { status: 401 },
       );
     }
@@ -89,7 +89,7 @@ export async function GET(request: NextRequest) {
 
     if (!currentUser) {
       return NextResponse.json(
-        { error: "An eligible user profile is required." },
+        { error: "Cần một hồ sơ người dùng hợp lệ." },
         { status: 403 },
       );
     }
@@ -109,13 +109,13 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: error.message }, { status: 403 });
     }
 
-    if (error instanceof Error && error.message.startsWith("q must")) {
+    if (error instanceof Error && error.message.startsWith("Từ khóa")) {
       return NextResponse.json({ error: error.message }, { status: 400 });
     }
 
     console.error("Failed to perform quick search", error);
     return NextResponse.json(
-      { error: "Unable to perform quick search." },
+      { error: "Không thể tìm kiếm nhanh." },
       { status: 500 },
     );
   }

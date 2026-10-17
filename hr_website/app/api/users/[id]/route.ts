@@ -52,7 +52,7 @@
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  *       401:
- *         description: Authentication is required.
+ *         description: Bạn cần đăng nhập để thực hiện thao tác này.
  *         content:
  *           application/json:
  *             schema:
@@ -106,7 +106,7 @@ export async function PATCH(
 
   if (!UUID_PATTERN.test(id)) {
     return NextResponse.json(
-      { error: "The user id must be a UUID." },
+      { error: "ID người dùng phải là UUID." },
       { status: 400 },
     );
   }
@@ -116,19 +116,19 @@ export async function PATCH(
   try {
     body = await request.json();
   } catch {
-    return NextResponse.json({ error: "Invalid JSON body." }, { status: 400 });
+    return NextResponse.json({ error: "Nội dung yêu cầu phải là JSON hợp lệ." }, { status: 400 });
   }
 
   if (typeof body.role !== "string" || !ROLE_SET.has(body.role)) {
     return NextResponse.json(
-      { error: `role must be one of ${APP_ROLES.join(", ")}.` },
+      { error: `role phải là một trong: ${APP_ROLES.join(", ")}.` },
       { status: 400 },
     );
   }
 
   if (typeof body.is_active !== "boolean") {
     return NextResponse.json(
-      { error: "is_active must be a boolean." },
+      { error: "is_active phải là true/false." },
       { status: 400 },
     );
   }
@@ -142,7 +142,7 @@ export async function PATCH(
     (typeof body.branch_id !== "string" || !UUID_PATTERN.test(body.branch_id))
   ) {
     return NextResponse.json(
-      { error: "branch_id must be a UUID or null." },
+      { error: "branch_id phải là UUID hoặc null." },
       { status: 400 },
     );
   }
@@ -195,16 +195,16 @@ export async function PATCH(
 
     if (
       error instanceof Error &&
-      (error.message.startsWith("role must") ||
-        error.message.startsWith("You cannot change your own role") ||
-        error.message.startsWith("You cannot assign a branch"))
+      (error.message.startsWith("role") ||
+        error.message.startsWith("Bạn không thể tự đổi vai trò") ||
+        error.message.startsWith("Không thể gán chi nhánh"))
     ) {
       return NextResponse.json({ error: error.message }, { status: 400 });
     }
 
     console.error("Failed to update staff member", error);
     return NextResponse.json(
-      { error: "Unable to update the staff member." },
+      { error: "Không thể cập nhật nhân sự." },
       { status: 500 },
     );
   }

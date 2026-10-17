@@ -19,7 +19,7 @@ export class RequestShiftSwapUseCase {
     assertUuid(command.targetEmployeeId, "target_employee_id");
 
     if (command.targetEmployeeId === command.callerId) {
-      throw new ShiftWorkflowInputError("You cannot hand a shift over to yourself.");
+      throw new ShiftWorkflowInputError("Bạn không thể chuyển ca cho chính mình.");
     }
 
     return this.repository.request({

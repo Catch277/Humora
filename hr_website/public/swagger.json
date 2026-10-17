@@ -297,11 +297,42 @@
           }
         }
       },
+      "PasswordResetRequest": {
+        "type": "object",
+        "required": [
+          "email"
+        ],
+        "properties": {
+          "email": {
+            "type": "string",
+            "format": "email",
+            "example": "hr.lead@humora.vn"
+          }
+        }
+      },
+      "PasswordResetResult": {
+        "type": "object",
+        "required": [
+          "success",
+          "email"
+        ],
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "description": "Luôn true khi yêu cầu đã được chuyển cho Supabase Auth — câu trả lời không thay đổi dù email có tồn tại hay không, để không ai dò được danh sách nhân sự."
+          },
+          "email": {
+            "type": "string",
+            "format": "email"
+          }
+        }
+      },
       "Branch": {
         "type": "object",
         "required": [
           "id",
           "name",
+          "asset_prefix",
           "address",
           "manager_id",
           "latitude",
@@ -317,6 +348,12 @@
           },
           "name": {
             "type": "string"
+          },
+          "asset_prefix": {
+            "type": "integer",
+            "nullable": true,
+            "minimum": 1,
+            "description": "Số thứ tự chi nhánh (SCRUM-67), cấp một lần khi tạo và không bao giờ cấp lại: nó là tiền tố mã tài sản của mọi thiết bị thuộc chi nhánh (`01HSVH-0001`), nên đổi tên chi nhánh không làm tem đã dán sai. `null` với chi nhánh tạo trước SCRUM-67 — mã tài sản khi đó chỉ còn phần viết tắt."
           },
           "address": {
             "type": "string",
@@ -778,6 +815,8 @@
           "check_in_distance_m",
           "check_in_photo_url",
           "check_out_photo_url",
+          "worked_seconds",
+          "resumed_at",
           "status",
           "note",
           "complaint",
@@ -860,6 +899,16 @@
           "check_out_photo_url": {
             "type": "string",
             "nullable": true
+          },
+          "worked_seconds": {
+            "type": "integer",
+            "description": "Tổng thời gian đã làm (giây) do database tích luỹ (SCRUM-69): mỗi lần ra ca cộng thêm đoạn kể từ giờ vào — hoặc từ lần vào ca lại gần nhất — nên khoảng nghỉ giữa ra ca và vào ca lại không bị tính."
+          },
+          "resumed_at": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true,
+            "description": "Thời điểm bắt đầu đoạn làm hiện tại sau khi vào ca lại (SCRUM-69); null khi ca chưa từng được mở lại."
           },
           "status": {
             "type": "string",
@@ -1279,14 +1328,15 @@
           },
           "type": {
             "type": "string",
-            "description": "Notification type (e.g. request_approved, shift_changed)."
+            "description": "A code written by the notification triggers (SCRUM-70/71/72) and labelled by lib/domain/notificationCatalog.ts: REVENUE_OPENED, REVENUE_CLOSED, REVENUE_DIFF, REQUEST_CREATED, REQUEST_APPROVED, REQUEST_REJECTED, REQUEST_REVIEWED, SHIFT_ASSIGNED, SHIFT_CHANGED, SHIFT_REMOVED, SHIFT_LEAVE, ATTENDANCE_LATE, ATTENDANCE_OUTSIDE, ATTENDANCE_EARLY_LEAVE, ATTENDANCE_RESUMED, ATTENDANCE_CORRECTED, ATTENDANCE_VERIFIED, ATTENDANCE_COMPLAINT, COMPLAINT_RESOLVED, ACCOUNT_CREATED, ACCOUNT_PASSWORD_RESET, STAFF_ROLE_CHANGED, STAFF_OFFBOARDED, STAFF_BRANCH_CHANGED, BRANCH_CREATED, BRANCH_UPDATED, BRANCH_DELETED, BRANCH_MANAGER_ASSIGNED, FACILITY_CREATED, FACILITY_UPDATED, FACILITY_DELETED, FACILITY_MOVED, FACILITY_CATEGORY_CREATED, ORGANIZATION_MEMBER_JOINED, ORGANIZATION_INVITED, ORGANIZATION_UPDATED."
           },
           "is_read": {
             "type": "boolean"
           },
           "related_entity_type": {
             "type": "string",
-            "nullable": true
+            "nullable": true,
+            "description": "What the notification is about (revenue, request, shift_assignment, attendance, user, branch, facility, facility_category, organization); the app turns it into the \"Xem\" link."
           },
           "related_entity_id": {
             "type": "string",
@@ -1508,19 +1558,13 @@
           "code": {
             "type": "string",
             "nullable": true,
-            "description": "Mã tài sản / số serial trên tem thiết bị."
+            "description": "Mã tài sản (SCRUM-67) — hệ thống tự sinh, không sửa và không gửi được: `{số chi nhánh}{viết tắt chi nhánh}-{số}`, ví dụ `01HSVH-0001` (chi nhánh chưa có số thứ tự thì mã chỉ còn phần viết tắt). Phần viết tắt lấy chữ đầu của từng từ trong tên chi nhánh (dấu được bỏ, `Quận 10` → `Q10`), phần số lấy theo chi nhánh và duy nhất trong tổ chức. `null` chỉ với thiết bị tạo trước khi có SCRUM-66 — lần lưu kế tiếp sẽ cấp mã mới.",
+            "example": "01HSVH-0001"
           },
           "category": {
             "type": "string",
-            "enum": [
-              "KITCHEN",
-              "COLD_STORAGE",
-              "FURNITURE",
-              "ELECTRICAL",
-              "CLEANING",
-              "OTHER"
-            ],
-            "description": "Nhóm thiết bị (Khu pha chế, Bảo quản lạnh, ...)."
+            "description": "Mã nhóm thiết bị (SCRUM-65), phải thuộc danh mục `facility_categories` của tổ chức — xem GET /api/facility-categories.",
+            "example": "KITCHEN"
           },
           "quantity": {
             "type": "integer",
@@ -1559,6 +1603,7 @@
       },
       "FacilityWriteRequest": {
         "type": "object",
+        "description": "Thân yêu cầu tạo/sửa thiết bị. Mã tài sản không nằm trong thân yêu cầu (SCRUM-67): hệ thống tự sinh theo chi nhánh, nên gửi thêm `code` sẽ nhận `400`.",
         "required": [
           "branch_id",
           "name"
@@ -1572,22 +1617,11 @@
             "type": "string",
             "maxLength": 120
           },
-          "code": {
-            "type": "string",
-            "maxLength": 60,
-            "nullable": true
-          },
           "category": {
             "type": "string",
-            "enum": [
-              "KITCHEN",
-              "COLD_STORAGE",
-              "FURNITURE",
-              "ELECTRICAL",
-              "CLEANING",
-              "OTHER"
-            ],
-            "default": "OTHER"
+            "pattern": "^[A-Z0-9_]{1,60}$",
+            "default": "OTHER",
+            "description": "Mã nhóm thiết bị lấy từ GET /api/facility-categories (SCRUM-65); gửi mã không có trong danh mục của tổ chức sẽ nhận `400`."
           },
           "quantity": {
             "type": "integer",
@@ -1614,6 +1648,55 @@
             "type": "string",
             "maxLength": 500,
             "nullable": true
+          }
+        }
+      },
+      "FacilityCategory": {
+        "type": "object",
+        "required": [
+          "id",
+          "organization_id",
+          "code",
+          "name",
+          "created_at"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "organization_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Tổ chức sở hữu danh mục (SCRUM-65)."
+          },
+          "code": {
+            "type": "string",
+            "description": "Giá trị lưu trong `facilities.category`: chữ hoa, chỉ A-Z, 0-9 và `_`.",
+            "example": "KITCHEN"
+          },
+          "name": {
+            "type": "string",
+            "description": "Tên nhóm hiển thị trên màn hình.",
+            "example": "Khu pha chế"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "FacilityCategoryWriteRequest": {
+        "type": "object",
+        "required": [
+          "name"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "maxLength": 60,
+            "description": "Tên nhóm thiết bị, duy nhất trong tổ chức; `code` được sinh tự động từ tên này.",
+            "example": "Máy móc"
           }
         }
       },
@@ -1896,7 +1979,7 @@
             }
           },
           "401": {
-            "description": "Authentication is required.",
+            "description": "Bạn cần đăng nhập để thực hiện thao tác này.",
             "content": {
               "application/json": {
                 "schema": {
@@ -2012,7 +2095,7 @@
             }
           },
           "401": {
-            "description": "Authentication is required.",
+            "description": "Bạn cần đăng nhập để thực hiện thao tác này.",
             "content": {
               "application/json": {
                 "schema": {
@@ -2076,7 +2159,7 @@
             }
           },
           "401": {
-            "description": "Authentication is required.",
+            "description": "Bạn cần đăng nhập để thực hiện thao tác này.",
             "content": {
               "application/json": {
                 "schema": {
@@ -2154,7 +2237,7 @@
             }
           },
           "401": {
-            "description": "Authentication is required.",
+            "description": "Bạn cần đăng nhập để thực hiện thao tác này.",
             "content": {
               "application/json": {
                 "schema": {
@@ -2242,7 +2325,7 @@
             }
           },
           "401": {
-            "description": "Authentication is required.",
+            "description": "Bạn cần đăng nhập để thực hiện thao tác này.",
             "content": {
               "application/json": {
                 "schema": {
@@ -2357,7 +2440,7 @@
             }
           },
           "401": {
-            "description": "Authentication is required.",
+            "description": "Bạn cần đăng nhập để thực hiện thao tác này.",
             "content": {
               "application/json": {
                 "schema": {
@@ -2467,7 +2550,7 @@
             }
           },
           "401": {
-            "description": "Authentication is required.",
+            "description": "Bạn cần đăng nhập để thực hiện thao tác này.",
             "content": {
               "application/json": {
                 "schema": {
@@ -2559,7 +2642,7 @@
             }
           },
           "401": {
-            "description": "Authentication is required.",
+            "description": "Bạn cần đăng nhập để thực hiện thao tác này.",
             "content": {
               "application/json": {
                 "schema": {
@@ -2690,7 +2773,7 @@
             }
           },
           "401": {
-            "description": "Authentication is required.",
+            "description": "Bạn cần đăng nhập để thực hiện thao tác này.",
             "content": {
               "application/json": {
                 "schema": {
@@ -2779,7 +2862,7 @@
             }
           },
           "401": {
-            "description": "Authentication is required.",
+            "description": "Bạn cần đăng nhập để thực hiện thao tác này.",
             "content": {
               "application/json": {
                 "schema": {
@@ -2884,7 +2967,7 @@
             }
           },
           "401": {
-            "description": "Authentication is required.",
+            "description": "Bạn cần đăng nhập để thực hiện thao tác này.",
             "content": {
               "application/json": {
                 "schema": {
@@ -2975,7 +3058,7 @@
             }
           },
           "401": {
-            "description": "Authentication is required.",
+            "description": "Bạn cần đăng nhập để thực hiện thao tác này.",
             "content": {
               "application/json": {
                 "schema": {
@@ -3077,7 +3160,7 @@
             "description": "The search query or type is invalid."
           },
           "401": {
-            "description": "Authentication is required."
+            "description": "Bạn cần đăng nhập để thực hiện thao tác này."
           },
           "403": {
             "description": "The authenticated account has no eligible user profile."
@@ -3156,7 +3239,7 @@
             }
           },
           "401": {
-            "description": "Authentication is required.",
+            "description": "Bạn cần đăng nhập để thực hiện thao tác này.",
             "content": {
               "application/json": {
                 "schema": {
@@ -3215,7 +3298,7 @@
             }
           },
           "401": {
-            "description": "Authentication is required.",
+            "description": "Bạn cần đăng nhập để thực hiện thao tác này.",
             "content": {
               "application/json": {
                 "schema": {
@@ -3317,7 +3400,7 @@
             }
           },
           "401": {
-            "description": "Authentication is required.",
+            "description": "Bạn cần đăng nhập để thực hiện thao tác này.",
             "content": {
               "application/json": {
                 "schema": {
@@ -3415,7 +3498,7 @@
             }
           },
           "401": {
-            "description": "Authentication is required.",
+            "description": "Bạn cần đăng nhập để thực hiện thao tác này.",
             "content": {
               "application/json": {
                 "schema": {
@@ -3528,7 +3611,7 @@
             }
           },
           "401": {
-            "description": "Authentication is required.",
+            "description": "Bạn cần đăng nhập để thực hiện thao tác này.",
             "content": {
               "application/json": {
                 "schema": {
@@ -3611,7 +3694,7 @@
             "description": "One or more query parameters are invalid."
           },
           "401": {
-            "description": "Authentication is required."
+            "description": "Bạn cần đăng nhập để thực hiện thao tác này."
           },
           "403": {
             "description": "The caller has no user profile, or their role may not read the report (SCRUM-59)."
@@ -3670,7 +3753,7 @@
             "description": "The request body is invalid."
           },
           "401": {
-            "description": "Authentication is required."
+            "description": "Bạn cần đăng nhập để thực hiện thao tác này."
           },
           "403": {
             "description": "The caller has no user profile, their role may not declare revenue (SCRUM-59), or they do not head that branch (SCRUM-61)."
@@ -3759,7 +3842,7 @@
             "description": "The request body is invalid."
           },
           "401": {
-            "description": "Authentication is required."
+            "description": "Bạn cần đăng nhập để thực hiện thao tác này."
           },
           "403": {
             "description": "The caller has no user profile, their role may not declare revenue (SCRUM-59), or they do not head that branch (SCRUM-61)."
@@ -3829,7 +3912,7 @@
             }
           },
           "401": {
-            "description": "Authentication is required.",
+            "description": "Bạn cần đăng nhập để thực hiện thao tác này.",
             "content": {
               "application/json": {
                 "schema": {
@@ -3921,7 +4004,7 @@
             }
           },
           "401": {
-            "description": "Authentication is required.",
+            "description": "Bạn cần đăng nhập để thực hiện thao tác này.",
             "content": {
               "application/json": {
                 "schema": {
@@ -3931,7 +4014,7 @@
             }
           },
           "403": {
-            "description": "The account has no user profile, the role may not file a request (SCRUM-59 — the organization's OWNER never does, SCRUM-63), the account is not assigned to a branch yet, or it names a branch other than its own (SCRUM-63).",
+            "description": "The account has no user profile, the role may not file a request (SCRUM-59 — the organization's OWNER never does, SCRUM-63), the account is not assigned to a branch yet, or it names a branch other than its own — or, for a manager, a branch they do not head (SCRUM-61/63).",
             "content": {
               "application/json": {
                 "schema": {
@@ -4031,7 +4114,7 @@
             }
           },
           "401": {
-            "description": "Authentication is required.",
+            "description": "Bạn cần đăng nhập để thực hiện thao tác này.",
             "content": {
               "application/json": {
                 "schema": {
@@ -4122,7 +4205,7 @@
             }
           },
           "401": {
-            "description": "Authentication is required.",
+            "description": "Bạn cần đăng nhập để thực hiện thao tác này.",
             "content": {
               "application/json": {
                 "schema": {
@@ -4132,7 +4215,7 @@
             }
           },
           "403": {
-            "description": "The account has no user profile.",
+            "description": "Tài khoản chưa có hồ sơ người dùng.",
             "content": {
               "application/json": {
                 "schema": {
@@ -4212,7 +4295,7 @@
             }
           },
           "401": {
-            "description": "Authentication is required.",
+            "description": "Bạn cần đăng nhập để thực hiện thao tác này.",
             "content": {
               "application/json": {
                 "schema": {
@@ -4286,7 +4369,7 @@
             }
           },
           "401": {
-            "description": "Authentication is required.",
+            "description": "Bạn cần đăng nhập để thực hiện thao tác này.",
             "content": {
               "application/json": {
                 "schema": {
@@ -4387,7 +4470,7 @@
             }
           },
           "401": {
-            "description": "Authentication is required.",
+            "description": "Bạn cần đăng nhập để thực hiện thao tác này.",
             "content": {
               "application/json": {
                 "schema": {
@@ -4487,7 +4570,7 @@
             }
           },
           "401": {
-            "description": "Authentication is required.",
+            "description": "Bạn cần đăng nhập để thực hiện thao tác này.",
             "content": {
               "application/json": {
                 "schema": {
@@ -4548,7 +4631,7 @@
             }
           },
           "401": {
-            "description": "Authentication is required.",
+            "description": "Bạn cần đăng nhập để thực hiện thao tác này.",
             "content": {
               "application/json": {
                 "schema": {
@@ -4558,7 +4641,7 @@
             }
           },
           "403": {
-            "description": "The account has no user profile.",
+            "description": "Tài khoản chưa có hồ sơ người dùng.",
             "content": {
               "application/json": {
                 "schema": {
@@ -4626,7 +4709,7 @@
             }
           },
           "401": {
-            "description": "Authentication is required.",
+            "description": "Bạn cần đăng nhập để thực hiện thao tác này.",
             "content": {
               "application/json": {
                 "schema": {
@@ -4712,7 +4795,7 @@
             }
           },
           "401": {
-            "description": "Authentication is required.",
+            "description": "Bạn cần đăng nhập để thực hiện thao tác này.",
             "content": {
               "application/json": {
                 "schema": {
@@ -4722,7 +4805,7 @@
             }
           },
           "403": {
-            "description": "The account has no user profile.",
+            "description": "Tài khoản chưa có hồ sơ người dùng.",
             "content": {
               "application/json": {
                 "schema": {
@@ -4799,7 +4882,7 @@
             }
           },
           "401": {
-            "description": "Authentication is required.",
+            "description": "Bạn cần đăng nhập để thực hiện thao tác này.",
             "content": {
               "application/json": {
                 "schema": {
@@ -4914,7 +4997,7 @@
             }
           },
           "401": {
-            "description": "Authentication is required.",
+            "description": "Bạn cần đăng nhập để thực hiện thao tác này.",
             "content": {
               "application/json": {
                 "schema": {
@@ -5006,6 +5089,26 @@
               ]
             },
             "description": "Set to `true` to return and count only unread notifications. The header uses\n`unread=true&page_size=1` so `total` is the exact unread count for its badge.\n"
+          },
+          {
+            "in": "query",
+            "name": "read",
+            "schema": {
+              "type": "string",
+              "enum": [
+                true,
+                false
+              ]
+            },
+            "description": "Set to `true` to return and count only the notifications already read (the \"Đã đọc\" tab of\n`/notifications`). Mutually exclusive with `unread=true`.\n"
+          },
+          {
+            "in": "query",
+            "name": "type",
+            "schema": {
+              "type": "string"
+            },
+            "description": "A comma-separated list of notification codes to include, e.g.\n`type=REQUEST_CREATED,REQUEST_APPROVED`. `/notifications` sends a whole category this way\n(its chips expand through `notificationTypesOfCategory`) so the filter, the total and the\npagination all describe the same rows. An unknown code answers `400`.\n"
           }
         ],
         "responses": {
@@ -5019,8 +5122,11 @@
               }
             }
           },
+          "400": {
+            "description": "A query parameter is invalid (a non-positive page size or an unknown `type`)."
+          },
           "401": {
-            "description": "Authentication is required."
+            "description": "Bạn cần đăng nhập để thực hiện thao tác này."
           },
           "500": {
             "description": "An unexpected server error occurred."
@@ -5068,7 +5174,7 @@
             "description": "The ID is not a valid UUID."
           },
           "401": {
-            "description": "Authentication is required."
+            "description": "Bạn cần đăng nhập để thực hiện thao tác này."
           },
           "404": {
             "description": "The notification was not found or does not belong to the user."
@@ -5101,7 +5207,7 @@
             }
           },
           "401": {
-            "description": "Authentication is required."
+            "description": "Bạn cần đăng nhập để thực hiện thao tác này."
           },
           "500": {
             "description": "An unexpected server error occurred."
@@ -5167,7 +5273,65 @@
             "description": "The request body is invalid."
           },
           "401": {
-            "description": "Authentication is required."
+            "description": "Bạn cần đăng nhập để thực hiện thao tác này."
+          },
+          "500": {
+            "description": "An unexpected server error occurred."
+          }
+        }
+      }
+    },
+    "/api/notifications/read-all": {
+      "post": {
+        "summary": "Mark every notification of the caller as read",
+        "description": "SCRUM-70. Marks the caller's unread notifications as read in a single statement, optionally\nnarrowed to a set of codes (`types`) so \"mark this group as read\" matches the chip the user\nis looking at. RLS (`notifications_update_own`) keeps the statement inside the caller's own\nrows; the response reports how many actually moved.\n",
+        "tags": [
+          "Notifications"
+        ],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "types": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    },
+                    "description": "Optional whitelist of notification codes (`REQUEST_CREATED`, …). Omitted means\nevery unread notification of the caller.\n"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "How many notifications were marked as read.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "updated"
+                  ],
+                  "properties": {
+                    "updated": {
+                      "type": "integer",
+                      "example": 6
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The JSON body is invalid, or `types` names a code the catalog does not know."
+          },
+          "401": {
+            "description": "Bạn cần đăng nhập để thực hiện thao tác này."
           },
           "500": {
             "description": "An unexpected server error occurred."
@@ -5178,7 +5342,7 @@
     "/api/geo/reverse": {
       "get": {
         "summary": "Turn a coordinate into an address",
-        "description": "Reverse geocoding for the branch form: the pin on the map becomes the \"Địa chỉ\" text, so the\noperator does not have to type it. Addresses come from Nominatim (OpenStreetMap) — the same\nproject the branch map draws its tiles from — and need no API key. The coordinate must be\ninside Vietnamese territory, exactly the rule the geofence itself enforces. `address` is\nnull when the provider knows no address for that point; `503` when it cannot be reached.\n",
+        "description": "Reverse geocoding for the branch form: the pin on the map becomes the \"Địa chỉ\" text, so the\noperator does not have to type it. Addresses come from Nominatim (OpenStreetMap) — the same\nproject the branch map draws its tiles from — and need no API key; when that provider cannot be\nreached the lookup is retried against Photon, which serves the same OpenStreetMap data and is\nkeyless too, so `503` means *both* providers failed. The coordinate must be\ninside Vietnamese territory, exactly the rule the geofence itself enforces. `address` is\nnull when the providers know no address for that point; `503` when neither can be reached.\n",
         "tags": [
           "Branches"
         ],
@@ -5228,7 +5392,7 @@
             }
           },
           "401": {
-            "description": "Authentication is required.",
+            "description": "Bạn cần đăng nhập để thực hiện thao tác này.",
             "content": {
               "application/json": {
                 "schema": {
@@ -5249,6 +5413,139 @@
           },
           "503": {
             "description": "The address lookup service is not available; type the address instead.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/facility-categories": {
+      "get": {
+        "summary": "List the facility categories of the organization",
+        "description": "The \"Nhóm thiết bị\" catalogue of the caller's organization (SCRUM-65): the six built-in groups\nSCRUM-45 shipped — Khu pha chế, Bảo quản lạnh, Nội thất, Thiết bị điện, Vệ sinh, Khác — plus any\ngroup the facilities tab has added since, sorted by name. `code` is what `facilities.category`\nstores; `name` is what the screen shows. Restricted to managers (`facility:manage`, SCRUM-59).\n",
+        "tags": [
+          "Facilities"
+        ],
+        "responses": {
+          "200": {
+            "description": "The category catalogue.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/FacilityCategory"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Bạn cần đăng nhập để thực hiện thao tác này.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The caller's role may not read the inventory (SCRUM-59, manager and above).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "An unexpected server error occurred.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "Add a facility category",
+        "description": "Adds one \"Nhóm thiết bị\" to the organization's catalogue (SCRUM-65), which is what the facilities\ntab does when an operator needs a group the six built-ins do not cover. Only the label is sent:\nthe `code` stored in `facilities.category` is derived from it (diacritics stripped, uppercased,\nuniquified inside the organization). A name that already exists answers `409`. Restricted to\nmanagers (`facility:manage`, SCRUM-59) and enforced by RLS.\n",
+        "tags": [
+          "Facilities"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FacilityCategoryWriteRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "The category was created.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FacilityCategory"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The name is missing, not a string, or longer than 60 characters.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Bạn cần đăng nhập để thực hiện thao tác này.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The caller's role may not manage facilities (SCRUM-59).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "A category with that name already exists in the organization.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "An unexpected server error occurred.",
             "content": {
               "application/json": {
                 "schema": {
@@ -5303,7 +5600,7 @@
             }
           },
           "401": {
-            "description": "Authentication is required.",
+            "description": "Bạn cần đăng nhập để thực hiện thao tác này.",
             "content": {
               "application/json": {
                 "schema": {
@@ -5336,7 +5633,7 @@
       },
       "post": {
         "summary": "Create a facility",
-        "description": "Registers one facility of a branch. Restricted to managers (`facility:manage`, SCRUM-59) and enforced by RLS.",
+        "description": "Registers one facility of a branch. Restricted to managers (`facility:manage`, SCRUM-59) and enforced by RLS. SCRUM-67 — the asset code is generated from the branch (`{số chi nhánh}{viết tắt chi nhánh}-{số}`, e.g. `01HSVH-0001`, then `-0002`) and the field is read-only in the UI, so a body that sends a non-empty `code` answers `400`.",
         "tags": [
           "Facilities"
         ],
@@ -5362,7 +5659,7 @@
             }
           },
           "400": {
-            "description": "The request body is invalid.",
+            "description": "The request body is invalid, it sends a `code` (SCRUM-67), or `category` is not one of the organization's facility categories (SCRUM-65).",
             "content": {
               "application/json": {
                 "schema": {
@@ -5372,7 +5669,7 @@
             }
           },
           "401": {
-            "description": "Authentication is required.",
+            "description": "Bạn cần đăng nhập để thực hiện thao tác này.",
             "content": {
               "application/json": {
                 "schema": {
@@ -5386,6 +5683,16 @@
           },
           "404": {
             "description": "The branch does not exist or is not visible to the caller.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The asset code is already used by another facility of the organization (SCRUM-66).",
             "content": {
               "application/json": {
                 "schema": {
@@ -5410,7 +5717,7 @@
     "/api/facilities/{id}": {
       "put": {
         "summary": "Update a facility",
-        "description": "Replaces the editable fields of one facility. Restricted to managers (`facility:manage`, SCRUM-59) and enforced by RLS; a hidden or unknown id answers 404. SCRUM-45.",
+        "description": "Replaces the editable fields of one facility. Restricted to managers (`facility:manage`, SCRUM-59) and enforced by RLS; a hidden or unknown id answers 404. SCRUM-45. SCRUM-67 — the request must not carry a `code`; the stored tag is kept while it still matches the branch, and a facility moved to another branch (or one holding a legacy code) is given a fresh tag for the branch it lands in.",
         "tags": [
           "Facilities"
         ],
@@ -5447,7 +5754,7 @@
             }
           },
           "400": {
-            "description": "The id is not a UUID, or the request body is invalid.",
+            "description": "The id is not a UUID, or the request body is invalid (including a `code`, which is generated — SCRUM-67).",
             "content": {
               "application/json": {
                 "schema": {
@@ -5457,7 +5764,7 @@
             }
           },
           "401": {
-            "description": "Authentication is required.",
+            "description": "Bạn cần đăng nhập để thực hiện thao tác này.",
             "content": {
               "application/json": {
                 "schema": {
@@ -5478,6 +5785,16 @@
           },
           "404": {
             "description": "The facility does not exist or is not updatable by the caller.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The asset code is already used by another facility of the organization (SCRUM-66).",
             "content": {
               "application/json": {
                 "schema": {
@@ -5545,7 +5862,7 @@
             }
           },
           "401": {
-            "description": "Authentication is required.",
+            "description": "Bạn cần đăng nhập để thực hiện thao tác này.",
             "content": {
               "application/json": {
                 "schema": {
@@ -5590,7 +5907,7 @@
     "/api/employee-status": {
       "get": {
         "summary": "Get the live employee status of one business day",
-        "description": "One row per person for the day (SCRUM-22), derived from `shift_assignments` and\n`attendance` by the `get_employee_status` RPC: đang làm việc, chưa vào ca, nghỉ phép,\nđã tan ca, không có ca hôm nay or nghỉ việc. The day defaults to today in Asia/Bangkok.\nSCRUM-59: giám sát nhân sự is a management view (`employee-status:view`), so a plain\nemployee gets `403`; SCRUM-60 narrows the rows `get_employee_status` may return.\n",
+        "description": "One row per person for the day (SCRUM-22), derived from `shift_assignments` and\n`attendance` by the `get_employee_status` RPC: đang làm việc, chưa vào ca, nghỉ phép,\nđã tan ca, không có ca hôm nay or nghỉ việc. The day defaults to today in Asia/Bangkok.\nSCRUM-59: giám sát nhân sự is a management view (`employee-status:view`), so a plain\nemployee gets `403`; SCRUM-60 narrows the rows `get_employee_status` may return.\nSCRUM-63: một quản lý chi nhánh chỉ thấy nhân sự thuộc (các) chi nhánh mình phụ trách —\nchủ sở hữu vẫn thấy toàn bộ tổ chức, kể cả tài khoản chưa gán chi nhánh.\n",
         "tags": [
           "Employees"
         ],
@@ -5657,7 +5974,7 @@
             }
           },
           "401": {
-            "description": "Authentication is required.",
+            "description": "Bạn cần đăng nhập để thực hiện thao tác này.",
             "content": {
               "application/json": {
                 "schema": {
@@ -5794,7 +6111,7 @@
     "/api/branches": {
       "get": {
         "summary": "List branches",
-        "description": "Returns every branch visible to the authenticated caller under the active RLS policy, sorted by name.",
+        "description": "Returns every branch visible to the authenticated caller under the active RLS policy, oldest first — the order the branches were created in, which is the order of the numbers in their asset codes (SCRUM-67).",
         "tags": [
           "Branches"
         ],
@@ -5813,7 +6130,7 @@
             }
           },
           "401": {
-            "description": "Authentication is required."
+            "description": "Bạn cần đăng nhập để thực hiện thao tác này."
           },
           "500": {
             "description": "An unexpected server error occurred."
@@ -5822,7 +6139,7 @@
       },
       "post": {
         "summary": "Create a branch",
-        "description": "Creates a branch together with its GPS geofence. Restricted to the organization's OWNER (`branch:manage`, SCRUM-59) and enforced by RLS.",
+        "description": "Creates a branch together with its GPS geofence. Restricted to the organization's OWNER (`branch:manage`, SCRUM-59) and enforced by RLS. SCRUM-67 — the branch also receives its own asset number, which prefixes every asset code of its facilities (`01HSVH-0001`).",
         "tags": [
           "Branches"
         ],
@@ -5896,10 +6213,20 @@
             "description": "The request body is invalid, including a manager_id that names no account in your organization or names an account that is not a MANAGER (SCRUM-63)."
           },
           "401": {
-            "description": "Authentication is required."
+            "description": "Bạn cần đăng nhập để thực hiện thao tác này."
           },
           "403": {
             "description": "The caller's role may not manage branches (SCRUM-59, owner only)."
+          },
+          "409": {
+            "description": "Another branch was created in the same instant, so the next asset number could not be claimed — saving the form again succeeds (SCRUM-67).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
           },
           "500": {
             "description": "An unexpected server error occurred."
@@ -5991,7 +6318,7 @@
             "description": "The route parameter or request body is invalid, including a manager_id that names no account in your organization or names an account that is not an OWNER/MANAGER (SCRUM-61)."
           },
           "401": {
-            "description": "Authentication is required."
+            "description": "Bạn cần đăng nhập để thực hiện thao tác này."
           },
           "403": {
             "description": "The caller may not update this branch — neither the organization's OWNER nor its chi nhánh trưởng (SCRUM-61) — or tried to change who heads it."
@@ -6052,7 +6379,7 @@
             }
           },
           "401": {
-            "description": "Authentication is required."
+            "description": "Bạn cần đăng nhập để thực hiện thao tác này."
           },
           "403": {
             "description": "The caller's role may not manage branches (SCRUM-59, owner only)."
@@ -6142,7 +6469,7 @@
             }
           },
           "409": {
-            "description": "An account already exists for this email address.",
+            "description": "Email này đã có tài khoản đăng nhập.",
             "content": {
               "application/json": {
                 "schema": {
@@ -6299,7 +6626,7 @@
             }
           },
           "401": {
-            "description": "Authentication is required.",
+            "description": "Bạn cần đăng nhập để thực hiện thao tác này.",
             "content": {
               "application/json": {
                 "schema": {
@@ -6310,6 +6637,101 @@
           },
           "404": {
             "description": "The account has no row in the users table.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "An unexpected server error occurred.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/recovery": {
+      "get": {
+        "summary": "Complete a password reset link",
+        "description": "The page a Supabase Auth recovery email returns to. It exchanges the one-time `code` for a\nrecovery session and redirects to `/reset-password`, where the new password is saved through\n`POST /api/auth/change-password`. A link that is missing, expired or already used lands on\n`/login?recovery=failed` instead of a screen whose save would be refused.\n\nThe `code` is PKCE-bound (`@supabase/ssr` pins `flowType: \"pkce\"` for both of its clients), so\nthe link completes only in the browser that requested it — the code verifier is a cookie there.\n",
+        "tags": [
+          "Authentication"
+        ],
+        "parameters": [
+          {
+            "in": "query",
+            "name": "code",
+            "required": true,
+            "description": "The one-time code Supabase Auth appends to the recovery link.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "sb_flow_id",
+            "required": false,
+            "description": "The PKCE flow the code belongs to, appended by `resetPasswordForEmail`.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "307": {
+            "description": "Redirect to `/reset-password` when the link was usable, or to `/login?recovery=failed`\nwhen it was not.\n"
+          }
+        }
+      }
+    },
+    "/api/auth/forgot-password": {
+      "post": {
+        "summary": "Send a password reset email",
+        "description": "Sends the Supabase Auth recovery email for the given address. The answer is identical whether\nor not that address has an account, so this endpoint cannot be used to enumerate the staff of\nan organization. The link in the email returns to `GET /api/auth/recovery`, which turns it into\na recovery session.\n",
+        "tags": [
+          "Authentication"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PasswordResetRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The request was accepted and the email is on its way, if the address exists.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PasswordResetResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The JSON body is invalid, or email is not a valid address.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Bạn đã yêu cầu quá nhiều lần. Vui lòng thử lại sau.",
             "content": {
               "application/json": {
                 "schema": {
@@ -6387,7 +6809,7 @@
             }
           },
           "401": {
-            "description": "Authentication is required.",
+            "description": "Bạn cần đăng nhập để thực hiện thao tác này.",
             "content": {
               "application/json": {
                 "schema": {
@@ -6412,7 +6834,7 @@
     "/api/attendance": {
       "get": {
         "summary": "List attendance records",
-        "description": "The Bảng công timesheet (SCRUM-21/22/29). Each row embeds the employee name, the branch\n(with its GPS centre and allowed radius, so the screen can judge the geofence) and the\nshift hours. Check-in and check-out themselves happen in the mobile app.\n",
+        "description": "The Bảng công timesheet (SCRUM-21/22/29). Each row embeds the employee name, the branch\n(with its GPS centre and allowed radius, so the screen can judge the geofence) and the\nshift hours.\n\nRows are written by two clients since SCRUM-68: `POST /api/attendance/check-in` /\n`check-out` on the web (GPS point, no photo) and the mobile app, which also captures the\ncheck-in photo. Reviewing, correcting and verifying stay a web task.\n",
         "tags": [
           "Attendance"
         ],
@@ -6491,7 +6913,7 @@
             }
           },
           "401": {
-            "description": "Authentication is required.",
+            "description": "Bạn cần đăng nhập để thực hiện thao tác này.",
             "content": {
               "application/json": {
                 "schema": {
@@ -6598,7 +7020,7 @@
             }
           },
           "401": {
-            "description": "Authentication is required.",
+            "description": "Bạn cần đăng nhập để thực hiện thao tác này.",
             "content": {
               "application/json": {
                 "schema": {
@@ -6680,7 +7102,7 @@
             }
           },
           "401": {
-            "description": "Authentication is required.",
+            "description": "Bạn cần đăng nhập để thực hiện thao tác này.",
             "content": {
               "application/json": {
                 "schema": {
@@ -6776,7 +7198,7 @@
             }
           },
           "401": {
-            "description": "Authentication is required.",
+            "description": "Bạn cần đăng nhập để thực hiện thao tác này.",
             "content": {
               "application/json": {
                 "schema": {
@@ -6880,7 +7302,7 @@
             }
           },
           "401": {
-            "description": "Authentication is required.",
+            "description": "Bạn cần đăng nhập để thực hiện thao tác này.",
             "content": {
               "application/json": {
                 "schema": {
@@ -6924,8 +7346,8 @@
     },
     "/api/attendance/check-out": {
       "post": {
-        "summary": "Clock out of the shift the caller is in",
-        "description": "Chấm công cuối ca (SCRUM-29). Completes the caller's own open record of today (a check-in with\nno check-out); with several open records the most recent check-in is closed. The time is the\nserver clock. Leaving more than 5 minutes before the shift ends sets `EARLY_LEAVE`, unless\nthe record is already `LATE`, which is kept. A note left at check-in is kept when none is sent.\n",
+        "summary": "Clock out",
+        "description": "Closes one of the signed-in account's own records for the current business day (SCRUM-68):\n`check_out_at`, the GPS point of the departure and the resulting status — `EARLY_LEAVE` when the\nca's end time has not been reached, otherwise the status the check-in already carried (a late\narrival is not erased by leaving on time).\n\nOnly today's own rows are considered. Without `attendance_id` the single open record is closed;\nwhen more than one ca is still open the request must name the row (`409`/`400` rather than\nclosing whichever came back first). The check-in facts are never touched — a wrong time is the\nmanager's correction on `PATCH /api/attendance/{id}`, which records who fixed it and why.\n\nLike the check-in, the organization's `OWNER` is refused (`403`, SCRUM-68).\n",
         "tags": [
           "Attendance"
         ],
@@ -6935,32 +7357,25 @@
             "application/json": {
               "schema": {
                 "type": "object",
-                "required": [
-                  "latitude",
-                  "longitude"
-                ],
                 "properties": {
+                  "attendance_id": {
+                    "type": "string",
+                    "format": "uuid",
+                    "nullable": true,
+                    "description": "The record to close, when the caller has more than one ca open today."
+                  },
                   "latitude": {
                     "type": "number",
-                    "minimum": -90,
-                    "maximum": 90,
-                    "example": 10.7769
+                    "format": "double",
+                    "nullable": true,
+                    "example": 10.7769,
+                    "description": "Required together with `longitude`; omit both when the device refused a location."
                   },
                   "longitude": {
                     "type": "number",
-                    "minimum": -180,
-                    "maximum": 180,
+                    "format": "double",
+                    "nullable": true,
                     "example": 106.7009
-                  },
-                  "photo_url": {
-                    "type": "string",
-                    "nullable": true,
-                    "maxLength": 2000
-                  },
-                  "note": {
-                    "type": "string",
-                    "nullable": true,
-                    "maxLength": 300
                   }
                 }
               }
@@ -6969,7 +7384,7 @@
         },
         "responses": {
           "200": {
-            "description": "The attendance record with the check-out stored.",
+            "description": "The closed attendance record.",
             "content": {
               "application/json": {
                 "schema": {
@@ -6979,7 +7394,7 @@
             }
           },
           "400": {
-            "description": "The body is invalid.",
+            "description": "The JSON body is invalid, or more than one ca is open and no `attendance_id` was sent.",
             "content": {
               "application/json": {
                 "schema": {
@@ -6989,7 +7404,7 @@
             }
           },
           "401": {
-            "description": "Authentication is required.",
+            "description": "Bạn cần đăng nhập để thực hiện thao tác này.",
             "content": {
               "application/json": {
                 "schema": {
@@ -6999,7 +7414,17 @@
             }
           },
           "403": {
-            "description": "The account has no profile, or its role may not use the timesheet.",
+            "description": "The caller is the organization's owner (SCRUM-68).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No check-in was found for this business day, or the named record is not the caller's own.",
             "content": {
               "application/json": {
                 "schema": {
@@ -7009,7 +7434,7 @@
             }
           },
           "409": {
-            "description": "The caller has not clocked in yet, or has already clocked out.",
+            "description": "The named record has already been checked out.",
             "content": {
               "application/json": {
                 "schema": {
@@ -7033,8 +7458,8 @@
     },
     "/api/attendance/check-in": {
       "post": {
-        "summary": "Clock in to a shift the schedule assigned today",
-        "description": "Chấm công đầu ca (SCRUM-22). The caller clocks in for **their own** shift of today: the branch\nand the shift come from their `SCHEDULED` assignment, never from the request, and a request\nwith no such assignment is refused (`404`). The time is the server clock, not the device's.\nThe status is `LATE` when the clock-in is more than 5 minutes after the shift starts,\notherwise `ON_TIME`. The distance to the branch centre is computed by the database from the\ncoordinates; whether it is inside the allowed radius is judged on the Bảng công screen.\n\nWith exactly one shift today `assignment_id` may be omitted; with several it is required.\nThe photo is uploaded by the app beforehand — only its address is stored here.\n",
+        "summary": "Clock in",
+        "description": "Records one arrival (SCRUM-68): `check_in_at`, the GPS point it was taken at and the status the\nca's hours justify (`ON_TIME`, or `LATE` beyond a five-minute grace). The distance is derived by\nthe database from the point against the branch centre, so it is never part of the request.\n\nAn `EMPLOYEE` clocks in against a ca they are scheduled for on that business day — `shift_id` is\nrequired and the branch (and the hours) come from that assignment, which must be their own\nbranch. A `MANAGER` names a branch they are the chi nhánh trưởng of (SCRUM-61) and may name a ca\n(`shift_id`, any template of the catalogue).\n\nThe organization's `OWNER` never clocks in (`attendance:checkin` is not theirs, SCRUM-68), so\nthis endpoint answers `403` for them and `attendance_insert_own` refuses the row in the database.\n\nThe point is recorded, not judged: an arrival outside the branch geofence is stored like any\nother and the reviewer reads the verdict on `/attendance`.\n\nSending the same ca again is **\"Vào ca lại\"** while that ca is still running: an employee who\nclosed it by mistake gets the same row back, re-opened (`200`), with the giờ vào they reported\nstill in place — a second tap is not a second record. The status is re-derived from that giờ vào\n(so a row an earlier check-out had stamped \"Về sớm\" reads `LATE` again when the arrival was in\nfact late), and a manager's correction is never overwritten. Once the ca is over the check-out\nstands (`409`), and a row that is still open is a plain duplicate (`409`).\n",
         "tags": [
           "Attendance"
         ],
@@ -7044,38 +7469,36 @@
             "application/json": {
               "schema": {
                 "type": "object",
-                "required": [
-                  "latitude",
-                  "longitude"
-                ],
                 "properties": {
                   "latitude": {
                     "type": "number",
-                    "minimum": -90,
-                    "maximum": 90,
-                    "example": 10.7769
+                    "format": "double",
+                    "nullable": true,
+                    "example": 10.7769,
+                    "description": "Required together with `longitude`; omit both when the device refused a location."
                   },
                   "longitude": {
                     "type": "number",
-                    "minimum": -180,
-                    "maximum": 180,
+                    "format": "double",
+                    "nullable": true,
                     "example": 106.7009
                   },
-                  "photo_url": {
-                    "type": "string",
-                    "nullable": true,
-                    "maxLength": 2000
-                  },
-                  "note": {
-                    "type": "string",
-                    "nullable": true,
-                    "maxLength": 300
-                  },
-                  "assignment_id": {
+                  "branch_id": {
                     "type": "string",
                     "format": "uuid",
                     "nullable": true,
-                    "description": "Which of today's shifts is starting. Required when there are several."
+                    "description": "The branch a MANAGER clocks in at. Required for them, ignored for an employee."
+                  },
+                  "shift_id": {
+                    "type": "string",
+                    "format": "uuid",
+                    "nullable": true,
+                    "description": "The ca being started. Required for an employee (today's `SCHEDULED` assignment); optional for a manager."
+                  },
+                  "note": {
+                    "type": "string",
+                    "maxLength": 500,
+                    "nullable": true
                   }
                 }
               }
@@ -7083,8 +7506,18 @@
           }
         },
         "responses": {
+          "200": {
+            "description": "The existing record, re-opened (\"Vào ca lại\") because the ca is still running.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Attendance"
+                }
+              }
+            }
+          },
           "201": {
-            "description": "The attendance record that was created.",
+            "description": "The created attendance record, with its derived distance and embedded branch/shift.",
             "content": {
               "application/json": {
                 "schema": {
@@ -7094,7 +7527,7 @@
             }
           },
           "400": {
-            "description": "The body is invalid, or `assignment_id` is missing while there are several shifts today.",
+            "description": "The JSON body is invalid, the coordinates are not a pairable pair, or a manager sent no branch.",
             "content": {
               "application/json": {
                 "schema": {
@@ -7104,7 +7537,7 @@
             }
           },
           "401": {
-            "description": "Authentication is required.",
+            "description": "Bạn cần đăng nhập để thực hiện thao tác này.",
             "content": {
               "application/json": {
                 "schema": {
@@ -7114,7 +7547,7 @@
             }
           },
           "403": {
-            "description": "The account has no profile, or its role may not use the timesheet.",
+            "description": "The caller is the organization's owner (SCRUM-68), belongs to no branch, or named a branch they do not head.",
             "content": {
               "application/json": {
                 "schema": {
@@ -7124,7 +7557,7 @@
             }
           },
           "404": {
-            "description": "The caller has no scheduled shift to clock in for today.",
+            "description": "The branch or the ca does not exist (or is not visible to the caller).",
             "content": {
               "application/json": {
                 "schema": {
@@ -7134,7 +7567,7 @@
             }
           },
           "409": {
-            "description": "The caller already clocked in for this shift.",
+            "description": "This ca is already open for today (or its working time is over, so the check-out stands), or the caller has no ca scheduled for this business day.",
             "content": {
               "application/json": {
                 "schema": {

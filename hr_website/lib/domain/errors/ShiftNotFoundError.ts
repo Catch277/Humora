@@ -1,6 +1,6 @@
 export class ShiftNotFoundError extends Error {
   constructor() {
-    super("Shift not found.");
+    super("Không tìm thấy ca làm việc.");
     this.name = "ShiftNotFoundError";
   }
 }

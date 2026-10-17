@@ -51,7 +51,7 @@
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  *       401:
- *         description: Authentication is required.
+ *         description: Bạn cần đăng nhập để thực hiện thao tác này.
  *         content:
  *           application/json:
  *             schema:
@@ -82,14 +82,14 @@ export async function GET(request: NextRequest) {
 
   if (branchId && !UUID_PATTERN.test(branchId)) {
     return NextResponse.json(
-      { error: "branch_id must be a UUID." },
+      { error: "branch_id phải là UUID." },
       { status: 400 },
     );
   }
 
   if (!REVENUE_STATUSES.has(status)) {
     return NextResponse.json(
-      { error: "status must be open, closed or all." },
+      { error: "status phải là open, closed hoặc all." },
       { status: 400 },
     );
   }
@@ -97,7 +97,7 @@ export async function GET(request: NextRequest) {
   const days = daysParam === null ? undefined : Number(daysParam);
 
   if (days !== undefined && !Number.isInteger(days)) {
-    return NextResponse.json({ error: "days must be an integer." }, { status: 400 });
+    return NextResponse.json({ error: "days phải là số nguyên." }, { status: 400 });
   }
 
   try {
@@ -109,7 +109,7 @@ export async function GET(request: NextRequest) {
 
     if (authError || !user) {
       return NextResponse.json(
-        { error: "Authentication is required." },
+        { error: "Bạn cần đăng nhập để thực hiện thao tác này." },
         { status: 401 },
       );
     }
@@ -123,13 +123,13 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json(records);
   } catch (error) {
-    if (error instanceof Error && error.message.startsWith("days must")) {
+    if (error instanceof Error && error.message.startsWith("days")) {
       return NextResponse.json({ error: error.message }, { status: 400 });
     }
 
     console.error("Failed to list revenue records", error);
     return NextResponse.json(
-      { error: "Unable to list revenue records." },
+      { error: "Không thể tải danh sách doanh thu." },
       { status: 500 },
     );
   }

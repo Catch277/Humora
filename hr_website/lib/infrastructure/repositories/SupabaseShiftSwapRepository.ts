@@ -155,7 +155,7 @@ export class SupabaseShiftSwapRepository implements IShiftSwapRepository {
       // For a request the missing resource is the caller's shift, not a swap.
       throwShiftWorkflowError(
         error,
-        new ShiftSwapNotFoundError("Shift assignment not found."),
+        new ShiftSwapNotFoundError("Không tìm thấy ca đã xếp."),
         "request the shift swap",
       );
     }

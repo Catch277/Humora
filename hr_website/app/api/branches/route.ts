@@ -3,7 +3,7 @@
  * /api/branches:
  *   get:
  *     summary: List branches
- *     description: Returns every branch visible to the authenticated caller under the active RLS policy, sorted by name.
+ *     description: Returns every branch visible to the authenticated caller under the active RLS policy, oldest first — the order the branches were created in, which is the order of the numbers in their asset codes (SCRUM-67).
  *     tags:
  *       - Branches
  *     responses:
@@ -16,12 +16,12 @@
  *               items:
  *                 $ref: '#/components/schemas/Branch'
  *       401:
- *         description: Authentication is required.
+ *         description: Bạn cần đăng nhập để thực hiện thao tác này.
  *       500:
  *         description: An unexpected server error occurred.
  *   post:
  *     summary: Create a branch
- *     description: Creates a branch together with its GPS geofence. Restricted to the organization's OWNER (`branch:manage`, SCRUM-59) and enforced by RLS.
+ *     description: Creates a branch together with its GPS geofence. Restricted to the organization's OWNER (`branch:manage`, SCRUM-59) and enforced by RLS. SCRUM-67 — the branch also receives its own asset number, which prefixes every asset code of its facilities (`01HSVH-0001`).
  *     tags:
  *       - Branches
  *     requestBody:
@@ -77,14 +77,21 @@
  *       400:
  *         description: The request body is invalid, including a manager_id that names no account in your organization or names an account that is not a MANAGER (SCRUM-63).
  *       401:
- *         description: Authentication is required.
+ *         description: Bạn cần đăng nhập để thực hiện thao tác này.
  *       403:
  *         description: The caller's role may not manage branches (SCRUM-59, owner only).
+ *       409:
+ *         description: Another branch was created in the same instant, so the next asset number could not be claimed — saving the form again succeeds (SCRUM-67).
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
  *       500:
  *         description: An unexpected server error occurred.
  */
 import { NextResponse } from "next/server";
 
+import { BranchAssetPrefixConflictError } from "@/lib/domain/errors/BranchAssetPrefixConflictError";
 import { BranchManagerNotFoundError } from "@/lib/domain/errors/BranchManagerNotFoundError";
 import { BranchManagerRoleError } from "@/lib/domain/errors/BranchManagerRoleError";
 import { SupabaseBranchRepository } from "@/lib/infrastructure/repositories/SupabaseBranchRepository";
@@ -105,7 +112,7 @@ export async function GET() {
 
     if (authError || !user) {
       return NextResponse.json(
-        { error: "Authentication is required." },
+        { error: "Bạn cần đăng nhập để thực hiện thao tác này." },
         { status: 401 },
       );
     }
@@ -117,7 +124,7 @@ export async function GET() {
   } catch (error) {
     console.error("Failed to list branches", error);
     return NextResponse.json(
-      { error: "Unable to retrieve branches." },
+      { error: "Không thể tải danh sách chi nhánh." },
       { status: 500 },
     );
   }
@@ -129,7 +136,7 @@ export async function POST(request: Request) {
   try {
     body = await request.json();
   } catch {
-    return NextResponse.json({ error: "Invalid JSON body." }, { status: 400 });
+    return NextResponse.json({ error: "Nội dung yêu cầu phải là JSON hợp lệ." }, { status: 400 });
   }
 
   const parsed = parseBranchRequest(body);
@@ -162,9 +169,16 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: error.message }, { status: 400 });
     }
 
+    // SCRUM-67: two branches created at the same instant race for the same asset number. The repository
+    // already retried once, so this is the rare second loss and the branch was not created — a `409`
+    // telling the owner to save again, not a `500`.
+    if (error instanceof BranchAssetPrefixConflictError) {
+      return NextResponse.json({ error: error.message }, { status: 409 });
+    }
+
     console.error("Failed to create branch", error);
     return NextResponse.json(
-      { error: "Unable to create branch." },
+      { error: "Không thể tạo chi nhánh." },
       { status: 500 },
     );
   }

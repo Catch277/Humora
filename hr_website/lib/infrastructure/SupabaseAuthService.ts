@@ -60,7 +60,7 @@ export class SupabaseAuthService implements IAuthService {
     }
 
     if (!data.user) {
-      throw new Error("Unable to sign up: Supabase returned no user.");
+      throw new Error("Không thể đăng ký: Supabase không trả về người dùng nào.");
     }
 
     // With email confirmation on, Supabase answers a known address with a user that has no

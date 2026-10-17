@@ -6,9 +6,11 @@
  *     description: |
  *       Reverse geocoding for the branch form: the pin on the map becomes the "Địa chỉ" text, so the
  *       operator does not have to type it. Addresses come from Nominatim (OpenStreetMap) — the same
- *       project the branch map draws its tiles from — and need no API key. The coordinate must be
+ *       project the branch map draws its tiles from — and need no API key; when that provider cannot be
+ *       reached the lookup is retried against Photon, which serves the same OpenStreetMap data and is
+ *       keyless too, so `503` means *both* providers failed. The coordinate must be
  *       inside Vietnamese territory, exactly the rule the geofence itself enforces. `address` is
- *       null when the provider knows no address for that point; `503` when it cannot be reached.
+ *       null when the providers know no address for that point; `503` when neither can be reached.
  *     tags:
  *       - Branches
  *     parameters:
@@ -42,7 +44,7 @@
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  *       401:
- *         description: Authentication is required.
+ *         description: Bạn cần đăng nhập để thực hiện thao tác này.
  *         content:
  *           application/json:
  *             schema:
@@ -64,7 +66,9 @@ import { type NextRequest, NextResponse } from "next/server";
 
 import { ReverseGeocodingUnavailableError } from "@/lib/domain/errors/ReverseGeocodingUnavailableError";
 import { isInsideVietnam } from "@/lib/geo/vietnam";
+import { FallbackReverseGeocodingService } from "@/lib/infrastructure/FallbackReverseGeocodingService";
 import { NominatimReverseGeocodingService } from "@/lib/infrastructure/NominatimReverseGeocodingService";
+import { PhotonReverseGeocodingService } from "@/lib/infrastructure/PhotonReverseGeocodingService";
 import { createSupabaseServerClient } from "@/lib/infrastructure/supabaseClient";
 import { ReverseGeocodeUseCase } from "@/lib/usecases/ReverseGeocodeUseCase";
 
@@ -81,7 +85,7 @@ export async function GET(request: NextRequest) {
     rawLongitude.trim() === ""
   ) {
     return NextResponse.json(
-      { error: "latitude and longitude are required." },
+      { error: "Cần có latitude và longitude." },
       { status: 400 },
     );
   }
@@ -126,13 +130,19 @@ export async function GET(request: NextRequest) {
 
     if (authError || !user) {
       return NextResponse.json(
-        { error: "Authentication is required." },
+        { error: "Bạn cần đăng nhập để thực hiện thao tác này." },
         { status: 401 },
       );
     }
 
+    // Two providers, tried in order (SCRUM-64): Nominatim first — the project the map tiles come from —
+    // and Photon as the fallback, because one unreachable host, rate limit or outage must not take the
+    // address field down with it. `FallbackReverseGeocodingService` holds the rule in one place.
     const reverseGeocode = new ReverseGeocodeUseCase(
-      new NominatimReverseGeocodingService(),
+      new FallbackReverseGeocodingService([
+        new NominatimReverseGeocodingService(),
+        new PhotonReverseGeocodingService(),
+      ]),
     );
     const address = await reverseGeocode.execute(latitude, longitude);
 
@@ -144,7 +154,7 @@ export async function GET(request: NextRequest) {
 
     console.error("Failed to look up the address", error);
     return NextResponse.json(
-      { error: "Unable to look up the address." },
+      { error: "Không thể tra cứu địa chỉ." },
       { status: 500 },
     );
   }

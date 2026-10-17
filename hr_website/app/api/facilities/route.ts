@@ -29,7 +29,7 @@
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  *       401:
- *         description: Authentication is required.
+ *         description: Bạn cần đăng nhập để thực hiện thao tác này.
  *         content:
  *           application/json:
  *             schema:
@@ -48,7 +48,7 @@
  *               $ref: '#/components/schemas/ErrorResponse'
  *   post:
  *     summary: Create a facility
- *     description: Registers one facility of a branch. Restricted to managers (`facility:manage`, SCRUM-59) and enforced by RLS.
+ *     description: Registers one facility of a branch. Restricted to managers (`facility:manage`, SCRUM-59) and enforced by RLS. SCRUM-67 — the asset code is generated from the branch (`{số chi nhánh}{viết tắt chi nhánh}-{số}`, e.g. `01HSVH-0001`, then `-0002`) and the field is read-only in the UI, so a body that sends a non-empty `code` answers `400`.
  *     tags:
  *       - Facilities
  *     requestBody:
@@ -65,13 +65,13 @@
  *             schema:
  *               $ref: '#/components/schemas/Facility'
  *       400:
- *         description: The request body is invalid.
+ *         description: The request body is invalid, it sends a `code` (SCRUM-67), or `category` is not one of the organization's facility categories (SCRUM-65).
  *         content:
  *           application/json:
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  *       401:
- *         description: Authentication is required.
+ *         description: Bạn cần đăng nhập để thực hiện thao tác này.
  *         content:
  *           application/json:
  *             schema:
@@ -80,6 +80,12 @@
  *         description: The caller's role may not manage facilities (SCRUM-59), or they do not head that branch (SCRUM-61).
  *       404:
  *         description: The branch does not exist or is not visible to the caller.
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       409:
+ *         description: The asset code is already used by another facility of the organization (SCRUM-66).
  *         content:
  *           application/json:
  *             schema:
@@ -95,6 +101,8 @@ import { NextResponse, type NextRequest } from "next/server";
 
 import { BranchForbiddenError } from "@/lib/domain/errors/BranchForbiddenError";
 import { BranchNotFoundError } from "@/lib/domain/errors/BranchNotFoundError";
+import { FacilityCategoryNotFoundError } from "@/lib/domain/errors/FacilityCategoryNotFoundError";
+import { FacilityCodeConflictError } from "@/lib/domain/errors/FacilityCodeConflictError";
 import { SupabaseBranchRepository } from "@/lib/infrastructure/repositories/SupabaseBranchRepository";
 import { SupabaseFacilityRepository } from "@/lib/infrastructure/repositories/SupabaseFacilityRepository";
 import { CreateFacilityUseCase } from "@/lib/usecases/CreateFacilityUseCase";
@@ -107,7 +115,7 @@ export async function GET(request: NextRequest) {
 
   if (branchId && !UUID_PATTERN.test(branchId)) {
     return NextResponse.json(
-      { error: "branch_id must be a UUID." },
+      { error: "branch_id phải là UUID." },
       { status: 400 },
     );
   }
@@ -130,7 +138,7 @@ export async function GET(request: NextRequest) {
   } catch (error) {
     console.error("Failed to list facilities", error);
     return NextResponse.json(
-      { error: "Unable to retrieve facilities." },
+      { error: "Không thể tải danh sách thiết bị." },
       { status: 500 },
     );
   }
@@ -142,7 +150,7 @@ export async function POST(request: Request) {
   try {
     body = await request.json();
   } catch {
-    return NextResponse.json({ error: "Invalid JSON body." }, { status: 400 });
+    return NextResponse.json({ error: "Nội dung yêu cầu phải là JSON hợp lệ." }, { status: 400 });
   }
 
   const parsed = parseFacilityRequest(body);
@@ -179,9 +187,22 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: error.message }, { status: 404 });
     }
 
+    // SCRUM-65: the category comes from the organization's catalogue, so an unknown one is the caller's
+    // input problem (a stale form or a hand-made body) — `400`, not the foreign key's `500`.
+    if (error instanceof FacilityCategoryNotFoundError) {
+      return NextResponse.json({ error: error.message }, { status: 400 });
+    }
+
+    // SCRUM-66/67: the asset code is unique per organization. A generated code only lands here through
+    // the race between two saves that picked the same number at the same moment, which is not a server
+    // failure but a retry — so the caller reads `409`, not `500`.
+    if (error instanceof FacilityCodeConflictError) {
+      return NextResponse.json({ error: error.message }, { status: 409 });
+    }
+
     console.error("Failed to create facility", error);
     return NextResponse.json(
-      { error: "Unable to create facility." },
+      { error: "Không thể tạo thiết bị." },
       { status: 500 },
     );
   }

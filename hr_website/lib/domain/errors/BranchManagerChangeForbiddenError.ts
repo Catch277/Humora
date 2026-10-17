@@ -6,7 +6,7 @@
  */
 export class BranchManagerChangeForbiddenError extends Error {
   constructor() {
-    super("Only the organization's OWNER may change who heads a branch.");
+    super("Chỉ chủ sở hữu tổ chức mới đổi được người phụ trách chi nhánh.");
     this.name = "BranchManagerChangeForbiddenError";
   }
 }

@@ -34,7 +34,7 @@
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  *       401:
- *         description: Authentication is required.
+ *         description: Bạn cần đăng nhập để thực hiện thao tác này.
  *         content:
  *           application/json:
  *             schema:
@@ -82,12 +82,12 @@ export async function POST(
   const body = await readJsonObject(request);
 
   if (!body) {
-    return NextResponse.json({ error: "Invalid JSON body." }, { status: 400 });
+    return NextResponse.json({ error: "Nội dung yêu cầu phải là JSON hợp lệ." }, { status: 400 });
   }
 
   if (typeof body.accept !== "boolean") {
     return NextResponse.json(
-      { error: "accept must be a boolean." },
+      { error: "accept phải là true/false." },
       { status: 400 },
     );
   }
@@ -113,7 +113,7 @@ export async function POST(
 
     console.error("Failed to answer the shift swap", error);
     return NextResponse.json(
-      { error: "Unable to answer the shift swap." },
+      { error: "Không thể phản hồi yêu cầu chuyển ca." },
       { status: 500 },
     );
   }

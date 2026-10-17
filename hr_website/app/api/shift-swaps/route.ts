@@ -75,7 +75,7 @@
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  *       401:
- *         description: Authentication is required.
+ *         description: Bạn cần đăng nhập để thực hiện thao tác này.
  *         content:
  *           application/json:
  *             schema:
@@ -125,7 +125,7 @@
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  *       401:
- *         description: Authentication is required.
+ *         description: Bạn cần đăng nhập để thực hiện thao tác này.
  *         content:
  *           application/json:
  *             schema:
@@ -181,7 +181,7 @@ export async function GET(request: Request) {
   if (branchId) {
     if (!UUID_PATTERN.test(branchId)) {
       return NextResponse.json(
-        { error: "branch_id must be a UUID." },
+        { error: "branch_id phải là UUID." },
         { status: 400 },
       );
     }
@@ -192,7 +192,7 @@ export async function GET(request: Request) {
   if (status) {
     if (!isShiftSwapStatus(status)) {
       return NextResponse.json(
-        { error: "status is not a valid swap status." },
+        { error: "status không phải trạng thái chuyển ca hợp lệ." },
         { status: 400 },
       );
     }
@@ -219,7 +219,7 @@ export async function GET(request: Request) {
   } catch (error) {
     console.error("Failed to list shift swaps", error);
     return NextResponse.json(
-      { error: "Unable to list the shift swaps." },
+      { error: "Không thể tải danh sách chuyển ca." },
       { status: 500 },
     );
   }
@@ -229,7 +229,7 @@ export async function POST(request: Request) {
   const body = await readJsonObject(request);
 
   if (!body) {
-    return NextResponse.json({ error: "Invalid JSON body." }, { status: 400 });
+    return NextResponse.json({ error: "Nội dung yêu cầu phải là JSON hợp lệ." }, { status: 400 });
   }
 
   const reason = optionalString(body.reason);
@@ -239,14 +239,14 @@ export async function POST(request: Request) {
     typeof body.target_employee_id !== "string"
   ) {
     return NextResponse.json(
-      { error: "assignment_id and target_employee_id are required strings." },
+      { error: "assignment_id và target_employee_id là bắt buộc và phải là chuỗi." },
       { status: 400 },
     );
   }
 
   if (reason === undefined) {
     return NextResponse.json(
-      { error: "reason must be a string or null." },
+      { error: "reason phải là chuỗi hoặc null." },
       { status: 400 },
     );
   }
@@ -278,7 +278,7 @@ export async function POST(request: Request) {
 
     console.error("Failed to request the shift swap", error);
     return NextResponse.json(
-      { error: "Unable to request the shift swap." },
+      { error: "Không thể gửi yêu cầu chuyển ca." },
       { status: 500 },
     );
   }

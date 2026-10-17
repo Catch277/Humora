@@ -37,13 +37,13 @@
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  *       401:
- *         description: Authentication is required.
+ *         description: Bạn cần đăng nhập để thực hiện thao tác này.
  *         content:
  *           application/json:
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  *       403:
- *         description: The account has no user profile.
+ *         description: Tài khoản chưa có hồ sơ người dùng.
  *         content:
  *           application/json:
  *             schema:
@@ -74,12 +74,12 @@ export async function POST(request: Request) {
   try {
     body = await request.json();
   } catch {
-    return NextResponse.json({ error: "Invalid JSON body." }, { status: 400 });
+    return NextResponse.json({ error: "Nội dung yêu cầu phải là JSON hợp lệ." }, { status: 400 });
   }
 
   if (typeof body.name !== "string") {
     return NextResponse.json(
-      { error: "name is required and must be a string." },
+      { error: "name là bắt buộc và phải là chuỗi." },
       { status: 400 },
     );
   }
@@ -105,7 +105,7 @@ export async function POST(request: Request) {
     }
 
     return NextResponse.json(
-      { error: "Unable to create the organization." },
+      { error: "Không thể tạo tổ chức." },
       { status: 500 },
     );
   }

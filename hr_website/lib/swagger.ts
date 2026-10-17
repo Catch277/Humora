@@ -183,11 +183,35 @@ export function getApiDocs() {
               },
             },
           },
+          PasswordResetRequest: {
+            type: "object",
+            required: ["email"],
+            properties: {
+              email: {
+                type: "string",
+                format: "email",
+                example: "hr.lead@humora.vn",
+              },
+            },
+          },
+          PasswordResetResult: {
+            type: "object",
+            required: ["success", "email"],
+            properties: {
+              success: {
+                type: "boolean",
+                description:
+                  "Luôn true khi yêu cầu đã được chuyển cho Supabase Auth — câu trả lời không thay đổi dù email có tồn tại hay không, để không ai dò được danh sách nhân sự.",
+              },
+              email: { type: "string", format: "email" },
+            },
+          },
           Branch: {
             type: "object",
             required: [
               "id",
               "name",
+              "asset_prefix",
               "address",
               "manager_id",
               "latitude",
@@ -199,6 +223,13 @@ export function getApiDocs() {
             properties: {
               id: { type: "string", format: "uuid" },
               name: { type: "string" },
+              asset_prefix: {
+                type: "integer",
+                nullable: true,
+                minimum: 1,
+                description:
+                  "Số thứ tự chi nhánh (SCRUM-67), cấp một lần khi tạo và không bao giờ cấp lại: nó là tiền tố mã tài sản của mọi thiết bị thuộc chi nhánh (`01HSVH-0001`), nên đổi tên chi nhánh không làm tem đã dán sai. `null` với chi nhánh tạo trước SCRUM-67 — mã tài sản khi đó chỉ còn phần viết tắt.",
+              },
               address: { type: "string", nullable: true },
               manager_id: {
                 type: "string",
@@ -494,6 +525,8 @@ export function getApiDocs() {
               "check_in_distance_m",
               "check_in_photo_url",
               "check_out_photo_url",
+              "worked_seconds",
+              "resumed_at",
               "status",
               "note",
               "complaint",
@@ -549,6 +582,18 @@ export function getApiDocs() {
               },
               check_in_photo_url: { type: "string", nullable: true },
               check_out_photo_url: { type: "string", nullable: true },
+              worked_seconds: {
+                type: "integer",
+                description:
+                  "Tổng thời gian đã làm (giây) do database tích luỹ (SCRUM-69): mỗi lần ra ca cộng thêm đoạn kể từ giờ vào — hoặc từ lần vào ca lại gần nhất — nên khoảng nghỉ giữa ra ca và vào ca lại không bị tính.",
+              },
+              resumed_at: {
+                type: "string",
+                format: "date-time",
+                nullable: true,
+                description:
+                  "Thời điểm bắt đầu đoạn làm hiện tại sau khi vào ca lại (SCRUM-69); null khi ca chưa từng được mở lại.",
+              },
               status: {
                 type: "string",
                 enum: ["ON_TIME", "LATE", "EARLY_LEAVE", "ABSENT", "INCOMPLETE"],
@@ -766,9 +811,30 @@ export function getApiDocs() {
               user_id: { type: "string", format: "uuid" },
               title: { type: "string" },
               body: { type: "string" },
-              type: { type: "string", description: "Notification type (e.g. request_approved, shift_changed)." },
+              type: {
+                type: "string",
+                description:
+                  "A code written by the notification triggers (SCRUM-70/71/72) and labelled by " +
+                  "lib/domain/notificationCatalog.ts: REVENUE_OPENED, REVENUE_CLOSED, REVENUE_DIFF, " +
+                  "REQUEST_CREATED, REQUEST_APPROVED, REQUEST_REJECTED, REQUEST_REVIEWED, " +
+                  "SHIFT_ASSIGNED, SHIFT_CHANGED, SHIFT_REMOVED, SHIFT_LEAVE, ATTENDANCE_LATE, " +
+                  "ATTENDANCE_OUTSIDE, ATTENDANCE_EARLY_LEAVE, ATTENDANCE_RESUMED, " +
+                  "ATTENDANCE_CORRECTED, ATTENDANCE_VERIFIED, ATTENDANCE_COMPLAINT, " +
+                  "COMPLAINT_RESOLVED, ACCOUNT_CREATED, ACCOUNT_PASSWORD_RESET, STAFF_ROLE_CHANGED, " +
+                  "STAFF_OFFBOARDED, STAFF_BRANCH_CHANGED, BRANCH_CREATED, BRANCH_UPDATED, " +
+                  "BRANCH_DELETED, BRANCH_MANAGER_ASSIGNED, FACILITY_CREATED, FACILITY_UPDATED, " +
+                  "FACILITY_DELETED, FACILITY_MOVED, FACILITY_CATEGORY_CREATED, " +
+                  "ORGANIZATION_MEMBER_JOINED, ORGANIZATION_INVITED, ORGANIZATION_UPDATED.",
+              },
               is_read: { type: "boolean" },
-              related_entity_type: { type: "string", nullable: true },
+              related_entity_type: {
+                type: "string",
+                nullable: true,
+                description:
+                  "What the notification is about (revenue, request, shift_assignment, attendance, " +
+                  "user, branch, facility, facility_category, organization); the app turns it into " +
+                  "the \"Xem\" link.",
+              },
               related_entity_id: { type: "string", format: "uuid", nullable: true },
               created_at: { type: "string", format: "date-time" },
             },
@@ -922,19 +988,15 @@ export function getApiDocs() {
               code: {
                 type: "string",
                 nullable: true,
-                description: "Mã tài sản / số serial trên tem thiết bị.",
+                description:
+                  "Mã tài sản (SCRUM-67) — hệ thống tự sinh, không sửa và không gửi được: `{số chi nhánh}{viết tắt chi nhánh}-{số}`, ví dụ `01HSVH-0001` (chi nhánh chưa có số thứ tự thì mã chỉ còn phần viết tắt). Phần viết tắt lấy chữ đầu của từng từ trong tên chi nhánh (dấu được bỏ, `Quận 10` → `Q10`), phần số lấy theo chi nhánh và duy nhất trong tổ chức. `null` chỉ với thiết bị tạo trước khi có SCRUM-66 — lần lưu kế tiếp sẽ cấp mã mới.",
+                example: "01HSVH-0001",
               },
               category: {
                 type: "string",
-                enum: [
-                  "KITCHEN",
-                  "COLD_STORAGE",
-                  "FURNITURE",
-                  "ELECTRICAL",
-                  "CLEANING",
-                  "OTHER",
-                ],
-                description: "Nhóm thiết bị (Khu pha chế, Bảo quản lạnh, ...).",
+                description:
+                  "Mã nhóm thiết bị (SCRUM-65), phải thuộc danh mục `facility_categories` của tổ chức — xem GET /api/facility-categories.",
+                example: "KITCHEN",
               },
               quantity: {
                 type: "integer",
@@ -960,22 +1022,18 @@ export function getApiDocs() {
           },
           FacilityWriteRequest: {
             type: "object",
+            description:
+              "Thân yêu cầu tạo/sửa thiết bị. Mã tài sản không nằm trong thân yêu cầu (SCRUM-67): hệ thống tự sinh theo chi nhánh, nên gửi thêm `code` sẽ nhận `400`.",
             required: ["branch_id", "name"],
             properties: {
               branch_id: { type: "string", format: "uuid" },
               name: { type: "string", maxLength: 120 },
-              code: { type: "string", maxLength: 60, nullable: true },
               category: {
                 type: "string",
-                enum: [
-                  "KITCHEN",
-                  "COLD_STORAGE",
-                  "FURNITURE",
-                  "ELECTRICAL",
-                  "CLEANING",
-                  "OTHER",
-                ],
+                pattern: "^[A-Z0-9_]{1,60}$",
                 default: "OTHER",
+                description:
+                  "Mã nhóm thiết bị lấy từ GET /api/facility-categories (SCRUM-65); gửi mã không có trong danh mục của tổ chức sẽ nhận `400`.",
               },
               quantity: { type: "integer", minimum: 1, maximum: 9999, default: 1 },
               condition: {
@@ -989,6 +1047,43 @@ export function getApiDocs() {
                 nullable: true,
               },
               note: { type: "string", maxLength: 500, nullable: true },
+            },
+          },
+          FacilityCategory: {
+            type: "object",
+            required: ["id", "organization_id", "code", "name", "created_at"],
+            properties: {
+              id: { type: "string", format: "uuid" },
+              organization_id: {
+                type: "string",
+                format: "uuid",
+                description: "Tổ chức sở hữu danh mục (SCRUM-65).",
+              },
+              code: {
+                type: "string",
+                description:
+                  "Giá trị lưu trong `facilities.category`: chữ hoa, chỉ A-Z, 0-9 và `_`.",
+                example: "KITCHEN",
+              },
+              name: {
+                type: "string",
+                description: "Tên nhóm hiển thị trên màn hình.",
+                example: "Khu pha chế",
+              },
+              created_at: { type: "string", format: "date-time" },
+            },
+          },
+          FacilityCategoryWriteRequest: {
+            type: "object",
+            required: ["name"],
+            properties: {
+              name: {
+                type: "string",
+                maxLength: 60,
+                description:
+                  "Tên nhóm thiết bị, duy nhất trong tổ chức; `code` được sinh tự động từ tên này.",
+                example: "Máy móc",
+              },
             },
           },
           ReverseGeocodeResult: {

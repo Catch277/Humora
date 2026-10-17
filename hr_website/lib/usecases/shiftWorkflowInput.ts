@@ -31,7 +31,7 @@ export function assertDate(value: string, label: string): void {
 /** Today in business time, or later: a shift that has already been worked cannot be requested. */
 export function assertNotInThePast(workDate: string, now: Date): void {
   if (workDate < getBusinessDay(now)) {
-    throw new ShiftWorkflowInputError("work_date must be today or later.");
+    throw new ShiftWorkflowInputError("Ngày làm việc phải từ hôm nay trở đi.");
   }
 }
 
@@ -71,7 +71,7 @@ export function normalizeDecision(
   const reason = normalizeShiftNote(rejectReason, "reject_reason");
 
   if (!reason) {
-    throw new ShiftWorkflowInputError("A reason is required to reject a request.");
+    throw new ShiftWorkflowInputError("Cần nêu lý do khi từ chối đơn.");
   }
 
   return reason;

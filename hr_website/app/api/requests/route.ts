@@ -37,7 +37,7 @@
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  *       401:
- *         description: Authentication is required.
+ *         description: Bạn cần đăng nhập để thực hiện thao tác này.
  *         content:
  *           application/json:
  *             schema:
@@ -102,13 +102,13 @@
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  *       401:
- *         description: Authentication is required.
+ *         description: Bạn cần đăng nhập để thực hiện thao tác này.
  *         content:
  *           application/json:
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  *       403:
- *         description: The account has no user profile, the role may not file a request (SCRUM-59 — the organization's OWNER never does, SCRUM-63), the account is not assigned to a branch yet, or it names a branch other than its own (SCRUM-63).
+ *         description: The account has no user profile, the role may not file a request (SCRUM-59 — the organization's OWNER never does, SCRUM-63), the account is not assigned to a branch yet, or it names a branch other than its own — or, for a manager, a branch they do not head (SCRUM-61/63).
  *         content:
  *           application/json:
  *             schema:
@@ -134,6 +134,7 @@ import {
   MAX_REQUEST_TITLE_LENGTH,
   REQUEST_TYPES,
 } from "@/lib/domain/entities/RequestEntity";
+import { BranchForbiddenError } from "@/lib/domain/errors/BranchForbiddenError";
 import { BranchNotFoundError } from "@/lib/domain/errors/BranchNotFoundError";
 import { RequestBranchForbiddenError } from "@/lib/domain/errors/RequestBranchForbiddenError";
 import { RequestBranchNotAssignedError } from "@/lib/domain/errors/RequestBranchNotAssignedError";
@@ -160,7 +161,7 @@ export async function GET(request: NextRequest) {
 
   if (branchId && !UUID_PATTERN.test(branchId)) {
     return NextResponse.json(
-      { error: "branch_id must be a UUID or all." },
+      { error: "branch_id phải là UUID hoặc all." },
       { status: 400 },
     );
   }
@@ -174,7 +175,7 @@ export async function GET(request: NextRequest) {
 
     if (authError || !user) {
       return NextResponse.json(
-        { error: "Authentication is required." },
+        { error: "Bạn cần đăng nhập để thực hiện thao tác này." },
         { status: 401 },
       );
     }
@@ -188,7 +189,7 @@ export async function GET(request: NextRequest) {
   } catch (error) {
     console.error("Failed to list requests", error);
     return NextResponse.json(
-      { error: "Unable to retrieve requests." },
+      { error: "Không thể tải danh sách đơn từ." },
       { status: 500 },
     );
   }
@@ -207,7 +208,7 @@ export async function POST(request: Request) {
   try {
     body = await request.json();
   } catch {
-    return NextResponse.json({ error: "Invalid JSON body." }, { status: 400 });
+    return NextResponse.json({ error: "Nội dung yêu cầu phải là JSON hợp lệ." }, { status: 400 });
   }
 
   if (
@@ -215,14 +216,14 @@ export async function POST(request: Request) {
     !UUID_PATTERN.test(body.branch_id)
   ) {
     return NextResponse.json(
-      { error: "branch_id is required and must be a UUID." },
+      { error: "branch_id là bắt buộc và phải là UUID." },
       { status: 400 },
     );
   }
 
   if (!isRequestType(body.request_type)) {
     return NextResponse.json(
-      { error: `request_type must be one of: ${REQUEST_TYPES.join(", ")}.` },
+      { error: `request_type phải là một trong: ${REQUEST_TYPES.join(", ")}.` },
       { status: 400 },
     );
   }
@@ -234,7 +235,7 @@ export async function POST(request: Request) {
   ) {
     return NextResponse.json(
       {
-        error: `title is required and must be at most ${MAX_REQUEST_TITLE_LENGTH} characters.`,
+        error: `title là bắt buộc và tối đa ${MAX_REQUEST_TITLE_LENGTH} ký tự.`,
       },
       { status: 400 },
     );
@@ -250,7 +251,7 @@ export async function POST(request: Request) {
   ) {
     return NextResponse.json(
       {
-        error: `content must be a string of at most ${MAX_REQUEST_CONTENT_LENGTH} characters.`,
+        error: `content tối đa ${MAX_REQUEST_CONTENT_LENGTH} ký tự.`,
       },
       { status: 400 },
     );
@@ -291,8 +292,10 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: error.message }, { status: 400 });
     }
 
-    // SCRUM-63: an employee files for their own branch, and an unassigned account files nothing.
+    // SCRUM-63: an employee files for their own branch, an unassigned account files nothing, and a
+    // manager files only for a branch they head (`BranchForbiddenError`).
     if (
+      error instanceof BranchForbiddenError ||
       error instanceof RequestBranchNotAssignedError ||
       error instanceof RequestBranchForbiddenError
     ) {
@@ -301,7 +304,7 @@ export async function POST(request: Request) {
 
     console.error("Failed to submit request", error);
     return NextResponse.json(
-      { error: "Unable to submit the request." },
+      { error: "Không thể gửi đơn." },
       { status: 500 },
     );
   }

@@ -39,7 +39,7 @@
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  *       401:
- *         description: Authentication is required.
+ *         description: Bạn cần đăng nhập để thực hiện thao tác này.
  *         content:
  *           application/json:
  *             schema:
@@ -64,12 +64,12 @@ export async function POST(request: Request) {
   try {
     body = await request.json();
   } catch {
-    return NextResponse.json({ error: "Invalid JSON body." }, { status: 400 });
+    return NextResponse.json({ error: "Nội dung yêu cầu phải là JSON hợp lệ." }, { status: 400 });
   }
 
   if (typeof body.password !== "string") {
     return NextResponse.json(
-      { error: "password is required and must be a string." },
+      { error: "password là bắt buộc và phải là chuỗi." },
       { status: 400 },
     );
   }
@@ -83,7 +83,7 @@ export async function POST(request: Request) {
 
     if (authError || !user) {
       return NextResponse.json(
-        { error: "Authentication is required." },
+        { error: "Bạn cần đăng nhập để thực hiện thao tác này." },
         { status: 401 },
       );
     }
@@ -98,14 +98,14 @@ export async function POST(request: Request) {
   } catch (error) {
     if (
       error instanceof Error &&
-      error.message.startsWith("password must")
+      error.message.startsWith("password")
     ) {
       return NextResponse.json({ error: error.message }, { status: 400 });
     }
 
     console.error("Failed to change password", error);
     return NextResponse.json(
-      { error: "Unable to change the password." },
+      { error: "Không thể đổi mật khẩu." },
       { status: 500 },
     );
   }

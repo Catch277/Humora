@@ -12,13 +12,20 @@ import {
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
+import { useLocale } from "@/components/LocaleProvider";
+import { useProfile } from "@/components/ProfileProvider";
 import { roleLabel } from "@/lib/accessPolicy";
+import { canManageBranch } from "@/lib/domain/branchScope";
 import type {
   EmployeeStatus,
   EmployeeStatusValue,
 } from "@/lib/domain/entities/EmployeeStatus";
+import { formatDate, formatTime } from "@/lib/i18n/format";
+import { employeeStatusLabel, geofenceLabel } from "@/lib/i18n/labels";
+import { errorMessageFor } from "@/lib/i18n/serverMessages";
 
-type Branch = { id: string; name: string };
+// SCRUM-63 needs `manager_id`: it is what says whether the caller heads the branch.
+type Branch = { id: string; name: string; manager_id: string | null };
 
 type LoadResult = {
   statuses: EmployeeStatus[];
@@ -27,15 +34,6 @@ type LoadResult = {
   /** Only sent on the first load of a filter change; the poll reuses the list already held. */
   branches?: Branch[];
   error: string | null;
-};
-
-const STATUS_LABELS: Record<EmployeeStatusValue, string> = {
-  WORKING: "Đang làm việc",
-  NOT_STARTED: "Chưa vào ca",
-  ON_LEAVE: "Nghỉ phép",
-  FINISHED: "Đã tan ca",
-  NO_SHIFT: "Không có ca hôm nay",
-  RESIGNED: "Đã nghỉ việc",
 };
 
 const STATUS_BADGES: Record<EmployeeStatusValue, string> = {
@@ -51,33 +49,6 @@ const ALL = "all";
 
 /** The giám sát screens refresh themselves; design.md documents the 60s poll. */
 const POLL_INTERVAL_MS = 60_000;
-
-const timeFormatter = new Intl.DateTimeFormat("vi-VN", {
-  timeZone: "Asia/Bangkok",
-  hour: "2-digit",
-  minute: "2-digit",
-});
-
-function formatTime(value: string | null): string {
-  if (!value) {
-    return "--:--";
-  }
-
-  const parsed = new Date(value);
-
-  return Number.isNaN(parsed.getTime()) ? "--:--" : timeFormatter.format(parsed);
-}
-
-/** `YYYY-MM-DD` → `DD/MM/YYYY`, without going through `Date` so no timezone shifts the day. */
-function formatBusinessDate(value: string): string {
-  if (!value) {
-    return "—";
-  }
-
-  const [year, month, day] = value.split("-");
-
-  return `${day}/${month}/${year}`;
-}
 
 /** The check-in point is valid when it is inside the branch radius (SCRUM-22). */
 function isInsideGeofence(status: EmployeeStatus): boolean | null {
@@ -98,6 +69,13 @@ function initials(fullName: string): string {
 }
 
 export default function EmployeeStatusPage() {
+  // SCRUM-63: the API already returns only the branches this caller runs, so the branch filter offers
+  // the same set — a filter that could only ever answer "không có ai" would be a lie on screen.
+  const { profile, can } = useProfile();
+  const { locale, t } = useLocale();
+  const viewerId = profile?.id ?? null;
+  const managesAllBranches = can("branch:manage");
+
   const [statuses, setStatuses] = useState<EmployeeStatus[]>([]);
   const [branches, setBranches] = useState<Branch[]>([]);
   const [loading, setLoading] = useState(true);
@@ -139,7 +117,7 @@ export default function EmployeeStatusPage() {
           statuses: [],
           updatedAt: "",
           workDate: "",
-          error: data?.error ?? "Không thể tải trạng thái nhân viên.",
+          error: errorMessageFor(statusResponse.status, data, t),
         };
       }
 
@@ -178,7 +156,7 @@ export default function EmployeeStatusPage() {
         return;
       }
 
-      setPageError("Không thể kết nối tới máy chủ. Vui lòng thử lại.");
+      setPageError(t("error.network"));
       setLoading(false);
     }
 
@@ -193,13 +171,23 @@ export default function EmployeeStatusPage() {
       cancelled = true;
       clearInterval(timer);
     };
-  }, [branchFilter, reloadToken]);
+  }, [branchFilter, reloadToken, t]);
 
   function refresh() {
     setLoading(true);
     setPageError("");
     setReloadToken((token) => token + 1);
   }
+
+  // A branch the caller does not head is not in the API's answer either, so the filter lists the same
+  // branches the roster can contain (SCRUM-63).
+  const scopedBranches = useMemo(
+    () =>
+      branches.filter((branch) =>
+        canManageBranch(branch, { userId: viewerId, managesAllBranches }),
+      ),
+    [branches, viewerId, managesAllBranches],
+  );
 
   const filtered = useMemo(() => {
     const keyword = query.trim().toLowerCase();
@@ -209,11 +197,13 @@ export default function EmployeeStatusPage() {
     }
 
     return statuses.filter((status) =>
-      `${status.full_name} ${roleLabel(status.role)} ${status.branch_name ?? ""}`
+      `${status.full_name} ${roleLabel(status.role, t)} ${status.branch_name ?? ""}`
         .toLowerCase()
         .includes(keyword),
     );
-  }, [statuses, query]);
+    // `t` belongs in the deps: the predicate searches a *localized* role label, so typing "manager" in
+    // English mode must not keep matching against the Vietnamese one until an unrelated re-render.
+  }, [statuses, query, t]);
 
   const workingCount = statuses.filter((s) => s.status === "WORKING").length;
   const notStartedCount = statuses.filter((s) => s.status === "NOT_STARTED").length;
@@ -228,20 +218,19 @@ export default function EmployeeStatusPage() {
       <div className="flex flex-col justify-between gap-3 lg:flex-row lg:items-end">
         <div>
           <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-slate-400">
-            Nhân sự / Giám sát · SCRUM-22
+            {t("employeeStatus.eyebrow")}
           </p>
           <h1 className="text-2xl font-bold tracking-tight text-slate-900">
-            Trạng thái làm việc nhân viên
+            {t("employeeStatus.title")}
           </h1>
           <p className="mt-1 text-xs text-slate-500">
-            Ai đang trong ca, ai chưa vào ca, ai nghỉ phép — cập nhật từ bảng công ngày{" "}
-            {formatBusinessDate(workDate)}.
+            {t("employeeStatus.subtitle", { date: formatDate(workDate, locale) })}
           </p>
         </div>
         <div className="flex items-center gap-2 self-start">
           <span className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-surface px-3 py-2 text-[10px] text-slate-500">
             <Clock3 size={12} className="text-slate-400" />
-            Cập nhật lúc {formatTime(updatedAt)}
+            {t("employeeStatus.updatedAt", { time: formatTime(updatedAt, locale, "--:--") })}
           </span>
           <button
             type="button"
@@ -250,7 +239,7 @@ export default function EmployeeStatusPage() {
             className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-surface px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
           >
             <RefreshCw size={14} className={loading ? "animate-spin" : undefined} />
-            Làm mới
+            {t("common.reload")}
           </button>
         </div>
       </div>
@@ -259,7 +248,7 @@ export default function EmployeeStatusPage() {
         <article className="rounded-xl border border-slate-200/80 border-b-2 border-b-emerald-200 bg-surface p-4 shadow-sm">
           <div className="flex items-start justify-between gap-3">
             <p className="max-w-44 text-[10px] font-semibold uppercase leading-relaxed tracking-wide text-slate-500">
-              Đang làm việc
+              {t("employeeStatus.working")}
             </p>
             <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-emerald-50 text-emerald-600">
               <UserCheck size={16} />
@@ -269,14 +258,14 @@ export default function EmployeeStatusPage() {
             {workingCount}
           </p>
           <p className="mt-1 text-[10px] text-emerald-600">
-            Đã chấm công vào và chưa tan ca
+            {t("employeeStatus.kpiWorkingNote")}
           </p>
         </article>
 
         <article className="rounded-xl border border-slate-200/80 border-b-2 border-b-amber-200 bg-surface p-4 shadow-sm">
           <div className="flex items-start justify-between gap-3">
             <p className="max-w-44 text-[10px] font-semibold uppercase leading-relaxed tracking-wide text-slate-500">
-              Chưa vào ca
+              {t("employeeStatus.notStarted")}
             </p>
             <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-amber-50 text-amber-600">
               <Clock3 size={16} />
@@ -286,14 +275,14 @@ export default function EmployeeStatusPage() {
             {notStartedCount}
           </p>
           <p className="mt-1 text-[10px] text-amber-600">
-            Có ca hôm nay nhưng chưa chấm công
+            {t("employeeStatus.kpiNotStartedNote")}
           </p>
         </article>
 
         <article className="rounded-xl border border-slate-200/80 border-b-2 border-b-blue-200 bg-surface p-4 shadow-sm">
           <div className="flex items-start justify-between gap-3">
             <p className="max-w-44 text-[10px] font-semibold uppercase leading-relaxed tracking-wide text-slate-500">
-              Nghỉ phép
+              {t("employeeStatus.onLeave")}
             </p>
             <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-blue-50 text-primary">
               <CalendarOff size={16} />
@@ -303,14 +292,14 @@ export default function EmployeeStatusPage() {
             {onLeaveCount}
           </p>
           <p className="mt-1 text-[10px] text-slate-500">
-            {finishedCount} người đã tan ca
+            {t("employeeStatus.kpiFinishedNote", { count: finishedCount })}
           </p>
         </article>
 
         <article className="rounded-xl border border-slate-200/80 border-b-2 border-b-rose-200 bg-surface p-4 shadow-sm">
           <div className="flex items-start justify-between gap-3">
             <p className="max-w-44 text-[10px] font-semibold uppercase leading-relaxed tracking-wide text-slate-500">
-              Chấm công ngoài vùng
+              {t("employeeStatus.kpiOutside")}
             </p>
             <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-rose-50 text-rose-600">
               <MapPin size={16} />
@@ -320,7 +309,7 @@ export default function EmployeeStatusPage() {
             {outsideCount}
           </p>
           <p className="mt-1 text-[10px] text-rose-600">
-            Khoảng cách vượt bán kính cho phép
+            {t("employeeStatus.kpiOutsideNote")}
           </p>
         </article>
       </div>
@@ -339,30 +328,38 @@ export default function EmployeeStatusPage() {
           <label className="flex items-center gap-2 rounded-lg border border-slate-200 bg-app px-3 py-2 text-xs xl:w-72">
             <Search size={14} className="shrink-0 text-slate-400" />
             <input
-              aria-label="Tìm nhân viên"
+              aria-label={t("employeeStatus.searchAria")}
               value={query}
               onChange={(event) => setQuery(event.target.value)}
-              placeholder="Tìm theo tên, vai trò, chi nhánh"
+              placeholder={t("employeeStatus.searchPlaceholder")}
               className="w-full bg-transparent outline-none placeholder:text-slate-400"
             />
           </label>
 
           <div className="flex flex-wrap items-center gap-2">
             <select
-              aria-label="Lọc theo chi nhánh"
+              aria-label={t("common.filterBranchAria")}
               value={branchFilter}
               onChange={(event) => setBranchFilter(event.target.value)}
               className="rounded-lg border border-slate-200 bg-surface px-3 py-2 text-xs outline-none focus:border-primary"
             >
-              <option value={ALL}>Tất cả chi nhánh</option>
-              {branches.map((branch) => (
+              <option value={ALL}>
+                {managesAllBranches
+                  ? t("common.allBranches")
+                  : t("employeeStatus.allBranchesScoped")}
+              </option>
+              {scopedBranches.map((branch) => (
                 <option key={branch.id} value={branch.id}>
                   {branch.name}
                 </option>
               ))}
             </select>
             <p className="text-[10px] text-slate-400">
-              {filtered.length} nhân sự · tự động làm mới mỗi phút
+              {managesAllBranches
+                ? t("employeeStatus.count", { count: filtered.length })
+                : t("employeeStatus.countScoped", { count: filtered.length })}
+              {" · "}
+              {t("employeeStatus.autoRefresh")}
             </p>
           </div>
         </div>
@@ -371,12 +368,12 @@ export default function EmployeeStatusPage() {
           <table className="w-full min-w-[1000px] text-left text-xs">
             <thead className="bg-surface-muted text-[9px] font-semibold uppercase tracking-wide text-slate-500">
               <tr>
-                <th className="px-4 py-3">Nhân viên</th>
-                <th className="px-4 py-3">Chi nhánh hôm nay</th>
-                <th className="px-4 py-3">Ca</th>
-                <th className="px-4 py-3">Chấm công</th>
-                <th className="px-4 py-3">Vị trí</th>
-                <th className="px-4 py-3">Trạng thái</th>
+                <th className="px-4 py-3">{t("common.employee")}</th>
+                <th className="px-4 py-3">{t("employeeStatus.columnBranch")}</th>
+                <th className="px-4 py-3">{t("employeeStatus.columnShift")}</th>
+                <th className="px-4 py-3">{t("employeeStatus.columnAttendance")}</th>
+                <th className="px-4 py-3">{t("employeeStatus.columnLocation")}</th>
+                <th className="px-4 py-3">{t("common.status")}</th>
               </tr>
             </thead>
             <tbody>
@@ -385,7 +382,7 @@ export default function EmployeeStatusPage() {
                   <td colSpan={6} className="px-4 py-10 text-center text-slate-400">
                     <span className="inline-flex items-center gap-2">
                       <Loader2 size={14} className="animate-spin text-primary" />
-                      Đang tải trạng thái nhân viên...
+                      {t("employeeStatus.loading")}
                     </span>
                   </td>
                 </tr>
@@ -395,8 +392,8 @@ export default function EmployeeStatusPage() {
                 <tr className="border-t border-slate-100">
                   <td colSpan={6} className="px-4 py-10 text-center text-slate-400">
                     {statuses.length === 0
-                      ? "Chưa có nhân sự nào để hiển thị — hãy chạy SCRUM-22 và tạo tài khoản/hồ sơ"
-                      : "Không tìm thấy nhân viên phù hợp"}
+                      ? t("employeeStatus.emptyNoData")
+                      : t("employeeStatus.emptyFiltered")}
                   </td>
                 </tr>
               )}
@@ -420,7 +417,7 @@ export default function EmployeeStatusPage() {
                               {status.full_name}
                             </p>
                             <p className="mt-0.5 text-[11px] text-slate-500">
-                              {roleLabel(status.role)}
+                              {roleLabel(status.role, t)}
                             </p>
                           </div>
                         </div>
@@ -434,14 +431,14 @@ export default function EmployeeStatusPage() {
                       <td className="px-4 py-4 tabular-nums text-slate-600">
                         <span className="inline-flex items-center gap-1">
                           <Clock3 size={12} className="text-slate-400" />
-                          {formatTime(status.check_in_at)} →{" "}
-                          {formatTime(status.check_out_at)}
+                          {formatTime(status.check_in_at, locale, "--:--")} →{" "}
+                          {formatTime(status.check_out_at, locale, "--:--")}
                         </span>
                       </td>
                       <td className="px-4 py-4">
                         {inside === null ? (
                           <span className="text-[11px] text-slate-400">
-                            Chưa có toạ độ
+                            {t("employeeStatus.noCoordinates")}
                           </span>
                         ) : (
                           <span
@@ -456,7 +453,7 @@ export default function EmployeeStatusPage() {
                             ) : (
                               <MapPin size={12} />
                             )}
-                            {inside ? "Trong vùng" : "Ngoài vùng"}
+                            {geofenceLabel(inside ? "INSIDE" : "OUTSIDE", t)}
                           </span>
                         )}
                         {status.check_in_distance_m !== null && (
@@ -474,7 +471,7 @@ export default function EmployeeStatusPage() {
                             STATUS_BADGES[status.status]
                           }`}
                         >
-                          {STATUS_LABELS[status.status]}
+                          {employeeStatusLabel(status.status, t)}
                         </span>
                       </td>
                     </tr>

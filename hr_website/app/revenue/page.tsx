@@ -12,63 +12,20 @@ import {
   Wallet,
 } from "lucide-react";
 
+import { useLocale } from "@/components/LocaleProvider";
 import { useProfile } from "@/components/ProfileProvider";
 import { asArray } from "@/lib/asArray";
 import { canManageBranch, defaultBranchId } from "@/lib/domain/branchScope";
 import type { Branch } from "@/lib/domain/entities/Branch";
 import type { RevenueRecord } from "@/lib/domain/entities/RevenueRecord";
+import { formatCurrency, formatDateTime } from "@/lib/i18n/format";
+import { errorMessageFor } from "@/lib/i18n/serverMessages";
 import { getBusinessDay } from "@/lib/usecases/businessDay";
 
 /** Vietnamese cash denominations, largest first — the order a drawer is counted in. */
 const DENOMINATIONS = [
   500_000, 200_000, 100_000, 50_000, 20_000, 10_000, 5_000, 2_000, 1_000,
 ];
-
-const currency = new Intl.NumberFormat("vi-VN");
-
-function formatCurrency(value: number): string {
-  return `${currency.format(Math.round(value))} ₫`;
-}
-
-function formatDateTime(value: string | null): string {
-  if (!value) {
-    return "—";
-  }
-
-  const parsed = new Date(value);
-
-  if (Number.isNaN(parsed.getTime())) {
-    return "—";
-  }
-
-  return new Intl.DateTimeFormat("vi-VN", {
-    day: "2-digit",
-    month: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    timeZone: "Asia/Bangkok",
-  }).format(parsed);
-}
-
-function errorMessage(status: number, serverMessage?: string): string {
-  if (status === 401) {
-    return "Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.";
-  }
-
-  if (status === 409) {
-    return "Hôm nay chi nhánh này đã khai báo mở ca rồi.";
-  }
-
-  if (status === 404) {
-    return "Chưa có khai báo mở ca cho hôm nay. Hãy mở ca trước khi chốt.";
-  }
-
-  if (status === 400) {
-    return serverMessage ?? "Số tiền không hợp lệ.";
-  }
-
-  return serverMessage ?? "Không thực hiện được thao tác. Vui lòng thử lại.";
-}
 
 const inputClassName =
   "w-full rounded-lg border border-slate-200 p-2.5 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-blue-500/15";
@@ -77,6 +34,7 @@ export default function RevenuePage() {
   // SCRUM-61: the owner works across every branch, a chi nhánh trưởng only their own. This screen is
   // per branch, so the picker opens on the branch the caller manages and grays out the others.
   const { profile, can } = useProfile();
+  const { locale, t } = useLocale();
   const viewerId = profile?.id ?? null;
   const managesAllBranches = can("branch:manage");
   const viewer = { userId: viewerId, managesAllBranches };
@@ -156,7 +114,7 @@ export default function RevenuePage() {
 
         return {
           records: [],
-          error: errorMessage(response.status, data?.error),
+          error: errorMessageFor(response.status, data, t),
         };
       }
 
@@ -182,14 +140,14 @@ export default function RevenuePage() {
         }
 
         setRecords([]);
-        setPageError("Không thể kết nối tới máy chủ. Vui lòng thử lại.");
+        setPageError(t("error.network"));
         setLoading(false);
       });
 
     return () => {
       cancelled = true;
     };
-  }, [branchId, reloadToken]);
+  }, [branchId, reloadToken, t]);
 
   function refresh() {
     setLoading(true);
@@ -235,7 +193,7 @@ export default function RevenuePage() {
     }
 
     if (!Number.isFinite(amount) || amount < 0) {
-      setPageError("Số tiền đầu ca phải là số không âm.");
+      setPageError(t("revenue.error.openNotNegative"));
       return;
     }
 
@@ -255,14 +213,16 @@ export default function RevenuePage() {
         const data = (await response.json().catch(() => null)) as {
           error?: string;
         } | null;
-        setPageError(errorMessage(response.status, data?.error));
+        setPageError(errorMessageFor(response.status, data, t));
         return;
       }
 
-      setNote(`Đã khai báo mở ca hôm nay với ${formatCurrency(amount)}.`);
+      setNote(
+        t("revenue.noteOpened", { amount: formatCurrency(amount, locale) }),
+      );
       refresh();
     } catch {
-      setPageError("Không thể kết nối tới máy chủ. Vui lòng thử lại.");
+      setPageError(t("error.network"));
     } finally {
       setBusy("");
     }
@@ -276,7 +236,7 @@ export default function RevenuePage() {
     }
 
     if (!Number.isFinite(amount) || amount < 0) {
-      setPageError("Số tiền cuối ca phải là số không âm.");
+      setPageError(t("revenue.error.closeNotNegative"));
       return;
     }
 
@@ -300,7 +260,7 @@ export default function RevenuePage() {
         const data = (await response.json().catch(() => null)) as {
           error?: string;
         } | null;
-        setPageError(errorMessage(response.status, data?.error));
+        setPageError(errorMessageFor(response.status, data, t));
         return;
       }
 
@@ -310,12 +270,12 @@ export default function RevenuePage() {
       };
 
       setDifference(data.revenue_difference);
-      setNote("Đã chốt ca. Số liệu đã vào báo cáo doanh thu.");
+      setNote(t("revenue.noteClosed"));
       setCounts({});
       setCloseNote("");
       refresh();
     } catch {
-      setPageError("Không thể kết nối tới máy chủ. Vui lòng thử lại.");
+      setPageError(t("error.network"));
     } finally {
       setBusy("");
     }
@@ -326,12 +286,13 @@ export default function RevenuePage() {
       <section className="flex flex-col justify-between gap-4 rounded-xl border border-slate-200/80 bg-surface p-5 shadow-sm lg:flex-row lg:items-center">
         <div>
           <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-slate-400">
-            Vận hành ca / SCRUM-39 &amp; SCRUM-40
+            {t("revenue.eyebrow")}
           </p>
-          <h1 className="text-2xl font-bold tracking-tight text-slate-900">Doanh thu</h1>
+          <h1 className="text-2xl font-bold tracking-tight text-slate-900">
+            {t("nav.revenue")}
+          </h1>
           <p className="mt-1 max-w-2xl text-xs leading-relaxed text-slate-500">
-            Khai báo tiền đầu ca khi mở ca và tiền cuối ca khi chốt ca. Mỗi chi nhánh chỉ có một
-            khai báo cho mỗi ngày kinh doanh (giờ Việt Nam).
+            {t("revenue.subtitle")}
           </p>
         </div>
         <button
@@ -341,19 +302,21 @@ export default function RevenuePage() {
           className="inline-flex shrink-0 items-center gap-2 rounded-lg border border-slate-200 bg-surface px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
         >
           <RefreshCw size={14} className={loading ? "animate-spin" : ""} />
-          Tải lại
+          {t("common.reload")}
         </button>
       </section>
 
       <section className="flex flex-wrap items-center gap-3 rounded-xl border border-slate-200/80 bg-surface p-4 shadow-sm">
         <label className="text-xs font-semibold text-slate-600">
-          Chi nhánh
+          {t("common.branch")}
           <select
             value={branchId}
             onChange={(event) => setRequestedBranchId(event.target.value)}
             className={`mt-1 ${inputClassName}`}
           >
-            {branches.length === 0 && <option value="">Chưa có chi nhánh</option>}
+            {branches.length === 0 && (
+              <option value="">{t("revenue.noBranch")}</option>
+            )}
             {branches.map((branch) => {
               const manageable = manageableIds.has(branch.id);
 
@@ -366,7 +329,7 @@ export default function RevenuePage() {
                   disabled={grayOutForeign && !manageable}
                 >
                   {branch.name}
-                  {manageable ? "" : " — chỉ xem"}
+                  {manageable ? "" : t("common.readOnlySuffix")}
                 </option>
               );
             })}
@@ -374,11 +337,11 @@ export default function RevenuePage() {
         </label>
         {branchId && !canManageSelected && (
           <p className="text-[11px] font-semibold text-amber-600">
-            Bạn không phụ trách chi nhánh này — chỉ xem được dữ liệu, không mở hay chốt ca được.
+            {t("revenue.foreignBranch")}
           </p>
         )}
         <p className="text-[11px] text-slate-500">
-          Ngày kinh doanh hôm nay: <b className="text-slate-700">{today}</b>
+          {t("revenue.todayLead")} <b className="text-slate-700">{today}</b>
         </p>
       </section>
 
@@ -405,8 +368,9 @@ export default function RevenuePage() {
           }`}
         >
           <CircleDollarSign size={16} />
-          Doanh thu ca vừa chốt: <b className="tabular-nums">{formatCurrency(difference)}</b>{" "}
-          (âm là chốt thiếu so với tiền đầu ca)
+          {t("revenue.differenceLead")}{" "}
+          <b className="tabular-nums">{formatCurrency(difference, locale)}</b>{" "}
+          {t("revenue.differenceNote")}
         </div>
       )}
 
@@ -417,9 +381,9 @@ export default function RevenuePage() {
               <Unlock size={18} />
             </span>
             <div>
-              <h2 className="font-bold text-slate-900">Mở ca hôm nay</h2>
+              <h2 className="font-bold text-slate-900">{t("revenue.openTitle")}</h2>
               <p className="mt-0.5 text-xs text-slate-500">
-                Số tiền mặt có trong két khi bắt đầu ngày.
+                {t("revenue.openHint")}
               </p>
             </div>
           </div>
@@ -427,19 +391,21 @@ export default function RevenuePage() {
           {todayRecord ? (
             <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50 px-4 py-3">
               <p className="text-xs font-semibold text-slate-700">
-                Đã khai báo mở ca lúc {formatDateTime(todayRecord.created_at)}
+                {t("revenue.openedAt", {
+                  time: formatDateTime(todayRecord.created_at, locale),
+                })}
               </p>
               <p className="mt-1 text-2xl font-bold tabular-nums text-slate-900">
-                {formatCurrency(todayRecord.open_amount)}
+                {formatCurrency(todayRecord.open_amount, locale)}
               </p>
               <p className="mt-1 text-[10px] text-slate-500">
-                Mỗi chi nhánh chỉ mở ca một lần mỗi ngày, nên biểu mẫu này đã đóng.
+                {t("revenue.openOnce")}
               </p>
             </div>
           ) : (
             <div className="mt-4 space-y-3">
               <label className="block text-xs font-semibold text-slate-600">
-                Tiền đầu ca (VND)
+                {t("revenue.openAmountLabel")}
                 <input
                   type="number"
                   min={0}
@@ -460,7 +426,7 @@ export default function RevenuePage() {
                 ) : (
                   <Unlock size={15} />
                 )}
-                Khai báo mở ca
+                {t("revenue.declareOpen")}
               </button>
             </div>
           )}
@@ -472,47 +438,50 @@ export default function RevenuePage() {
               <LockKeyhole size={18} />
             </span>
             <div>
-              <h2 className="font-bold text-slate-900">Chốt ca</h2>
+              <h2 className="font-bold text-slate-900">{t("revenue.closeShift")}</h2>
               <p className="mt-0.5 text-xs text-slate-500">
-                Đếm mệnh giá hoặc nhập thẳng tổng tiền cuối ca.
+                {t("revenue.closeHint")}
               </p>
             </div>
           </div>
 
           {!todayRecord ? (
             <p className="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
-              Chưa có khai báo mở ca cho hôm nay, nên chưa thể chốt. Hãy khai báo mở ca trước.
+              {t("revenue.openFirst")}
             </p>
           ) : todayRecord.closed_at ? (
             <div className="mt-4 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3">
               <p className="text-xs font-semibold text-emerald-800">
-                Đã chốt ca lúc {formatDateTime(todayRecord.closed_at)}
+                {t("revenue.closedAt", {
+                  time: formatDateTime(todayRecord.closed_at, locale),
+                })}
               </p>
-              <div className="mt-2 grid grid-cols-3 gap-2 text-xs">
+              <div className="mt-2 grid grid-cols-1 gap-1 text-xs sm:grid-cols-3 sm:gap-2">
                 <span className="text-slate-600">
-                  Đầu ca
+                  {t("revenue.openAmount")}
                   <b className="mt-0.5 block tabular-nums text-slate-900">
-                    {formatCurrency(todayRecord.open_amount)}
+                    {formatCurrency(todayRecord.open_amount, locale)}
                   </b>
                 </span>
                 <span className="text-slate-600">
-                  Cuối ca
+                  {t("revenue.closeAmount")}
                   <b className="mt-0.5 block tabular-nums text-slate-900">
-                    {formatCurrency(todayRecord.close_amount ?? 0)}
+                    {formatCurrency(todayRecord.close_amount ?? 0, locale)}
                   </b>
                 </span>
                 <span className="text-slate-600">
-                  Doanh thu
+                  {t("revenue.revenue")}
                   <b className="mt-0.5 block tabular-nums text-primary">
                     {formatCurrency(
                       (todayRecord.close_amount ?? 0) - todayRecord.open_amount,
+                      locale,
                     )}
                   </b>
                 </span>
               </div>
               {todayRecord.close_note && (
                 <p className="mt-2 text-[11px] text-slate-600">
-                  Ghi chú: {todayRecord.close_note}
+                  {t("revenue.closeNoteInline", { note: todayRecord.close_note })}
                 </p>
               )}
             </div>
@@ -520,8 +489,8 @@ export default function RevenuePage() {
             <div className="mt-4 space-y-3">
               <div className="rounded-lg border border-slate-200">
                 <div className="grid grid-cols-2 gap-x-4 px-3 py-2 text-[10px] font-semibold uppercase tracking-wider text-slate-400">
-                  <span>Mệnh giá</span>
-                  <span className="text-right">Số tờ</span>
+                  <span>{t("revenue.denomination")}</span>
+                  <span className="text-right">{t("revenue.denominationCount")}</span>
                 </div>
                 <div className="divide-y divide-slate-100">
                   {DENOMINATIONS.map((denomination) => (
@@ -530,7 +499,7 @@ export default function RevenuePage() {
                       className="grid grid-cols-2 items-center gap-x-4 px-3 py-1.5"
                     >
                       <span className="text-xs tabular-nums text-slate-600">
-                        {currency.format(denomination)} ₫
+                        {formatCurrency(denomination, locale)}
                       </span>
                       <input
                         type="number"
@@ -540,22 +509,26 @@ export default function RevenuePage() {
                         onChange={(event) =>
                           setCount(denomination, Number(event.target.value))
                         }
-                        aria-label={`Số tờ ${denomination}`}
+                        aria-label={t("revenue.denominationCountAria", {
+                          amount: formatCurrency(denomination, locale),
+                        })}
                         className="w-full rounded border border-slate-200 px-2 py-1 text-right text-xs tabular-nums outline-none focus:border-primary"
                       />
                     </div>
                   ))}
                 </div>
                 <div className="flex items-center justify-between border-t border-slate-100 px-3 py-2 text-xs">
-                  <span className="font-semibold text-slate-600">Tiền mặt đếm được</span>
+                  <span className="font-semibold text-slate-600">
+                    {t("revenue.countedCash")}
+                  </span>
                   <b className="tabular-nums text-slate-900">
-                    {formatCurrency(countedTotal)}
+                    {formatCurrency(countedTotal, locale)}
                   </b>
                 </div>
               </div>
 
               <label className="block text-xs font-semibold text-slate-600">
-                Tổng tiền cuối ca (VND) — tự tính từ mệnh giá, có thể sửa
+                {t("revenue.closeAmountLabel")}
                 <input
                   type="number"
                   min={0}
@@ -567,13 +540,13 @@ export default function RevenuePage() {
               </label>
 
               <label className="block text-xs font-semibold text-slate-600">
-                Ghi chú chốt ca (không bắt buộc)
+                {t("revenue.closeNoteLabel")}
                 <textarea
                   value={closeNote}
                   onChange={(event) => setCloseNote(event.target.value)}
                   rows={2}
                   maxLength={500}
-                  placeholder="Ví dụ: thiếu 50.000 ₫ do thối nhầm cho khách."
+                  placeholder={t("revenue.closeNotePlaceholder")}
                   className={`mt-1 resize-none ${inputClassName}`}
                 />
               </label>
@@ -589,7 +562,7 @@ export default function RevenuePage() {
                 ) : (
                   <LockKeyhole size={15} />
                 )}
-                Chốt ca
+                {t("revenue.closeShift")}
               </button>
             </div>
           )}
@@ -599,37 +572,37 @@ export default function RevenuePage() {
       <section className="overflow-hidden rounded-xl border border-slate-200/80 bg-surface shadow-sm">
         <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
           <div>
-            <h2 className="text-sm font-bold text-slate-900">Khai báo 7 ngày gần đây</h2>
+            <h2 className="text-sm font-bold text-slate-900">{t("revenue.recentTitle")}</h2>
             <p className="mt-0.5 text-[10px] text-slate-500">
-              Mỗi dòng là một ngày kinh doanh của chi nhánh đang chọn.
+              {t("revenue.recentHint")}
             </p>
           </div>
           <span className="flex items-center gap-1.5 text-[10px] text-slate-500">
             <Wallet size={12} />
-            {records.length} bản ghi
+            {t("revenue.recordCount", { count: records.length })}
           </span>
         </div>
 
         {recordsLoading ? (
           <div className="flex items-center justify-center gap-2 py-12 text-sm text-slate-500">
             <Loader2 size={16} className="animate-spin" />
-            Đang tải khai báo doanh thu...
+            {t("revenue.loading")}
           </div>
         ) : records.length === 0 ? (
           <p className="px-5 py-12 text-center text-xs text-slate-400">
-            Chưa có khai báo doanh thu nào cho chi nhánh này trong 7 ngày gần đây.
+            {t("revenue.empty")}
           </p>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full min-w-[820px] text-left text-sm">
               <thead className="bg-slate-50 text-[11px] uppercase tracking-wider text-slate-500">
                 <tr>
-                  <th className="px-4 py-3 font-semibold">Ngày kinh doanh</th>
-                  <th className="px-4 py-3 text-right font-semibold">Tiền đầu ca</th>
-                  <th className="px-4 py-3 text-right font-semibold">Tiền cuối ca</th>
-                  <th className="px-4 py-3 text-right font-semibold">Doanh thu</th>
-                  <th className="px-4 py-3 font-semibold">Trạng thái</th>
-                  <th className="px-4 py-3 font-semibold">Chốt lúc</th>
+                  <th className="px-4 py-3 font-semibold">{t("revenue.businessDay")}</th>
+                  <th className="px-4 py-3 text-right font-semibold">{t("revenue.openAmount")}</th>
+                  <th className="px-4 py-3 text-right font-semibold">{t("revenue.closeAmount")}</th>
+                  <th className="px-4 py-3 text-right font-semibold">{t("revenue.revenue")}</th>
+                  <th className="px-4 py-3 font-semibold">{t("common.status")}</th>
+                  <th className="px-4 py-3 font-semibold">{t("revenue.columnClosedAt")}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
@@ -645,10 +618,12 @@ export default function RevenuePage() {
                         {getBusinessDay(new Date(record.created_at))}
                       </td>
                       <td className="whitespace-nowrap px-4 py-3 text-right tabular-nums text-slate-600">
-                        {formatCurrency(record.open_amount)}
+                        {formatCurrency(record.open_amount, locale)}
                       </td>
                       <td className="whitespace-nowrap px-4 py-3 text-right tabular-nums text-slate-600">
-                        {isClosed ? formatCurrency(record.close_amount ?? 0) : "—"}
+                        {isClosed
+                          ? formatCurrency(record.close_amount ?? 0, locale)
+                          : "—"}
                       </td>
                       <td
                         className={`whitespace-nowrap px-4 py-3 text-right font-semibold tabular-nums ${
@@ -657,7 +632,7 @@ export default function RevenuePage() {
                             : "text-primary"
                         }`}
                       >
-                        {revenue === null ? "—" : formatCurrency(revenue)}
+                        {revenue === null ? "—" : formatCurrency(revenue, locale)}
                       </td>
                       <td className="whitespace-nowrap px-4 py-3">
                         <span
@@ -667,11 +642,13 @@ export default function RevenuePage() {
                               : "bg-amber-50 text-amber-700"
                           }`}
                         >
-                          {isClosed ? "Đã chốt" : "Đang mở"}
+                          {isClosed
+                            ? t("revenue.statusClosed")
+                            : t("revenue.statusOpen")}
                         </span>
                       </td>
                       <td className="whitespace-nowrap px-4 py-3 text-xs text-slate-500">
-                        {formatDateTime(record.closed_at)}
+                        {formatDateTime(record.closed_at, locale)}
                       </td>
                     </tr>
                   );
@@ -682,8 +659,8 @@ export default function RevenuePage() {
         )}
 
         <div className="border-t border-slate-100 px-4 py-3 text-[10px] text-slate-500">
-          Doanh thu chỉ được tính cho các ca <b>đã chốt</b> — đó là con số xuất hiện trong Báo cáo
-          và trên Tổng quan.
+          {t("revenue.footerLead")} <b>{t("revenue.footerSettled")}</b>{" "}
+          {t("revenue.footerTail")}
         </div>
       </section>
     </div>

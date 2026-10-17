@@ -4,7 +4,7 @@
  */
 export class MissingUserProfileError extends Error {
   constructor() {
-    super("The account has no user profile.");
+    super("Tài khoản chưa có hồ sơ người dùng.");
     this.name = "MissingUserProfileError";
   }
 }

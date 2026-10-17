@@ -35,7 +35,7 @@
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  *       401:
- *         description: Authentication is required.
+ *         description: Bạn cần đăng nhập để thực hiện thao tác này.
  *         content:
  *           application/json:
  *             schema:
@@ -75,7 +75,7 @@ export async function GET(request: NextRequest) {
 
   if (id && !UUID_PATTERN.test(id)) {
     return NextResponse.json(
-      { error: "The id query parameter must be a UUID." },
+      { error: "Tham số id phải là UUID." },
       { status: 400 },
     );
   }
@@ -94,7 +94,7 @@ export async function GET(request: NextRequest) {
       const profile = await getUser.execute(id);
 
       if (!profile) {
-        return NextResponse.json({ error: "User not found." }, { status: 404 });
+        return NextResponse.json({ error: "Không tìm thấy người dùng." }, { status: 404 });
       }
 
       return NextResponse.json(profile);
@@ -119,7 +119,7 @@ export async function GET(request: NextRequest) {
 
     console.error("Failed to load users", error);
     return NextResponse.json(
-      { error: "Unable to retrieve users." },
+      { error: "Không thể tải danh sách nhân sự." },
       { status: 500 },
     );
   }

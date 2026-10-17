@@ -2,12 +2,19 @@
  * @swagger
  * /api/attendance/check-out:
  *   post:
- *     summary: Clock out of the shift the caller is in
+ *     summary: Clock out
  *     description: |
- *       Chấm công cuối ca (SCRUM-29). Completes the caller's own open record of today (a check-in with
- *       no check-out); with several open records the most recent check-in is closed. The time is the
- *       server clock. Leaving more than 5 minutes before the shift ends sets `EARLY_LEAVE`, unless
- *       the record is already `LATE`, which is kept. A note left at check-in is kept when none is sent.
+ *       Closes one of the signed-in account's own records for the current business day (SCRUM-68):
+ *       `check_out_at`, the GPS point of the departure and the resulting status — `EARLY_LEAVE` when the
+ *       ca's end time has not been reached, otherwise the status the check-in already carried (a late
+ *       arrival is not erased by leaving on time).
+ *
+ *       Only today's own rows are considered. Without `attendance_id` the single open record is closed;
+ *       when more than one ca is still open the request must name the row (`409`/`400` rather than
+ *       closing whichever came back first). The check-in facts are never touched — a wrong time is the
+ *       manager's correction on `PATCH /api/attendance/{id}`, which records who fixed it and why.
+ *
+ *       Like the check-in, the organization's `OWNER` is refused (`403`, SCRUM-68).
  *     tags:
  *       - Attendance
  *     requestBody:
@@ -16,55 +23,56 @@
  *         application/json:
  *           schema:
  *             type: object
- *             required:
- *               - latitude
- *               - longitude
  *             properties:
+ *               attendance_id:
+ *                 type: string
+ *                 format: uuid
+ *                 nullable: true
+ *                 description: The record to close, when the caller has more than one ca open today.
  *               latitude:
  *                 type: number
- *                 minimum: -90
- *                 maximum: 90
+ *                 format: double
+ *                 nullable: true
  *                 example: 10.7769
+ *                 description: Required together with `longitude`; omit both when the device refused a location.
  *               longitude:
  *                 type: number
- *                 minimum: -180
- *                 maximum: 180
+ *                 format: double
+ *                 nullable: true
  *                 example: 106.7009
- *               photo_url:
- *                 type: string
- *                 nullable: true
- *                 maxLength: 2000
- *               note:
- *                 type: string
- *                 nullable: true
- *                 maxLength: 300
  *     responses:
  *       200:
- *         description: The attendance record with the check-out stored.
+ *         description: The closed attendance record.
  *         content:
  *           application/json:
  *             schema:
  *               $ref: '#/components/schemas/Attendance'
  *       400:
- *         description: The body is invalid.
+ *         description: The JSON body is invalid, or more than one ca is open and no `attendance_id` was sent.
  *         content:
  *           application/json:
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  *       401:
- *         description: Authentication is required.
+ *         description: Bạn cần đăng nhập để thực hiện thao tác này.
  *         content:
  *           application/json:
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  *       403:
- *         description: The account has no profile, or its role may not use the timesheet.
+ *         description: The caller is the organization's owner (SCRUM-68).
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       404:
+ *         description: No check-in was found for this business day, or the named record is not the caller's own.
  *         content:
  *           application/json:
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  *       409:
- *         description: The caller has not clocked in yet, or has already clocked out.
+ *         description: The named record has already been checked out.
  *         content:
  *           application/json:
  *             schema:
@@ -78,52 +86,75 @@
  */
 import { NextResponse } from "next/server";
 
-import {
-  clockErrorResponse,
-  parseClockBody,
-  readClockBody,
-} from "@/app/api/attendance/_lib/clock";
 import { requireCapability } from "@/app/api/_lib/requireCaller";
-import { SupabaseAttendanceClockRepository } from "@/lib/infrastructure/repositories/SupabaseAttendanceClockRepository";
-import { CheckOutUseCase } from "@/lib/usecases/CheckOutUseCase";
+import { parseCheckOutRequest } from "@/app/api/attendance/_lib/checkRequest";
+import { AttendanceAlreadyCheckedOutError } from "@/lib/domain/errors/AttendanceAlreadyCheckedOutError";
+import { AttendanceCheckInForbiddenError } from "@/lib/domain/errors/AttendanceCheckInForbiddenError";
+import { AttendanceCheckOutAmbiguousError } from "@/lib/domain/errors/AttendanceCheckOutAmbiguousError";
+import { AttendanceNotFoundError } from "@/lib/domain/errors/AttendanceNotFoundError";
+import { AttendanceNotCheckedInError } from "@/lib/domain/errors/AttendanceNotCheckedInError";
+import { SupabaseAttendanceRepository } from "@/lib/infrastructure/repositories/SupabaseAttendanceRepository";
+import { RecordCheckOutUseCase } from "@/lib/usecases/RecordCheckOutUseCase";
 
 export async function POST(request: Request) {
-  const body = await readClockBody(request);
+  let body: unknown;
 
-  if (!body) {
-    return NextResponse.json({ error: "Invalid JSON body." }, { status: 400 });
+  try {
+    body = await request.json();
+  } catch {
+    return NextResponse.json({ error: "Nội dung yêu cầu phải là JSON hợp lệ." }, { status: 400 });
   }
 
-  const parsed = parseClockBody(body);
+  const parsed = parseCheckOutRequest(body);
 
   if (!parsed.ok) {
-    return NextResponse.json({ error: parsed.message }, { status: 400 });
+    return NextResponse.json({ error: parsed.error }, { status: 400 });
   }
 
   try {
-    const caller = await requireCapability("attendance:view");
+    // The same capability as the check-in, and for the same reason: the owner does not clock in or out.
+    const caller = await requireCapability("attendance:checkin");
 
     if (!caller.ok) {
       return caller.response;
     }
 
-    const checkOut = new CheckOutUseCase(new SupabaseAttendanceClockRepository());
-    const record = await checkOut.execute({
-      ...parsed.point,
-      employeeId: caller.userId,
+    const recordCheckOut = new RecordCheckOutUseCase(
+      new SupabaseAttendanceRepository(),
+    );
+
+    const record = await recordCheckOut.execute({
+      callerId: caller.userId,
+      callerRole: caller.role,
+      attendanceId: parsed.input.attendanceId,
+      latitude: parsed.input.latitude,
+      longitude: parsed.input.longitude,
     });
 
-    return NextResponse.json(record, { status: 200 });
+    return NextResponse.json(record);
   } catch (error) {
-    const mapped = clockErrorResponse(error);
-
-    if (mapped) {
-      return mapped;
+    if (error instanceof AttendanceCheckInForbiddenError) {
+      return NextResponse.json({ error: error.message }, { status: 403 });
     }
 
-    console.error("Failed to record the check-out", error);
+    if (
+      error instanceof AttendanceNotCheckedInError ||
+      error instanceof AttendanceNotFoundError
+    ) {
+      return NextResponse.json({ error: error.message }, { status: 404 });
+    }
+
+    if (error instanceof AttendanceAlreadyCheckedOutError) {
+      return NextResponse.json({ error: error.message }, { status: 409 });
+    }
+
+    if (error instanceof AttendanceCheckOutAmbiguousError) {
+      return NextResponse.json({ error: error.message }, { status: 400 });
+    }
+
+    console.error("Failed to record check-out", error);
     return NextResponse.json(
-      { error: "Unable to record the check-out." },
+      { error: "Không thể ghi nhận ra ca." },
       { status: 500 },
     );
   }

@@ -66,7 +66,7 @@ export function parseClockBody(body: ClockBody): ParsedClockBody {
     body.note !== null &&
     typeof body.note !== "string"
   ) {
-    return { ok: false, message: "note must be a string or null." };
+    return { ok: false, message: "note phải là chuỗi hoặc null." };
   }
 
   let assignmentId: string | null = null;
@@ -76,7 +76,7 @@ export function parseClockBody(body: ClockBody): ParsedClockBody {
       typeof body.assignment_id !== "string" ||
       !UUID_PATTERN.test(body.assignment_id)
     ) {
-      return { ok: false, message: "assignment_id must be a UUID." };
+      return { ok: false, message: "assignment_id phải là UUID." };
     }
 
     assignmentId = body.assignment_id;

@@ -18,13 +18,22 @@ import {
   UserRound,
 } from "lucide-react";
 
+import { useLocale } from "@/components/LocaleProvider";
 import type { DocumentChunk } from "@/lib/domain/entities/ChatMessage";
 import type {
   KnowledgeCorpus,
   KnowledgeSources,
 } from "@/lib/domain/entities/KnowledgeSource";
+import { errorMessageFor } from "@/lib/i18n/serverMessages";
 
-/** Câu hỏi gợi ý: đều là câu hỏi về quy chế/tài liệu nội bộ — đúng phạm vi trợ lý tra cứu được. */
+/**
+ * Câu hỏi gợi ý: đều là câu hỏi về quy chế/tài liệu nội bộ — đúng phạm vi trợ lý tra cứu được.
+ *
+ * Bốn câu này **cố ý giữ tiếng Việt** dù màn hình đã đa ngôn ngữ: chúng là *truy vấn*, không phải nhãn
+ * giao diện. Câu hỏi được gửi nguyên văn tới `/api/chat/ask` rồi nhúng thành vector để dò trong
+ * `company_documents` — kho tài liệu tiếng Việt — nên dịch chúng sang tiếng Anh sẽ làm giảm chất lượng
+ * tra cứu, giống như lý do `requests.request_type` giữ nguyên giá trị lưu trong CSDL.
+ */
 const SUGGESTED_QUESTIONS = [
   "Chính sách nghỉ phép năm của công ty là bao nhiêu ngày?",
   "Thủ tục xin đổi ca làm việc như thế nào?",
@@ -55,29 +64,20 @@ function formatSimilarity(similarity: number): string {
   return `${Math.round(similarity * 100)}%`;
 }
 
-function errorMessageFor(status: number, serverMessage?: string): string {
-  if (status === 401) {
-    return "Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại rồi thử lại.";
-  }
-
-  return (
-    serverMessage ??
-    "Không thể xử lý yêu cầu. Vui lòng thử lại sau."
-  );
-}
-
 /** Bảng kê một kho tri thức: tổng số đoạn và vài tài liệu nhiều đoạn nhất. */
 function CorpusList({ label, corpus }: { label: string; corpus: KnowledgeCorpus }) {
+  const { t } = useLocale();
   const visible = corpus.documents.slice(0, 4);
   const hidden = corpus.documents.length - visible.length;
 
   return (
     <div>
       <p className="font-semibold text-slate-700">
-        {label} · {corpus.totalChunks} đoạn{corpus.truncated ? " (một phần)" : ""}
+        {label} · {t("chat.corpusChunks", { count: corpus.totalChunks })}
+        {corpus.truncated ? t("chat.corpusTruncated") : ""}
       </p>
       {corpus.totalChunks === 0 ? (
-        <p className="mt-0.5 text-slate-400">Chưa có tài liệu nào.</p>
+        <p className="mt-0.5 text-slate-400">{t("chat.corpusEmpty")}</p>
       ) : (
         <ul className="mt-0.5 space-y-0.5">
           {visible.map((document) => (
@@ -90,7 +90,11 @@ function CorpusList({ label, corpus }: { label: string; corpus: KnowledgeCorpus 
               </span>
             </li>
           ))}
-          {hidden > 0 && <li className="text-slate-400">và {hidden} tài liệu khác…</li>}
+          {hidden > 0 && (
+            <li className="text-slate-400">
+              {t("chat.corpusMore", { count: hidden })}
+            </li>
+          )}
         </ul>
       )}
     </div>
@@ -98,6 +102,7 @@ function CorpusList({ label, corpus }: { label: string; corpus: KnowledgeCorpus 
 }
 
 export default function ChatPage() {
+  const { t } = useLocale();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [isAsking, setIsAsking] = useState(false);
@@ -125,7 +130,7 @@ export default function ChatPage() {
 
         return {
           sources: null,
-          error: errorMessageFor(response.status, data?.error),
+          error: errorMessageFor(response.status, data, t),
         };
       }
 
@@ -147,14 +152,14 @@ export default function ChatPage() {
           return;
         }
 
-        setSourcesError("Không đọc được kho tri thức.");
+        setSourcesError(t("chat.error.sources"));
         setSourcesLoading(false);
       });
 
     return () => {
       cancelled = true;
     };
-  }, [sourcesReloadToken]);
+  }, [sourcesReloadToken, t]);
 
   function refreshSources() {
     setSourcesLoading(true);
@@ -201,7 +206,7 @@ export default function ChatPage() {
           {
             id: nextMessageId(),
             role: "error",
-            text: errorMessageFor(response.status, data?.error),
+            text: errorMessageFor(response.status, data, t),
             question: trimmed,
           },
         ]);
@@ -221,7 +226,7 @@ export default function ChatPage() {
           text:
             typeof data.answer === "string" && data.answer.trim() !== ""
               ? data.answer
-              : "Trợ lý không trả về nội dung nào cho câu hỏi này.",
+              : t("chat.error.answerEmpty"),
           sources: Array.isArray(data.sources)
             ? (data.sources as DocumentChunk[])
             : [],
@@ -233,7 +238,7 @@ export default function ChatPage() {
         {
           id: nextMessageId(),
           role: "error",
-          text: "Không thể kết nối tới máy chủ. Vui lòng kiểm tra kết nối và thử lại.",
+          text: t("error.network"),
           question: trimmed,
         },
       ]);
@@ -283,21 +288,21 @@ export default function ChatPage() {
           </span>
           <div>
             <h1 className="text-sm font-bold text-slate-900">
-              Trợ lý Nhân sự &amp; Vận hành Humora
+              {t("chat.title")}
             </h1>
             <p className="mt-1 text-[10px] text-slate-500">
-              Trả lời câu hỏi về quy chế, quy trình và hợp đồng nội bộ — kèm trích dẫn tài liệu.
+              {t("chat.subtitle")}
             </p>
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-1.5 text-[9px] font-medium text-slate-500">
           <span className="flex items-center gap-1 rounded-full bg-surface-muted px-2.5 py-1">
             <BookOpen size={11} className="text-primary" />
-            Tài liệu công ty
+            {t("chat.companyDocuments")}
           </span>
           <span className="flex items-center gap-1 rounded-full bg-surface-muted px-2.5 py-1">
             <FileText size={11} className="text-primary" />
-            Hợp đồng của bạn
+            {t("chat.yourContracts")}
           </span>
           <span className="flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-1 text-emerald-700">
             <Sparkles size={11} />
@@ -314,13 +319,13 @@ export default function ChatPage() {
             disabled={messages.length === 0 && input === ""}
             className="flex items-center justify-center gap-2 rounded-lg bg-primary px-3 py-2.5 text-xs font-semibold text-white shadow-sm transition-colors hover:bg-primary-strong disabled:cursor-not-allowed disabled:opacity-50"
           >
-            <PlusCircle size={15} /> Cuộc trò chuyện mới
+            <PlusCircle size={15} /> {t("chat.newConversation")}
           </button>
 
           <section>
             <div className="mb-2 flex items-center justify-between px-1">
               <h2 className="text-[9px] font-semibold uppercase tracking-wide text-slate-400">
-                Câu hỏi gợi ý
+                {t("chat.suggestedTitle")}
               </h2>
               <Sparkles size={13} className="text-primary" />
             </div>
@@ -344,13 +349,13 @@ export default function ChatPage() {
           <section className="border-t border-slate-100 pt-3">
             <div className="mb-2 flex items-center justify-between px-1">
               <h2 className="text-[9px] font-semibold uppercase tracking-wide text-slate-400">
-                Nguồn tri thức
+                {t("chat.sourcesTitle")}
               </h2>
               <button
                 type="button"
                 onClick={refreshSources}
                 disabled={sourcesLoading}
-                title="Đọc lại kho tri thức"
+                title={t("chat.reloadSourcesAria")}
                 className="text-slate-400 hover:text-primary disabled:opacity-50"
               >
                 <RotateCw size={12} className={sourcesLoading ? "animate-spin" : ""} />
@@ -360,19 +365,21 @@ export default function ChatPage() {
             {sourcesError ? (
               <p className="px-1 text-[9px] leading-relaxed text-rose-600">{sourcesError}</p>
             ) : sources === null ? (
-              <p className="px-1 text-[9px] text-slate-400">Đang đọc kho tri thức…</p>
+              <p className="px-1 text-[9px] text-slate-400">{t("chat.sourcesLoading")}</p>
             ) : sources.companyDocuments.totalChunks + sources.userContracts.totalChunks ===
               0 ? (
               <p className="px-1 text-[9px] leading-relaxed text-amber-700">
-                Kho tri thức đang <b>trống</b>: trợ lý chưa có gì để tra cứu nên mọi câu hỏi đều
-                nhận câu trả lời &ldquo;chưa có thông tin&rdquo;. Cần nhúng nội dung tài liệu vào{" "}
-                <code className="rounded bg-slate-100 px-1">company_documents</code> và hợp đồng
-                vào <code className="rounded bg-slate-100 px-1">user_contracts</code>.
+                {t("chat.sourcesEmptyLead")}{" "}
+                <b>{t("chat.sourcesEmptyBold")}</b>
+                {t("chat.sourcesEmptyTail")}{" "}
+                <code className="rounded bg-slate-100 px-1">company_documents</code>{" "}
+                {t("chat.sourcesEmptyMid")}{" "}
+                <code className="rounded bg-slate-100 px-1">user_contracts</code>.
               </p>
             ) : (
               <div className="space-y-2 px-1 text-[9px] leading-relaxed text-slate-500">
-                <CorpusList label="Tài liệu công ty" corpus={sources.companyDocuments} />
-                <CorpusList label="Hợp đồng của bạn" corpus={sources.userContracts} />
+                <CorpusList label={t("chat.companyDocuments")} corpus={sources.companyDocuments} />
+                <CorpusList label={t("chat.yourContracts")} corpus={sources.userContracts} />
               </div>
             )}
           </section>
@@ -380,31 +387,32 @@ export default function ChatPage() {
           <section className="border-t border-slate-100 pt-3">
             <div className="mb-2 flex items-center justify-between px-1">
               <h2 className="text-[9px] font-semibold uppercase tracking-wide text-slate-400">
-                Phạm vi &amp; giới hạn
+                {t("chat.scopeTitle")}
               </h2>
               <ShieldCheck size={13} className="text-emerald-600" />
             </div>
             <ul className="space-y-2 px-1 text-[9px] leading-relaxed text-slate-500">
               <li>
-                Trợ lý chỉ đọc <b className="text-slate-700">tài liệu công ty</b> và{" "}
-                <b className="text-slate-700">hợp đồng của chính bạn</b> qua tìm kiếm vector
-                trên Supabase.
+                {t("chat.scopeReadsLead")}{" "}
+                <b className="text-slate-700">{t("chat.scopeReadsDocs")}</b>{" "}
+                {t("chat.scopeReadsJoin")}{" "}
+                <b className="text-slate-700">{t("chat.scopeReadsContracts")}</b>{" "}
+                {t("chat.scopeReadsTail")}
               </li>
               <li>
-                Không tìm thấy tài liệu liên quan thì trợ lý trả lời là chưa có thông tin,
-                thay vì suy đoán.
+                {t("chat.scopeNoGuess")}
               </li>
               <li>
-                Cuộc trò chuyện <b className="text-slate-700">không được lưu</b> trên máy
-                chủ — tải lại trang là mất.
+                {t("chat.scopeNotStoredLead")}{" "}
+                <b className="text-slate-700">{t("chat.scopeNotStoredBold")}</b>{" "}
+                {t("chat.scopeNotStoredTail")}
               </li>
             </ul>
           </section>
 
           <div className="mt-auto flex items-start gap-2 rounded-lg bg-surface-muted px-2.5 py-2 text-[9px] leading-relaxed text-slate-500">
             <AlertTriangle size={14} className="mt-0.5 shrink-0 text-amber-500" />
-            Nội dung do AI sinh có thể sai hoặc thiếu — hãy kiểm tra lại với quản lý trước khi
-            áp dụng.
+            {t("chat.disclaimer")}
           </div>
         </aside>
 
@@ -422,15 +430,14 @@ export default function ChatPage() {
                       isAsking ? "bg-amber-500" : "bg-emerald-500"
                     }`}
                   />
-                  {isAsking
-                    ? "Đang tạo embedding, tra cứu tài liệu và gọi Gemini..."
-                    : "Sẵn sàng · trả lời dựa trên tài liệu nội bộ"}
+                  {isAsking ? t("chat.statusAsking") : t("chat.statusReady")}
                 </p>
               </div>
             </div>
             <span className="hidden text-[9px] text-slate-400 sm:block">
-              {messages.filter((message) => message.role === "ai").length} câu trả lời trong
-              phiên này
+              {t("chat.answerCount", {
+                count: messages.filter((message) => message.role === "ai").length,
+              })}
             </span>
           </header>
 
@@ -442,11 +449,10 @@ export default function ChatPage() {
                 </span>
                 <div>
                   <h3 className="text-xs font-bold text-slate-900">
-                    Xin chào! Mình có thể giúp gì cho bạn hôm nay?
+                    {t("chat.greeting")}
                   </h3>
                   <p className="mt-1 text-[10px] leading-relaxed text-slate-500">
-                    Hỏi về quy chế, quy trình vận hành ca hoặc nội dung hợp đồng lao động. Câu
-                    trả lời luôn kèm danh sách đoạn tài liệu đã dùng.
+                    {t("chat.greetingHint")}
                   </p>
                 </div>
                 <div className="flex flex-wrap justify-center gap-1.5">
@@ -493,7 +499,7 @@ export default function ChatPage() {
                           disabled={isAsking}
                           className="mt-2 inline-flex items-center gap-1.5 rounded-lg border border-rose-200 bg-surface px-2.5 py-1.5 text-[10px] font-semibold text-rose-700 hover:bg-rose-50 disabled:opacity-50"
                         >
-                          <RotateCw size={12} /> Thử lại
+                          <RotateCw size={12} /> {t("chat.retry")}
                         </button>
                       </div>
                     </div>
@@ -513,8 +519,10 @@ export default function ChatPage() {
                         <div className="mt-2.5 flex items-center justify-between gap-2 border-t border-slate-100 pt-2">
                           <span className="text-[9px] text-slate-400">
                             {message.sources.length > 0
-                              ? `${message.sources.length} đoạn tài liệu liên quan`
-                              : "Không tìm thấy đoạn tài liệu nào liên quan"}
+                              ? t("chat.sourcesFound", {
+                                  count: message.sources.length,
+                                })
+                              : t("chat.sourcesNone")}
                           </span>
                           <button
                             type="button"
@@ -523,11 +531,11 @@ export default function ChatPage() {
                           >
                             {copiedId === message.id ? (
                               <>
-                                <Check size={11} className="text-emerald-600" /> Đã sao chép
+                                <Check size={11} className="text-emerald-600" /> {t("chat.copied")}
                               </>
                             ) : (
                               <>
-                                <Copy size={11} /> Sao chép
+                                <Copy size={11} /> {t("chat.copy")}
                               </>
                             )}
                           </button>
@@ -539,7 +547,7 @@ export default function ChatPage() {
                           <summary className="flex cursor-pointer items-center justify-between px-3 py-2 text-[10px] font-semibold text-primary hover:underline">
                             <span className="flex items-center gap-1.5">
                               <BookOpen size={12} className="text-primary" />
-                              Trích dẫn tài liệu ({message.sources.length})
+                              {t("chat.citations", { count: message.sources.length })}
                             </span>
                             <ChevronDown size={13} className="text-slate-400" />
                           </summary>
@@ -550,11 +558,13 @@ export default function ChatPage() {
                                   <span className="flex min-w-0 items-center gap-1.5 text-[10px] font-semibold text-slate-700">
                                     <FileText size={11} className="shrink-0 text-slate-400" />
                                     <span className="truncate">
-                                      {source.source || "Tài liệu nội bộ"}
+                                      {source.source || t("chat.internalDocument")}
                                     </span>
                                   </span>
                                   <span className="shrink-0 rounded-full bg-blue-50 px-2 py-0.5 text-[9px] font-semibold tabular-nums text-primary">
-                                    Độ liên quan {formatSimilarity(source.similarity)}
+                                    {t("chat.relevance", {
+                                      percent: formatSimilarity(source.similarity),
+                                    })}
                                   </span>
                                 </div>
                                 <p className="mt-1 whitespace-pre-line text-[10px] leading-relaxed text-slate-500">
@@ -578,7 +588,7 @@ export default function ChatPage() {
                 </span>
                 <div className="flex items-center gap-2 rounded-lg bg-surface px-3 py-2 text-[10px] text-slate-500">
                   <Loader2 size={13} className="animate-spin text-primary" />
-                  Đang tra cứu tài liệu nội bộ...
+                  {t("chat.searching")}
                 </div>
               </div>
             )}
@@ -596,20 +606,20 @@ export default function ChatPage() {
                 onChange={(event) => setInput(event.target.value)}
                 onKeyDown={handleKeyDown}
                 maxLength={MAX_QUESTION_LENGTH}
-                placeholder="Hỏi trợ lý AI về quy chế công ty, thủ tục đơn từ, hoặc nội dung hợp đồng..."
+                placeholder={t("chat.inputPlaceholder")}
                 className="w-full resize-none bg-transparent px-2 py-1.5 text-xs leading-relaxed outline-none placeholder:text-slate-400"
                 disabled={isAsking}
               />
               <div className="flex items-center justify-between px-1">
                 <span className="ml-1 text-[9px] text-slate-400">
-                  Enter để gửi · Shift + Enter xuống dòng
+                  {t("chat.inputHint")}
                   {input.length > MAX_QUESTION_LENGTH - 100 &&
                     ` · ${input.length}/${MAX_QUESTION_LENGTH}`}
                 </span>
                 <button
                   type="submit"
                   disabled={input.trim() === "" || isAsking}
-                  title="Gửi câu hỏi"
+                  title={t("chat.sendAria")}
                   className="flex h-8 w-8 items-center justify-center rounded-full bg-primary text-white transition-colors hover:bg-primary-strong disabled:bg-slate-300"
                 >
                   {isAsking ? (
@@ -622,8 +632,7 @@ export default function ChatPage() {
             </form>
             <p className="mt-2 text-center text-[9px] text-slate-400">
               <ShieldCheck size={10} className="mr-1 inline text-emerald-600" />
-              Câu hỏi được gửi tới /api/chat/ask và chỉ đối chiếu với tài liệu công ty cùng hợp
-              đồng của bạn.
+              {t("chat.privacyNote")}
             </p>
           </div>
         </section>

@@ -18,13 +18,13 @@
  *             schema:
  *               $ref: '#/components/schemas/OrganizationSummary'
  *       401:
- *         description: Authentication is required.
+ *         description: Bạn cần đăng nhập để thực hiện thao tác này.
  *         content:
  *           application/json:
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  *       403:
- *         description: The account has no user profile.
+ *         description: Tài khoản chưa có hồ sơ người dùng.
  *         content:
  *           application/json:
  *             schema:
@@ -70,7 +70,7 @@
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  *       401:
- *         description: Authentication is required.
+ *         description: Bạn cần đăng nhập để thực hiện thao tác này.
  *         content:
  *           application/json:
  *             schema:
@@ -122,7 +122,7 @@ export async function GET() {
   } catch (error) {
     console.error("Failed to load organization", error);
     return NextResponse.json(
-      { error: "Unable to retrieve the organization." },
+      { error: "Không thể tải thông tin tổ chức." },
       { status: 500 },
     );
   }
@@ -134,11 +134,11 @@ export async function PATCH(request: Request) {
   try {
     body = await request.json();
   } catch {
-    return NextResponse.json({ error: "Invalid JSON body." }, { status: 400 });
+    return NextResponse.json({ error: "Nội dung yêu cầu phải là JSON hợp lệ." }, { status: 400 });
   }
 
   if (body.name !== undefined && typeof body.name !== "string") {
-    return NextResponse.json({ error: "name must be a string." }, { status: 400 });
+    return NextResponse.json({ error: "name phải là chuỗi." }, { status: 400 });
   }
 
   const wantsRename = typeof body.name === "string";
@@ -146,7 +146,7 @@ export async function PATCH(request: Request) {
 
   if (!wantsRename && !wantsRotation) {
     return NextResponse.json(
-      { error: "Send name, rotate_code, or both." },
+      { error: "Hãy gửi name, rotate_code hoặc cả hai." },
       { status: 400 },
     );
   }
@@ -194,7 +194,7 @@ export async function PATCH(request: Request) {
     }
 
     return NextResponse.json(
-      { error: "Unable to update the organization." },
+      { error: "Không thể cập nhật tổ chức." },
       { status: 500 },
     );
   }

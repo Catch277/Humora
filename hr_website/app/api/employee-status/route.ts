@@ -9,6 +9,8 @@
  *       đã tan ca, không có ca hôm nay or nghỉ việc. The day defaults to today in Asia/Bangkok.
  *       SCRUM-59: giám sát nhân sự is a management view (`employee-status:view`), so a plain
  *       employee gets `403`; SCRUM-60 narrows the rows `get_employee_status` may return.
+ *       SCRUM-63: một quản lý chi nhánh chỉ thấy nhân sự thuộc (các) chi nhánh mình phụ trách —
+ *       chủ sở hữu vẫn thấy toàn bộ tổ chức, kể cả tài khoản chưa gán chi nhánh.
  *     tags:
  *       - Employees
  *     parameters:
@@ -53,7 +55,7 @@
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  *       401:
- *         description: Authentication is required.
+ *         description: Bạn cần đăng nhập để thực hiện thao tác này.
  *         content:
  *           application/json:
  *             schema:
@@ -73,6 +75,7 @@
  */
 import { NextResponse, type NextRequest } from "next/server";
 
+import { SupabaseBranchRepository } from "@/lib/infrastructure/repositories/SupabaseBranchRepository";
 import { SupabaseEmployeeStatusRepository } from "@/lib/infrastructure/repositories/SupabaseEmployeeStatusRepository";
 import { GetEmployeeStatusUseCase } from "@/lib/usecases/GetEmployeeStatusUseCase";
 import { requireCapability } from "@/app/api/_lib/requireCaller";
@@ -105,14 +108,14 @@ export async function GET(request: NextRequest) {
 
   if (branchId && !UUID_PATTERN.test(branchId)) {
     return NextResponse.json(
-      { error: "branch_id must be a UUID." },
+      { error: "branch_id phải là UUID." },
       { status: 400 },
     );
   }
 
   if (workDate && !isCalendarDate(workDate)) {
     return NextResponse.json(
-      { error: "work_date must be a calendar date (YYYY-MM-DD)." },
+      { error: "work_date phải là ngày dạng YYYY-MM-DD." },
       { status: 400 },
     );
   }
@@ -127,8 +130,13 @@ export async function GET(request: NextRequest) {
 
     const getEmployeeStatus = new GetEmployeeStatusUseCase(
       new SupabaseEmployeeStatusRepository(),
+      new SupabaseBranchRepository(),
     );
-    const snapshot = await getEmployeeStatus.execute({ branchId, workDate });
+    // SCRUM-63: a branch head watches their own branches only, so the caller travels with the filters.
+    const snapshot = await getEmployeeStatus.execute(
+      { branchId, workDate },
+      { userId: caller.userId, role: caller.role },
+    );
 
     // The shape the giám sát screen already polls: `updated_at` + `data`.
     return NextResponse.json({
@@ -139,7 +147,7 @@ export async function GET(request: NextRequest) {
   } catch (error) {
     console.error("Failed to load employee status", error);
     return NextResponse.json(
-      { error: "Unable to retrieve employee status." },
+      { error: "Không thể tải trạng thái nhân viên." },
       { status: 500 },
     );
   }

@@ -2,17 +2,29 @@
  * @swagger
  * /api/attendance/check-in:
  *   post:
- *     summary: Clock in to a shift the schedule assigned today
+ *     summary: Clock in
  *     description: |
- *       Chấm công đầu ca (SCRUM-22). The caller clocks in for **their own** shift of today: the branch
- *       and the shift come from their `SCHEDULED` assignment, never from the request, and a request
- *       with no such assignment is refused (`404`). The time is the server clock, not the device's.
- *       The status is `LATE` when the clock-in is more than 5 minutes after the shift starts,
- *       otherwise `ON_TIME`. The distance to the branch centre is computed by the database from the
- *       coordinates; whether it is inside the allowed radius is judged on the Bảng công screen.
+ *       Records one arrival (SCRUM-68): `check_in_at`, the GPS point it was taken at and the status the
+ *       ca's hours justify (`ON_TIME`, or `LATE` beyond a five-minute grace). The distance is derived by
+ *       the database from the point against the branch centre, so it is never part of the request.
  *
- *       With exactly one shift today `assignment_id` may be omitted; with several it is required.
- *       The photo is uploaded by the app beforehand — only its address is stored here.
+ *       An `EMPLOYEE` clocks in against a ca they are scheduled for on that business day — `shift_id` is
+ *       required and the branch (and the hours) come from that assignment, which must be their own
+ *       branch. A `MANAGER` names a branch they are the chi nhánh trưởng of (SCRUM-61) and may name a ca
+ *       (`shift_id`, any template of the catalogue).
+ *
+ *       The organization's `OWNER` never clocks in (`attendance:checkin` is not theirs, SCRUM-68), so
+ *       this endpoint answers `403` for them and `attendance_insert_own` refuses the row in the database.
+ *
+ *       The point is recorded, not judged: an arrival outside the branch geofence is stored like any
+ *       other and the reviewer reads the verdict on `/attendance`.
+ *
+ *       Sending the same ca again is **"Vào ca lại"** while that ca is still running: an employee who
+ *       closed it by mistake gets the same row back, re-opened (`200`), with the giờ vào they reported
+ *       still in place — a second tap is not a second record. The status is re-derived from that giờ vào
+ *       (so a row an earlier check-out had stamped "Về sớm" reads `LATE` again when the arrival was in
+ *       fact late), and a manager's correction is never overwritten. Once the ca is over the check-out
+ *       stands (`409`), and a row that is still open is a plain duplicate (`409`).
  *     tags:
  *       - Attendance
  *     requestBody:
@@ -21,66 +33,71 @@
  *         application/json:
  *           schema:
  *             type: object
- *             required:
- *               - latitude
- *               - longitude
  *             properties:
  *               latitude:
  *                 type: number
- *                 minimum: -90
- *                 maximum: 90
+ *                 format: double
+ *                 nullable: true
  *                 example: 10.7769
+ *                 description: Required together with `longitude`; omit both when the device refused a location.
  *               longitude:
  *                 type: number
- *                 minimum: -180
- *                 maximum: 180
+ *                 format: double
+ *                 nullable: true
  *                 example: 106.7009
- *               photo_url:
- *                 type: string
- *                 nullable: true
- *                 maxLength: 2000
- *               note:
- *                 type: string
- *                 nullable: true
- *                 maxLength: 300
- *               assignment_id:
+ *               branch_id:
  *                 type: string
  *                 format: uuid
  *                 nullable: true
- *                 description: Which of today's shifts is starting. Required when there are several.
+ *                 description: The branch a MANAGER clocks in at. Required for them, ignored for an employee.
+ *               shift_id:
+ *                 type: string
+ *                 format: uuid
+ *                 nullable: true
+ *                 description: The ca being started. Required for an employee (today's `SCHEDULED` assignment); optional for a manager.
+ *               note:
+ *                 type: string
+ *                 maxLength: 500
+ *                 nullable: true
  *     responses:
  *       201:
- *         description: The attendance record that was created.
+ *         description: The created attendance record, with its derived distance and embedded branch/shift.
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Attendance'
+ *       200:
+ *         description: The existing record, re-opened ("Vào ca lại") because the ca is still running.
  *         content:
  *           application/json:
  *             schema:
  *               $ref: '#/components/schemas/Attendance'
  *       400:
- *         description: The body is invalid, or `assignment_id` is missing while there are several shifts today.
+ *         description: The JSON body is invalid, the coordinates are not a pairable pair, or a manager sent no branch.
  *         content:
  *           application/json:
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  *       401:
- *         description: Authentication is required.
+ *         description: Bạn cần đăng nhập để thực hiện thao tác này.
  *         content:
  *           application/json:
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  *       403:
- *         description: The account has no profile, or its role may not use the timesheet.
+ *         description: The caller is the organization's owner (SCRUM-68), belongs to no branch, or named a branch they do not head.
  *         content:
  *           application/json:
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  *       404:
- *         description: The caller has no scheduled shift to clock in for today.
+ *         description: The branch or the ca does not exist (or is not visible to the caller).
  *         content:
  *           application/json:
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  *       409:
- *         description: The caller already clocked in for this shift.
+ *         description: This ca is already open for today (or its working time is over, so the check-out stands), or the caller has no ca scheduled for this business day.
  *         content:
  *           application/json:
  *             schema:
@@ -94,57 +111,100 @@
  */
 import { NextResponse } from "next/server";
 
-import {
-  clockErrorResponse,
-  parseClockBody,
-  readClockBody,
-} from "@/app/api/attendance/_lib/clock";
 import { requireCapability } from "@/app/api/_lib/requireCaller";
-import { SupabaseAttendanceClockRepository } from "@/lib/infrastructure/repositories/SupabaseAttendanceClockRepository";
+import { parseCheckInRequest } from "@/app/api/attendance/_lib/checkRequest";
+import { AttendanceAlreadyCheckedInError } from "@/lib/domain/errors/AttendanceAlreadyCheckedInError";
+import { AttendanceBranchNotAssignedError } from "@/lib/domain/errors/AttendanceBranchNotAssignedError";
+import { AttendanceBranchRequiredError } from "@/lib/domain/errors/AttendanceBranchRequiredError";
+import { AttendanceCheckInForbiddenError } from "@/lib/domain/errors/AttendanceCheckInForbiddenError";
+import { AttendanceNoShiftTodayError } from "@/lib/domain/errors/AttendanceNoShiftTodayError";
+import { BranchForbiddenError } from "@/lib/domain/errors/BranchForbiddenError";
+import { BranchNotFoundError } from "@/lib/domain/errors/BranchNotFoundError";
+import { ShiftNotFoundError } from "@/lib/domain/errors/ShiftNotFoundError";
+import { SupabaseAttendanceRepository } from "@/lib/infrastructure/repositories/SupabaseAttendanceRepository";
+import { SupabaseBranchRepository } from "@/lib/infrastructure/repositories/SupabaseBranchRepository";
 import { SupabaseShiftAssignmentRepository } from "@/lib/infrastructure/repositories/SupabaseShiftAssignmentRepository";
-import { CheckInUseCase } from "@/lib/usecases/CheckInUseCase";
+import { SupabaseShiftRepository } from "@/lib/infrastructure/repositories/SupabaseShiftRepository";
+import { RecordCheckInUseCase } from "@/lib/usecases/RecordCheckInUseCase";
 
 export async function POST(request: Request) {
-  const body = await readClockBody(request);
+  let body: unknown;
 
-  if (!body) {
-    return NextResponse.json({ error: "Invalid JSON body." }, { status: 400 });
+  try {
+    body = await request.json();
+  } catch {
+    return NextResponse.json({ error: "Nội dung yêu cầu phải là JSON hợp lệ." }, { status: 400 });
   }
 
-  const parsed = parseClockBody(body);
+  const parsed = parseCheckInRequest(body);
 
   if (!parsed.ok) {
-    return NextResponse.json({ error: parsed.message }, { status: 400 });
+    return NextResponse.json({ error: parsed.error }, { status: 400 });
   }
 
   try {
-    const caller = await requireCapability("attendance:view");
+    // Clocking in is everybody's own action except the owner's (SCRUM-68). The check constraint, the use
+    // case's own rule and `attendance_insert_own` all repeat it — this is the `403` the caller reads.
+    const caller = await requireCapability("attendance:checkin");
 
     if (!caller.ok) {
       return caller.response;
     }
 
-    const checkIn = new CheckInUseCase(
-      new SupabaseAttendanceClockRepository(),
+    const recordCheckIn = new RecordCheckInUseCase(
+      new SupabaseAttendanceRepository(),
       new SupabaseShiftAssignmentRepository(),
+      new SupabaseShiftRepository(),
+      new SupabaseBranchRepository(),
     );
-    const record = await checkIn.execute({
-      ...parsed.point,
-      assignmentId: parsed.assignmentId,
-      employeeId: caller.userId,
+
+    const result = await recordCheckIn.execute({
+      callerId: caller.userId,
+      callerRole: caller.role,
+      callerBranchId: caller.profile.branch_id,
+      latitude: parsed.input.latitude,
+      longitude: parsed.input.longitude,
+      branchId: parsed.input.branchId,
+      shiftId: parsed.input.shiftId,
+      note: parsed.input.note,
     });
 
-    return NextResponse.json(record, { status: 201 });
+    // `201` when a row was created; `200` when an existing one was re-opened ("Vào ca lại"), which is the
+    // same resource being updated rather than a second one being born.
+    return NextResponse.json(result.attendance, {
+      status: result.created ? 201 : 200,
+    });
   } catch (error) {
-    const mapped = clockErrorResponse(error);
-
-    if (mapped) {
-      return mapped;
+    if (
+      error instanceof AttendanceCheckInForbiddenError ||
+      error instanceof AttendanceBranchNotAssignedError ||
+      error instanceof BranchForbiddenError
+    ) {
+      return NextResponse.json({ error: error.message }, { status: 403 });
     }
 
-    console.error("Failed to record the check-in", error);
+    if (
+      error instanceof BranchNotFoundError ||
+      error instanceof ShiftNotFoundError
+    ) {
+      return NextResponse.json({ error: error.message }, { status: 404 });
+    }
+
+    if (error instanceof AttendanceBranchRequiredError) {
+      return NextResponse.json({ error: error.message }, { status: 400 });
+    }
+
+    // `schedule:view` lets an employee read today's plan, so "no ca today" is a state, not a permission.
+    if (
+      error instanceof AttendanceAlreadyCheckedInError ||
+      error instanceof AttendanceNoShiftTodayError
+    ) {
+      return NextResponse.json({ error: error.message }, { status: 409 });
+    }
+
+    console.error("Failed to record check-in", error);
     return NextResponse.json(
-      { error: "Unable to record the check-in." },
+      { error: "Không thể ghi nhận vào ca." },
       { status: 500 },
     );
   }

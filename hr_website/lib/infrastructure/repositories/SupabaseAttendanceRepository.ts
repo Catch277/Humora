@@ -1,11 +1,14 @@
 import type {
   Attendance,
   AttendanceBranch,
+  AttendanceCheckInInput,
+  AttendanceCheckOutInput,
   AttendanceComplaintStatus,
   AttendanceCorrectionInput,
   AttendanceFilters,
   AttendanceStatus,
 } from "@/lib/domain/entities/Attendance";
+import { AttendanceAlreadyCheckedInError } from "@/lib/domain/errors/AttendanceAlreadyCheckedInError";
 import { AttendanceNotFoundError } from "@/lib/domain/errors/AttendanceNotFoundError";
 import type { IAttendanceRepository } from "@/lib/domain/repositories/IAttendanceRepository";
 import {
@@ -37,6 +40,8 @@ const ATTENDANCE_COLUMNS = [
   "check_in_distance_m",
   "check_in_photo_url",
   "check_out_photo_url",
+  "worked_seconds",
+  "resumed_at",
   "status",
   "note",
   "complaint",
@@ -86,6 +91,8 @@ type AttendanceRow = {
   check_in_distance_m: number | string | null;
   check_in_photo_url: string | null;
   check_out_photo_url: string | null;
+  worked_seconds: number | string | null;
+  resumed_at: string | null;
   status: string;
   note: string | null;
   complaint: string | null;
@@ -147,6 +154,9 @@ function toAttendance(row: AttendanceRow): Attendance {
     check_in_distance_m: optionalNumber(row.check_in_distance_m),
     check_in_photo_url: row.check_in_photo_url,
     check_out_photo_url: row.check_out_photo_url,
+    // `integer` arrives as a string like every other numeric column in this client.
+    worked_seconds: Number(row.worked_seconds ?? 0),
+    resumed_at: row.resumed_at,
     // The check constraint in SCRUM-21 keeps this inside the union.
     status: row.status as AttendanceStatus,
     note: row.note,
@@ -223,6 +233,97 @@ export class SupabaseAttendanceRepository implements IAttendanceRepository {
     }
 
     return data ? toAttendance(data as unknown as AttendanceRow) : null;
+  }
+
+  async create(input: AttendanceCheckInInput): Promise<Attendance> {
+    const supabase = await createSupabaseServerClient();
+    const { data, error } = await supabase
+      .from("attendance")
+      .insert({
+        employee_id: input.employeeId,
+        branch_id: input.branchId,
+        shift_id: input.shiftId,
+        work_date: input.workDate,
+        check_in_at: input.checkInAt,
+        check_in_latitude: input.checkInLatitude,
+        check_in_longitude: input.checkInLongitude,
+        status: input.status,
+        note: input.note,
+        // `check_in_distance_m` is not sent: `attendance_compute_distance` (SCRUM-21) derives it from
+        // the point, so the two can never disagree. `created_at` / `updated_at` have defaults.
+      })
+      .select(ATTENDANCE_COLUMNS)
+      .single();
+
+    if (error) {
+      // `attendance_employee_shift_day_idx` is unique on (employee_id, work_date, shift_id), so two
+      // saves racing for the same ca land here; the use case checks the same thing before inserting.
+      if (error.code === "23505") {
+        throw new AttendanceAlreadyCheckedInError();
+      }
+
+      throw new Error(`Unable to record the check-in: ${error.message}`);
+    }
+
+    return toAttendance(data as unknown as AttendanceRow);
+  }
+
+  async checkOut(id: string, input: AttendanceCheckOutInput): Promise<Attendance> {
+    const supabase = await createSupabaseServerClient();
+    const { data, error } = await supabase
+      .from("attendance")
+      .update({
+        check_out_at: input.checkOutAt,
+        check_out_latitude: input.checkOutLatitude,
+        check_out_longitude: input.checkOutLongitude,
+        status: input.status,
+        updated_at: new Date().toISOString(),
+        // The check-in facts stay untouched: `attendance_guard_self_update` (SCRUM-21) would refuse the
+        // update for an employee, and the times they reported are the reviewer's evidence.
+      })
+      .eq("id", id)
+      .select(ATTENDANCE_COLUMNS)
+      .maybeSingle();
+
+    if (error) {
+      throw new Error(`Unable to record the check-out: ${error.message}`);
+    }
+
+    // RLS hides rows the caller may not update, so "no row" covers both a wrong id and a forbidden
+    // update — both answer 404 to avoid leaking which ids exist.
+    if (!data) {
+      throw new AttendanceNotFoundError();
+    }
+
+    return toAttendance(data as unknown as AttendanceRow);
+  }
+
+  async reopen(id: string, status: AttendanceStatus): Promise<Attendance> {
+    const supabase = await createSupabaseServerClient();
+    const { data, error } = await supabase
+      .from("attendance")
+      .update({
+        // Only the closing columns are cleared, so an employee's `attendance_guard_self_update` is
+        // satisfied: the check-in facts they submitted stay untouched, which is what the reviewer reads.
+        check_out_at: null,
+        check_out_latitude: null,
+        check_out_longitude: null,
+        status,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", id)
+      .select(ATTENDANCE_COLUMNS)
+      .maybeSingle();
+
+    if (error) {
+      throw new Error(`Unable to re-open the check-in: ${error.message}`);
+    }
+
+    if (!data) {
+      throw new AttendanceNotFoundError();
+    }
+
+    return toAttendance(data as unknown as AttendanceRow);
   }
 
   async recordComplaint(id: string, complaint: string): Promise<Attendance> {

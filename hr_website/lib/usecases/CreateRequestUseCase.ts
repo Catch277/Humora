@@ -11,6 +11,7 @@ import { RequestInputError } from "@/lib/domain/errors/RequestInputError";
 import type { IBranchRepository } from "@/lib/domain/repositories/IBranchRepository";
 import type { IRequestRepository } from "@/lib/domain/repositories/IRequestRepository";
 import { isManagerRole } from "@/lib/domain/roles";
+import { assertBranchManagedBy } from "@/lib/usecases/branchScope";
 
 /**
  * The caller as the route handler knows it: who files, their role and the branch they belong to
@@ -45,11 +46,18 @@ export class CreateRequestUseCase {
       );
     }
 
-    // SCRUM-63: an employee works inside one branch, so their đơn must name that branch, and an
-    // account that belongs to no branch cannot file at all. A manager may file for any branch they
-    // can see — they run the operation. `requests_insert_own` repeats both halves in the database;
-    // this check is here so the caller gets a sentence instead of a policy that matched no row.
-    if (!isManagerRole(input.requesterRole)) {
+    // SCRUM-63: a đơn belongs to one branch, and the caller may only name a branch they actually work
+    // in or run. An employee works inside the branch they belong to, and an account that belongs to no
+    // branch cannot file at all; a manager files for a branch they *head* — otherwise a chi nhánh
+    // trưởng could open a đơn against somebody else's roster, where nobody but the owner could decide
+    // it. `assertBranchManagedBy` answers `403` (another branch) or `404` (unknown) instead of letting
+    // RLS match no row, which the caller would read as "not found".
+    if (isManagerRole(input.requesterRole)) {
+      await assertBranchManagedBy(this.branchRepository, input.branchId, {
+        userId: input.requesterId,
+        role: input.requesterRole,
+      });
+    } else {
       if (input.requesterBranchId === null) {
         throw new RequestBranchNotAssignedError();
       }

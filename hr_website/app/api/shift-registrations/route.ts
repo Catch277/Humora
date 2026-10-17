@@ -62,7 +62,7 @@
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  *       401:
- *         description: Authentication is required.
+ *         description: Bạn cần đăng nhập để thực hiện thao tác này.
  *         content:
  *           application/json:
  *             schema:
@@ -112,7 +112,7 @@
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  *       401:
- *         description: Authentication is required.
+ *         description: Bạn cần đăng nhập để thực hiện thao tác này.
  *         content:
  *           application/json:
  *             schema:
@@ -200,7 +200,7 @@ export async function GET(request: Request) {
   if (status) {
     if (!isShiftRegistrationStatus(status)) {
       return NextResponse.json(
-        { error: "status is not a valid registration status." },
+        { error: "status không phải trạng thái đăng ký ca hợp lệ." },
         { status: 400 },
       );
     }
@@ -229,7 +229,7 @@ export async function GET(request: Request) {
   } catch (error) {
     console.error("Failed to list shift registrations", error);
     return NextResponse.json(
-      { error: "Unable to list the shift registrations." },
+      { error: "Không thể tải danh sách đăng ký ca." },
       { status: 500 },
     );
   }
@@ -239,21 +239,21 @@ export async function POST(request: Request) {
   const body = await readJsonObject(request);
 
   if (!body) {
-    return NextResponse.json({ error: "Invalid JSON body." }, { status: 400 });
+    return NextResponse.json({ error: "Nội dung yêu cầu phải là JSON hợp lệ." }, { status: 400 });
   }
 
   const note = optionalString(body.note);
 
   if (typeof body.shift_id !== "string" || typeof body.work_date !== "string") {
     return NextResponse.json(
-      { error: "shift_id and work_date are required strings." },
+      { error: "shift_id và work_date là bắt buộc và phải là chuỗi." },
       { status: 400 },
     );
   }
 
   if (note === undefined) {
     return NextResponse.json(
-      { error: "note must be a string or null." },
+      { error: "note phải là chuỗi hoặc null." },
       { status: 400 },
     );
   }
@@ -287,7 +287,7 @@ export async function POST(request: Request) {
 
     console.error("Failed to create the shift registration", error);
     return NextResponse.json(
-      { error: "Unable to register for the shift." },
+      { error: "Không thể đăng ký ca làm việc." },
       { status: 500 },
     );
   }

@@ -21,7 +21,7 @@
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  *       401:
- *         description: Authentication is required.
+ *         description: Bạn cần đăng nhập để thực hiện thao tác này.
  *         content:
  *           application/json:
  *             schema:
@@ -87,7 +87,7 @@ export async function POST(
 
     console.error("Failed to cancel the shift registration", error);
     return NextResponse.json(
-      { error: "Unable to cancel the registration." },
+      { error: "Không thể hủy đăng ký ca." },
       { status: 500 },
     );
   }

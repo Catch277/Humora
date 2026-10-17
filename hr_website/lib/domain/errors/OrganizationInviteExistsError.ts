@@ -1,6 +1,6 @@
 export class OrganizationInviteExistsError extends Error {
   constructor() {
-    super("This email is already on the organization's list.");
+    super("Email này đã có trong danh sách của tổ chức.");
     this.name = "OrganizationInviteExistsError";
   }
 }

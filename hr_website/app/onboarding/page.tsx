@@ -11,6 +11,9 @@ import {
   Users,
 } from "lucide-react";
 
+import { useLocale } from "@/components/LocaleProvider";
+import type { Translate } from "@/lib/i18n/translate";
+
 type OrganizationSummary = {
   organization: { id: string; name: string } | null;
   member_count: number;
@@ -20,60 +23,75 @@ type OrganizationSummary = {
 const MIN_NAME_LENGTH = 2;
 
 /**
- * Vietnamese copy for the join failures. `403` covers two very different cases, and the difference
- * matters to the person typing the code, so it is read from the message the API documents
- * (`organizationErrorResponse` maps both to 403, the wording comes from the domain errors).
+ * Copy for the create failures. `t` is last, like every module-level helper on a migrated screen: a
+ * function outside the component has no hook, so the component hands it the translator.
  */
-function createErrorMessage(status: number, serverMessage?: string): string {
+function createErrorMessage(
+  status: number,
+  serverMessage: string | undefined,
+  t: Translate,
+): string {
   if (status === 401) {
-    return "Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.";
+    return t("error.sessionExpired");
   }
 
   if (status === 409) {
-    return "Tài khoản này đã thuộc một tổ chức rồi.";
+    return t("onboarding.error.alreadyMember");
   }
 
   if (status === 429) {
-    return "Bạn đã nhập sai mã quá nhiều lần. Vui lòng thử lại sau một giờ.";
+    return t("onboarding.error.tooMany");
   }
 
   if (status === 400) {
-    return `Tên tổ chức cần từ ${MIN_NAME_LENGTH} ký tự trở lên.`;
+    return t("onboarding.error.nameTooShort", { min: MIN_NAME_LENGTH });
   }
 
-  return serverMessage ?? "Không tạo được tổ chức. Vui lòng thử lại.";
+  return serverMessage ?? t("onboarding.error.createFailed");
 }
 
-function joinErrorMessage(status: number, serverMessage?: string): string {
+/**
+ * Copy for the join failures. `403` covers two very different cases, and the difference matters to the
+ * person typing the code, so it is read from the message the API documents
+ * (`organizationErrorResponse` maps both to 403, the wording comes from the domain errors). The token
+ * it matches — the English word `code` in the server's sentence — is unchanged; only the answer is
+ * translated.
+ */
+function joinErrorMessage(
+  status: number,
+  serverMessage: string | undefined,
+  t: Translate,
+): string {
   if (status === 401) {
-    return "Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.";
+    return t("error.sessionExpired");
   }
 
   if (status === 409) {
-    return "Tài khoản này đã thuộc một tổ chức rồi.";
+    return t("onboarding.error.alreadyMember");
   }
 
   if (status === 429) {
-    return "Bạn đã nhập sai mã quá nhiều lần. Vui lòng thử lại sau một giờ.";
+    return t("onboarding.error.tooMany");
   }
 
   if (status === 403) {
     return serverMessage && serverMessage.toLowerCase().includes("code")
-      ? "Mã tham gia không đúng. Hãy kiểm tra lại mã mà chủ sở hữu đã chia sẻ."
-      : "Tài khoản này chưa được tổ chức đăng ký. Hãy nhờ chủ sở hữu tạo tài khoản hoặc gửi lời mời cho email của bạn.";
+      ? t("onboarding.error.codeUnknown")
+      : t("onboarding.error.notRegistered");
   }
 
   if (status === 400) {
-    return "Mã tham gia không hợp lệ. Mã gồm 8 ký tự chữ và số.";
+    return t("onboarding.error.codeInvalid");
   }
 
-  return serverMessage ?? "Không tham gia được tổ chức. Vui lòng thử lại.";
+  return serverMessage ?? t("onboarding.error.joinFailed");
 }
 
 const inputClassName =
   "w-full rounded-lg border border-slate-200 p-2.5 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-blue-500/15";
 
 export default function OnboardingPage() {
+  const { t } = useLocale();
   const router = useRouter();
   const [organizationName, setOrganizationName] = useState("");
   const [code, setCode] = useState("");
@@ -118,14 +136,14 @@ export default function OnboardingPage() {
         const data = (await response.json().catch(() => null)) as {
           error?: string;
         } | null;
-        setError(createErrorMessage(response.status, data?.error));
+        setError(createErrorMessage(response.status, data?.error, t));
         return;
       }
 
       router.replace("/organization");
       router.refresh();
     } catch {
-      setError("Không thể kết nối tới máy chủ. Vui lòng thử lại.");
+      setError(t("error.network"));
     } finally {
       setBusy("");
     }
@@ -150,14 +168,14 @@ export default function OnboardingPage() {
         const data = (await response.json().catch(() => null)) as {
           error?: string;
         } | null;
-        setError(joinErrorMessage(response.status, data?.error));
+        setError(joinErrorMessage(response.status, data?.error, t));
         return;
       }
 
       router.replace("/");
       router.refresh();
     } catch {
-      setError("Không thể kết nối tới máy chủ. Vui lòng thử lại.");
+      setError(t("error.network"));
     } finally {
       setBusy("");
     }
@@ -167,12 +185,13 @@ export default function OnboardingPage() {
     <div className="mx-auto max-w-3xl space-y-6 py-4">
       <div>
         <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">
-          Bắt đầu / SCRUM-51
+          {t("onboarding.eyebrow")}
         </p>
-        <h1 className="mt-1 text-2xl font-bold text-slate-900">Tổ chức của bạn</h1>
+        <h1 className="mt-1 text-2xl font-bold text-slate-900">
+          {t("onboarding.title")}
+        </h1>
         <p className="mt-1 text-sm text-slate-500">
-          Tài khoản này chưa thuộc tổ chức nào. Hãy tạo tổ chức của riêng bạn — bạn sẽ là chủ sở
-          hữu — hoặc tham gia tổ chức đã có bằng mã tham gia.
+          {t("onboarding.subtitle")}
         </p>
       </div>
 
@@ -188,17 +207,18 @@ export default function OnboardingPage() {
           <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-50 text-primary">
             <Landmark size={20} />
           </span>
-          <h2 className="mt-4 font-bold text-slate-900">Tạo tổ chức mới</h2>
+          <h2 className="mt-4 font-bold text-slate-900">
+            {t("onboarding.createTitle")}
+          </h2>
           <p className="mt-1 flex-1 text-xs text-slate-500">
-            Dành cho chủ doanh nghiệp: tên chuỗi cà phê, công ty của bạn. Sau khi tạo, bạn là chủ sở
-            hữu và nhận mã tham gia để chia sẻ cho nhân viên.
+            {t("onboarding.createHint")}
           </p>
           <label className="mt-4 block text-xs font-semibold text-slate-600">
-            Tên tổ chức
+            {t("organization.nameLabel")}
             <input
               value={organizationName}
               onChange={(event) => setOrganizationName(event.target.value)}
-              placeholder="Ví dụ: Humora Coffee"
+              placeholder={t("onboarding.namePlaceholder")}
               className={`mt-1 ${inputClassName}`}
             />
           </label>
@@ -213,7 +233,7 @@ export default function OnboardingPage() {
             ) : (
               <Landmark size={15} />
             )}
-            Tạo tổ chức
+            {t("onboarding.createButton")}
           </button>
         </section>
 
@@ -221,17 +241,18 @@ export default function OnboardingPage() {
           <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600">
             <KeyRound size={20} />
           </span>
-          <h2 className="mt-4 font-bold text-slate-900">Tham gia bằng mã</h2>
+          <h2 className="mt-4 font-bold text-slate-900">
+            {t("onboarding.joinTitle")}
+          </h2>
           <p className="mt-1 flex-1 text-xs text-slate-500">
-            Dành cho nhân viên đã được chủ sở hữu đăng ký tài khoản. Mã tham gia chỉ dùng được khi
-            email của bạn đã có trong danh sách của tổ chức.
+            {t("onboarding.joinHint")}
           </p>
           <label className="mt-4 block text-xs font-semibold text-slate-600">
-            Mã tham gia
+            {t("organization.joinCodeLabel")}
             <input
               value={code}
               onChange={(event) => setCode(event.target.value.toUpperCase())}
-              placeholder="Ví dụ: K7QM2XPD"
+              placeholder={t("onboarding.codePlaceholder")}
               className={`mt-1 font-mono tracking-widest ${inputClassName}`}
             />
           </label>
@@ -246,7 +267,7 @@ export default function OnboardingPage() {
             ) : (
               <KeyRound size={15} />
             )}
-            Tham gia tổ chức
+            {t("onboarding.joinButton")}
           </button>
         </section>
       </div>
@@ -254,19 +275,19 @@ export default function OnboardingPage() {
       <div className="flex items-start gap-3 rounded-xl border border-blue-100 bg-surface-accent p-4">
         <ShieldCheck size={18} className="mt-0.5 shrink-0 text-primary" />
         <div className="text-xs text-slate-600">
-          <p className="font-semibold text-slate-800">Vì sao cần cả mã và danh sách đăng ký?</p>
+          <p className="font-semibold text-slate-800">
+            {t("onboarding.whyTitle")}
+          </p>
           <p className="mt-1">
-            Mã tham gia có thể bị lộ. Vì vậy hệ thống kiểm tra thêm một điều kiện: email của bạn phải
-            có trong danh sách tài khoản mà tổ chức đã đăng ký. Người ngoài dù biết mã vẫn không vào
-            được. Chủ sở hữu có thể đổi mã bất cứ lúc nào trong mục{" "}
-            <span className="font-medium">Tổ chức</span>.
+            {t("onboarding.whyBefore")}
+            <span className="font-medium">{t("organization.heading")}</span>.
           </p>
         </div>
       </div>
 
       <div className="flex items-center gap-2 text-xs text-slate-500">
         <Users size={14} />
-        Nếu bạn cho rằng mình đã được đăng ký, hãy nhờ chủ sở hữu kiểm tra lại đúng địa chỉ email.
+        {t("onboarding.registerHint")}
       </div>
     </div>
   );

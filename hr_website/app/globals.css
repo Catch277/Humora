@@ -127,3 +127,24 @@ body {
   background: var(--surface);
 }
 
+/* ── Small screens (below Tailwind's `md`, the breakpoint the shell switches at) ───────────────
+   iOS Safari zooms the whole page whenever a focused field computes below 16px, and every control here
+   is deliberately `text-xs`/`text-sm` (12–14px) for desktop density. One rule keeps the layout from
+   jumping when a phone user taps a field, instead of a breakpoint class on every one of ~40 inputs.
+   It deliberately sits outside every `@layer`: Tailwind v4 puts its utilities in `@layer utilities`, and
+   an unlayered declaration outranks a layered one no matter the specificity — `input` beats `.text-sm`
+   here, whereas the same rule inside `@layer base` would lose. Do not "fix" it with `!important`. */
+@media (max-width: 767px) {
+  input,
+  select,
+  textarea {
+    font-size: 16px;
+  }
+}
+
+html {
+  /* Landscape on iOS inflates body text without this, and the grey tap flash reads as a stuck button. */
+  -webkit-text-size-adjust: 100%;
+  -webkit-tap-highlight-color: transparent;
+}
+

@@ -1,6 +1,6 @@
 export class RequestNotFoundError extends Error {
   constructor() {
-    super("Request not found.");
+    super("Không tìm thấy đơn từ.");
     this.name = "RequestNotFoundError";
   }
 }

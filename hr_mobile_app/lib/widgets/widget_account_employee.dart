@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 // ==================== 1. APP BAR ====================
 class AccountAppBar extends StatelessWidget {
@@ -65,8 +66,97 @@ class AccountAppBar extends StatelessWidget {
 }
 
 // ==================== 2. PROFILE CARD ====================
-class ProfileCard extends StatelessWidget {
+class ProfileCard extends StatefulWidget {
   const ProfileCard({super.key});
+
+  @override
+  State<ProfileCard> createState() => _ProfileCardState();
+}
+
+class _ProfileCardState extends State<ProfileCard> {
+  String _fullName = 'Đang tải...';
+  String _role = 'EMPLOYEE';
+  String _branchName = 'Đang tải...';
+  bool _isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchEmployeeProfile();
+  }
+
+  Future<void> _fetchEmployeeProfile() async {
+    final user = Supabase.instance.client.auth.currentUser;
+    if (user == null) {
+      if (mounted) setState(() => _isLoading = false);
+      return;
+    }
+
+    try {
+      String resolvedFullName = '';
+      String resolvedRole = 'EMPLOYEE';
+      dynamic organizationId;
+
+      // 1. Truy vấn trực tiếp từ bảng 'users' theo user.id hoặc email đang đăng nhập
+      final userData = await Supabase.instance.client
+          .from('users')
+          .select('full_name, role, organization_id')
+          .eq('id', user.id) // Hoặc dùng .eq('email', user.email!.toLowerCase().trim())
+          .maybeSingle();
+
+      if (userData != null) {
+        if (userData['full_name'] != null &&
+            userData['full_name'].toString().trim().isNotEmpty) {
+          resolvedFullName = userData['full_name'].toString().trim();
+        }
+        if (userData['role'] != null) {
+          resolvedRole = userData['role'].toString();
+        }
+        organizationId = userData['organization_id'];
+      }
+
+      // Fallback nếu full_name bị trống trên bảng users
+      if (resolvedFullName.isEmpty) {
+        final metaName = user.userMetadata?['full_name'];
+        if (metaName != null && metaName.toString().trim().isNotEmpty) {
+          resolvedFullName = metaName.toString().trim();
+        } else {
+          resolvedFullName = 'Chưa cập nhật tên';
+        }
+      }
+
+      // 2. Lấy tên chi nhánh/công ty từ bảng 'branches' hoặc 'organizations' nếu có organizationId
+      String resolvedBranchName = 'Chưa phân chi nhánh';
+      if (organizationId != null) {
+        final orgData = await Supabase.instance.client
+            .from('organizations')
+            .select('name')
+            .eq('id', organizationId)
+            .maybeSingle();
+
+        if (orgData != null && orgData['name'] != null) {
+          resolvedBranchName = orgData['name'].toString();
+        }
+      }
+
+      if (mounted) {
+        setState(() {
+          _fullName = resolvedFullName;
+          _role = resolvedRole;
+          _branchName = resolvedBranchName;
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      debugPrint('Lỗi tải dữ liệu người dùng: $e');
+      if (mounted) {
+        setState(() {
+          _fullName = 'Chưa cập nhật tên';
+          _isLoading = false;
+        });
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -141,18 +231,20 @@ class ProfileCard extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text(
-                        'Nguyễn Văn An',
-                        style: TextStyle(
+                      Text(
+                        _isLoading ? 'Đang tải...' : _fullName,
+                        style: const TextStyle(
                           color: Colors.white,
                           fontSize: 20,
                           fontWeight: FontWeight.bold,
                         ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
                       const SizedBox(height: 2),
-                      const Text(
-                        'Senior Software Engineer',
-                        style: TextStyle(
+                      Text(
+                        _role,
+                        style: const TextStyle(
                           color: Colors.white70,
                           fontSize: 13,
                         ),
@@ -166,9 +258,9 @@ class ProfileCard extends StatelessWidget {
                               color: Colors.white.withOpacity(0.2),
                               borderRadius: BorderRadius.circular(6),
                             ),
-                            child: const Text(
-                              '#NV-2048',
-                              style: TextStyle(
+                            child: Text(
+                              '#$_role',
+                              style: const TextStyle(
                                 color: Colors.white,
                                 fontSize: 11,
                                 fontWeight: FontWeight.bold,
@@ -176,9 +268,13 @@ class ProfileCard extends StatelessWidget {
                             ),
                           ),
                           const SizedBox(width: 6),
-                          const Text(
-                            '• Khối Công nghệ & SP',
-                            style: TextStyle(color: Colors.white70, fontSize: 11),
+                          Expanded(
+                            child: Text(
+                              '• $_branchName',
+                              style: const TextStyle(color: Colors.white70, fontSize: 11),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
                           ),
                         ],
                       ),
@@ -449,10 +545,10 @@ class WorkInfoCard extends StatelessWidget {
               ),
               child: Row(
                 children: [
-                  CircleAvatar(
-                    backgroundColor: const Color(0xFFDCE6FF),
+                  const CircleAvatar(
+                    backgroundColor: Color(0xFFDCE6FF),
                     radius: 22,
-                    child: const Text(
+                    child: Text(
                       'TQ',
                       style: TextStyle(
                         color: Color(0xFF2563EB),

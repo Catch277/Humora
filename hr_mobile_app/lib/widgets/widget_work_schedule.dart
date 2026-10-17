@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/gestures.dart';
+import '../widgets/widget_open_shift_registration.dart';
 
 // ==================== 1. HEADER PROFILE ====================
 class ScheduleHeaderCard extends StatelessWidget {
@@ -78,37 +79,50 @@ class ScheduleHeaderCard extends StatelessWidget {
 class OpenShiftBanner extends StatelessWidget {
   const OpenShiftBanner({super.key});
 
+  void _showOpenShiftRegistrationForm(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => const OpenShiftFormModal(),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric( vertical: 12, horizontal: 16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.02),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: const [
-          Icon(Icons.person_add_alt_1_outlined, color: Color(0xFF2563EB), size: 20),
-          SizedBox(width: 8),
-          Center(
-            child: Text(
-              'Tự đăng ký ca mở',
-              style: TextStyle(
-                fontSize: 15,
-              fontWeight: FontWeight.bold,
-              color: Colors.black87,
+    return InkWell(
+      onTap: () => _showOpenShiftRegistrationForm(context),
+      borderRadius: BorderRadius.circular(16),
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.02),
+              blurRadius: 8,
+              offset: const Offset(0, 2),
             ),
-          ),
-          )
-        ],
+          ],
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: const [
+            Icon(Icons.person_add_alt_1_outlined, color: Color(0xFF2563EB), size: 20),
+            SizedBox(width: 8),
+            Center(
+              child: Text(
+                'Tự đăng ký ca mở',
+                style: TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.black87,
+                ),
+              ),
+            )
+          ],
+        ),
       ),
     );
   }

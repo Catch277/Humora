@@ -34,7 +34,7 @@
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  *       401:
- *         description: Authentication is required.
+ *         description: Bạn cần đăng nhập để thực hiện thao tác này.
  *         content:
  *           application/json:
  *             schema:
@@ -76,7 +76,7 @@ export async function DELETE(
 
   if (!UUID_PATTERN.test(id)) {
     return NextResponse.json(
-      { error: "The invite id must be a UUID." },
+      { error: "ID lời mời phải là UUID." },
       { status: 400 },
     );
   }
@@ -102,7 +102,7 @@ export async function DELETE(
     }
 
     return NextResponse.json(
-      { error: "Unable to revoke the invite." },
+      { error: "Không thể thu hồi lời mời." },
       { status: 500 },
     );
   }
