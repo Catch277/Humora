@@ -1,13 +1,9 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
-<<<<<<< HEAD
-
-import '../routes/app_routers.dart'; // Import AppRoutes
-import '../widgets/bottom_nav_bar.dart';
-import '../widgets/stat_card_employee.dart';
-=======
+import 'package:geolocator/geolocator.dart';
 import 'package:intl/intl.dart';
 
+import '../services/attendance_api.dart';
 import '../widgets/bottom_nav_bar.dart';
 import '../widgets/employee_home/home_header.dart';
 import '../widgets/employee_home/checkin_card.dart';
@@ -15,7 +11,11 @@ import '../widgets/employee_home/performance_card.dart';
 import '../widgets/employee_home/hr_services_grid.dart';
 import '../widgets/employee_home/internal_news_card.dart';
 import 'camera_checkin.dart'; // Import màn hình camera
->>>>>>> a084c334e8c7cf84edd2d67dc131a8c94b2212a9
+
+class _LocationException implements Exception {
+  _LocationException(this.message);
+  final String message;
+}
 
 class HomeEmployeeScreen extends StatefulWidget {
   const HomeEmployeeScreen({super.key});
@@ -31,11 +31,15 @@ class _HomeEmployeeScreenState extends State<HomeEmployeeScreen> {
   Timer? _timer;
   DateTime _currentTime = DateTime.now();
 
-  // Quản lý trạng thái Check-in
+  final AttendanceApi _api = AttendanceApi();
+
+  // Trạng thái chấm công (lấy từ server qua /today)
   bool _isCheckedIn = false;
   String _checkInTime = '--:--';
+  String? _shiftId; // ca đang chờ chấm vào, hoặc ca đang mở
+  bool _busy = false;
 
-  final TimeOfDay _shiftStart = const TimeOfDay(hour: 8, minute: 30);
+  TimeOfDay _shiftStart = const TimeOfDay(hour: 8, minute: 30);
 
   @override
   void initState() {
@@ -47,6 +51,7 @@ class _HomeEmployeeScreenState extends State<HomeEmployeeScreen> {
         });
       }
     });
+    _loadToday();
   }
 
   @override
@@ -55,7 +60,114 @@ class _HomeEmployeeScreenState extends State<HomeEmployeeScreen> {
     super.dispose();
   }
 
+  // ---------- Gọi API ----------
+
+  TimeOfDay? _parseHm(String? s) {
+    if (s == null) return null;
+    final p = s.split(':');
+    if (p.length < 2) return null;
+    final h = int.tryParse(p[0]);
+    final m = int.tryParse(p[1]);
+    if (h == null || m == null) return null;
+    return TimeOfDay(hour: h, minute: m);
+  }
+
+  String _fmtTime(dynamic iso) =>
+      DateFormat('hh:mm a').format(DateTime.parse(iso as String).toLocal());
+
+  Future<void> _loadToday() async {
+    try {
+      final data = await _api.today();
+      final assignments = (data['assignments'] as List)
+          .map((e) => Map<String, dynamic>.from(e as Map))
+          .toList();
+      final attendance = (data['attendance'] as List)
+          .map((e) => Map<String, dynamic>.from(e as Map))
+          .toList();
+
+      final open = attendance
+          .where((a) => a['check_in_at'] != null && a['check_out_at'] == null)
+          .firstOrNull;
+      final doneIds = attendance.map((a) => a['shift_id']).toSet();
+
+      final Map<String, dynamic>? target = open != null
+          ? assignments.where((a) => a['shift_id'] == open['shift_id']).firstOrNull
+          : assignments.where((a) => !doneIds.contains(a['shift_id'])).firstOrNull;
+
+      if (!mounted) return;
+      setState(() {
+        _isCheckedIn = open != null;
+        _checkInTime = open != null ? _fmtTime(open['check_in_at']) : '--:--';
+        _shiftId = (open ?? target)?['shift_id'] as String?;
+        final start = _parseHm(target?['start_time'] as String?);
+        if (start != null) _shiftStart = start;
+      });
+    } catch (e) {
+      _showError(e);
+    }
+  }
+
+  Future<Position> _getPosition() async {
+    if (!await Geolocator.isLocationServiceEnabled()) {
+      throw _LocationException('Hãy bật định vị (GPS) trên thiết bị.');
+    }
+    var perm = await Geolocator.checkPermission();
+    if (perm == LocationPermission.denied) {
+      perm = await Geolocator.requestPermission();
+    }
+    if (perm == LocationPermission.denied ||
+        perm == LocationPermission.deniedForever) {
+      throw _LocationException(
+          'Bạn cần cho phép ứng dụng truy cập vị trí để chấm công.');
+    }
+    return Geolocator.getCurrentPosition(
+      locationSettings: const LocationSettings(
+        accuracy: LocationAccuracy.high,
+        timeLimit: Duration(seconds: 15),
+      ),
+    );
+  }
+
+  void _showSnack(String text,
+      {required Color color, required IconData icon}) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Row(
+          children: [
+            Icon(icon, color: Colors.white),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                text,
+                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+              ),
+            ),
+          ],
+        ),
+        backgroundColor: color,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        duration: const Duration(seconds: 4),
+      ),
+    );
+  }
+
+  void _showError(Object e) {
+    final String text;
+    if (e is ApiException) {
+      text = e.message;
+    } else if (e is _LocationException) {
+      text = e.message;
+    } else {
+      text = 'Không kết nối được máy chủ. Kiểm tra mạng rồi thử lại.';
+    }
+    _showSnack(text, color: Colors.redAccent, icon: Icons.error_outline);
+  }
+
   String _getCountdownToShiftStart() {
+    if (_shiftId == null && !_isCheckedIn) return 'Không còn ca hôm nay';
+
     final now = _currentTime;
     final startDateTime = DateTime(
       now.year,
@@ -78,72 +190,60 @@ class _HomeEmployeeScreenState extends State<HomeEmployeeScreen> {
     return 'Còn ${hours.toString().padLeft(2, '0')}:${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}';
   }
 
-  // Điều hướng mở Camera Chụp ảnh
+  // Mở camera, chụp xong thì lấy GPS rồi gọi API chấm công
   Future<void> _handleCheckIn() async {
+    if (_busy) return;
+    final checkingIn = !_isCheckedIn;
+
+    if (checkingIn && _shiftId == null) {
+      _showSnack('Hôm nay bạn không có ca nào để chấm công.',
+          color: Colors.orange, icon: Icons.info_outline);
+      return;
+    }
+
     final result = await Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (context) => CameraCheckInScreen(isCheckingIn: !_isCheckedIn),
+        builder: (context) => CameraCheckInScreen(isCheckingIn: checkingIn),
       ),
     );
+    if (result == null || result is! Map<String, String>) return;
+    if (!mounted) return;
 
-    // Xử lý khi chụp ảnh thành công và quay về Home
-    if (result != null && result is Map<String, String>) {
-      final String time = result['time'] ?? '';
-      final String ip = result['ip'] ?? '';
+    final ip = result['ip'] ?? '';
+    setState(() => _busy = true);
 
-      setState(() {
-        if (!_isCheckedIn) {
-          _isCheckedIn = true;
-          _checkInTime = time;
-        } else {
-          _isCheckedIn = false;
-        }
-      });
+    try {
+      final pos = await _getPosition();
+      final Map<String, dynamic> r = checkingIn
+          ? await _api.checkIn(_shiftId!, pos.latitude, pos.longitude)
+          : await _api.checkOut(pos.latitude, pos.longitude);
 
-      if (!mounted) return;
-
-      final now = DateTime.now();
-      final startDateTime = DateTime(
-        now.year,
-        now.month,
-        now.day,
-        _shiftStart.hour,
-        _shiftStart.minute,
-      );
-      final isLate = now.isAfter(startDateTime);
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Row(
-            children: [
-              Icon(
-                _isCheckedIn
-                    ? (isLate ? Icons.warning_amber_rounded : Icons.check_circle_outline)
-                    : Icons.exit_to_app,
-                color: Colors.white,
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Text(
-                  _isCheckedIn
-                      ? (isLate
-                          ? 'Vào ca thành công lúc $time (Trễ) - IP: $ip'
-                          : 'Vào ca thành công lúc $time (Đúng giờ) - IP: $ip')
-                      : 'Ra ca thành công lúc $time! - IP: $ip',
-                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
-                ),
-              ),
-            ],
-          ),
-          backgroundColor: _isCheckedIn
-              ? (isLate ? Colors.deepOrange : const Color(0xFF10B981))
-              : Colors.blueAccent,
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-          duration: const Duration(seconds: 4),
-        ),
-      );
+      final status = r['status'] as String?;
+      if (checkingIn) {
+        final time = _fmtTime(r['check_in_at']);
+        final isLate = status == 'LATE';
+        _showSnack(
+          'Vào ca thành công lúc $time (${isLate ? 'Trễ' : 'Đúng giờ'}) - IP: $ip',
+          color: isLate ? Colors.deepOrange : const Color(0xFF10B981),
+          icon: isLate
+              ? Icons.warning_amber_rounded
+              : Icons.check_circle_outline,
+        );
+      } else {
+        final time = _fmtTime(r['check_out_at']);
+        final early = status == 'EARLY_LEAVE';
+        _showSnack(
+          'Ra ca thành công lúc $time${early ? ' (Về sớm)' : ''}! - IP: $ip',
+          color: Colors.blueAccent,
+          icon: Icons.exit_to_app,
+        );
+      }
+      await _loadToday();
+    } catch (e) {
+      _showError(e);
+    } finally {
+      if (mounted) setState(() => _busy = false);
     }
   }
 
@@ -170,250 +270,6 @@ class _HomeEmployeeScreenState extends State<HomeEmployeeScreen> {
       body: SingleChildScrollView(
         child: Column(
           children: [
-<<<<<<< HEAD
-            // 1. HEADER + BACKGROUND
-            Stack(
-              clipBehavior: Clip.none,
-              children: [
-                Container(
-                  height: 210,
-                  width: double.infinity,
-                  padding: const EdgeInsets.fromLTRB(20, 50, 20, 0),
-                  decoration: const BoxDecoration(color: Color(0xFF3860F4)),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        _getGreeting(),
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 24,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      Row(
-                        children: [
-                          const CircleAvatar(
-                            radius: 24,
-                            backgroundImage: AssetImage('assets/images/bg.png'),
-                          ),
-                          const SizedBox(width: 12),
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const Text(
-                                'Họ tên nhân viên',
-                                style: TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                              const SizedBox(height: 4),
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 10,
-                                  vertical: 2,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: Colors.white.withOpacity(0.25),
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                                child: const Text(
-                                  'Chức vụ nhân viên',
-                                  style: TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 12,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-
-                // 2 Nút thao tác nhanh
-                Positioned(
-                  bottom: -25,
-                  left: 16,
-                  right: 16,
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: Container(
-                          height: 52,
-                          decoration: BoxDecoration(
-                            gradient: const LinearGradient(
-                              colors: [
-                                Color(0xFF6B11FF),
-                                Color(0xFFB524FF),
-                                Color(0xFF00E5FF),
-                              ],
-                              begin: Alignment.topLeft,
-                              end: Alignment.bottomRight,
-                            ),
-                            borderRadius: BorderRadius.circular(12),
-                            boxShadow: const [
-                              BoxShadow(
-                                color: Colors.black26,
-                                blurRadius: 8,
-                                offset: Offset(0, 4),
-                              ),
-                            ],
-                          ),
-                          child: InkWell(
-                            onTap: () {},
-                            child: const Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Icon(Icons.touch_app, color: Colors.white),
-                                SizedBox(width: 8),
-                                Text(
-                                  'Chấm công',
-                                  style: TextStyle(
-                                    color: Colors.white,
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 15,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Container(
-                          height: 52,
-                          decoration: BoxDecoration(
-                            color: Colors.white,
-                            borderRadius: BorderRadius.circular(12),
-                            boxShadow: const [
-                              BoxShadow(
-                                color: Colors.black12,
-                                blurRadius: 6,
-                                offset: Offset(0, 3),
-                              ),
-                            ],
-                          ),
-                          child: InkWell(
-                            onTap: () {},
-                            child: const Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Icon(Icons.attach_money, color: Colors.black),
-                                SizedBox(width: 8),
-                                Text(
-                                  'Lương: số tiền',
-                                  style: TextStyle(
-                                    color: Colors.blue,
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 15,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-
-            const SizedBox(height: 40),
-
-            // 2. KHỐI NỘI DUNG CHÍNH
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                child: Column(
-                  children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        const Text(
-                          'Tiện ích',
-                          style: TextStyle(
-                            fontSize: 20,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        GestureDetector(
-                          onTap: () {},
-                          child: const Row(
-                            children: [
-                              Text(
-                                'Xem chi tiết',
-                                style: TextStyle(
-                                  color: Colors.grey,
-                                  fontSize: 14,
-                                ),
-                              ),
-                              Icon(
-                                Icons.chevron_right,
-                                size: 20,
-                                color: Colors.grey,
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 14),
-
-                    // Grid ô tiện ích
-                    GridView.count(
-                      shrinkWrap: true,
-                      physics: const NeverScrollableScrollPhysics(),
-                      crossAxisCount: 2,
-                      childAspectRatio: 2.5,
-                      crossAxisSpacing: 10,
-                      mainAxisSpacing: 10,
-                      children: [
-                        // Chuyển trang khi nhấn Lịch làm việc
-                        StatCardEmployee(
-                          icon: Icons.calendar_today_outlined,
-                          label: 'Lịch làm việc',
-                          onTap: () {
-                            Navigator.pushNamed(
-                              context,
-                              AppRoutes.work_schedule_employee,
-                            );
-                          },
-                        ),
-                        StatCardEmployee(
-                          icon: Icons.attach_money_outlined,
-                          label: 'Phiếu lương',
-                          onTap: () {},
-                        ),
-                        StatCardEmployee(
-                          icon: Icons.table_chart_outlined,
-                          label: 'Bảng công',
-                          onTap: () {},
-                        ),
-                        StatCardEmployee(
-                          icon: Icons.newspaper_outlined,
-                          label: 'Bản tin',
-                          onTap: () {},
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 10),
-                  ],
-                ),
-              ),
-=======
             HomeHeader(
               formattedDate: _getFormattedDate(),
               greeting: _getGreeting(),
@@ -426,7 +282,6 @@ class _HomeEmployeeScreenState extends State<HomeEmployeeScreen> {
               onCheckIn: _handleCheckIn,
               isCheckedIn: _isCheckedIn,
               checkInTime: _checkInTime,
->>>>>>> a084c334e8c7cf84edd2d67dc131a8c94b2212a9
             ),
             const SizedBox(height: 20),
             PerformanceCard(
