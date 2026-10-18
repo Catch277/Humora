@@ -468,7 +468,11 @@ function ContactBody({
               </button>
 
               <p className="text-center text-xs leading-relaxed text-slate-500">
-                Bằng việc gửi, bạn đồng ý để Humora liên hệ lại về yêu cầu này.
+                Bằng việc gửi, bạn đồng ý để Humora liên hệ lại về yêu cầu này. Xem{" "}
+                <Link href="/privacy" className="font-semibold text-blue-600 underline-offset-2 hover:underline">
+                  Chính sách bảo mật
+                </Link>
+                .
               </p>
             </form>
           )}

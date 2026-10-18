@@ -1,3 +1,4 @@
+import Image from "next/image";
 import Link from "next/link";
 
 const COLUMNS = [
@@ -39,12 +40,7 @@ export default function Footer() {
           {/* Thương hiệu */}
           <div>
             <Link href="/" className="inline-flex items-center gap-2.5 rounded-lg focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-blue-600">
-              <span className="grid size-9 place-items-center rounded-xl bg-blue-600 text-white">
-                <svg viewBox="0 0 24 24" className="size-5" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                  <circle cx="12" cy="12" r="9" />
-                  <path d="M12 7v5l3 2" />
-                </svg>
-              </span>
+              <Image src="/logo.png" alt="" width={223} height={175} priority className="h-10 w-auto" />
               <span className="font-heading text-xl font-extrabold tracking-tight text-ink">Humora</span>
             </Link>
             <p className="mt-4 max-w-xs text-sm leading-relaxed text-body">
