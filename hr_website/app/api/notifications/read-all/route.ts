@@ -39,7 +39,7 @@
  *       400:
  *         description: The JSON body is invalid, or `types` names a code the catalog does not know.
  *       401:
- *         description: Authentication is required.
+ *         description: Bạn cần đăng nhập để thực hiện thao tác này.
  *       500:
  *         description: An unexpected server error occurred.
  */
@@ -63,14 +63,14 @@ export async function POST(request: Request) {
 
       if (typeof parsed !== "object" || parsed === null) {
         return NextResponse.json(
-          { error: "The body must be a JSON object." },
+          { error: "Nội dung yêu cầu phải là một đối tượng JSON." },
           { status: 400 },
         );
       }
 
       body = parsed as { types?: unknown };
     } catch {
-      return NextResponse.json({ error: "Invalid JSON body." }, { status: 400 });
+      return NextResponse.json({ error: "Nội dung yêu cầu phải là JSON hợp lệ." }, { status: 400 });
     }
   }
 
@@ -89,7 +89,7 @@ export async function POST(request: Request) {
 
     if (authError || !user) {
       return NextResponse.json(
-        { error: "Authentication is required." },
+        { error: "Bạn cần đăng nhập để thực hiện thao tác này." },
         { status: 401 },
       );
     }
@@ -103,7 +103,7 @@ export async function POST(request: Request) {
   } catch (error) {
     console.error("Failed to mark all notifications as read", error);
     return NextResponse.json(
-      { error: "Unable to mark notifications as read." },
+      { error: "Không thể đánh dấu tất cả thông báo đã đọc." },
       { status: 500 },
     );
   }

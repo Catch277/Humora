@@ -1,6 +1,6 @@
 export class QuickSearchForbiddenError extends Error {
   constructor() {
-    super("A user profile with a role is required to search.");
+    super("Cần hồ sơ người dùng có vai trò để tìm kiếm.");
     this.name = "QuickSearchForbiddenError";
   }
 }

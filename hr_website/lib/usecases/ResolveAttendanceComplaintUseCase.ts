@@ -32,7 +32,7 @@ export class ResolveAttendanceComplaintUseCase {
     }
 
     if (!record.complaint) {
-      throw new Error("This attendance record has no complaint to resolve.");
+      throw new Error("Bản ghi chấm công này không có khiếu nại để xử lý.");
     }
 
     // SCRUM-61: closing a complaint is a branch action, so a manager may only close their own.

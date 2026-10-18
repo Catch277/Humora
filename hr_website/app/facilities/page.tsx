@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
+import { useLocale } from "@/components/LocaleProvider";
 import { useProfile } from "@/components/ProfileProvider";
 import { canManageBranch, defaultBranchId } from "@/lib/domain/branchScope";
 import {
@@ -29,6 +30,9 @@ import {
   type FacilityCategory,
   type FacilityCondition,
 } from "@/lib/domain/entities/Facility";
+import { formatDate } from "@/lib/i18n/format";
+import { errorMessageFor } from "@/lib/i18n/serverMessages";
+import type { MessageKey, Translate } from "@/lib/i18n/translate";
 import {
   branchAssetToken,
   nextFacilityAssetCode,
@@ -72,21 +76,32 @@ type LoadResult = {
  * (`GET /api/facility-categories`), so this map is only the fallback: it labels a facility written before
  * that table existed, and it keeps the picker usable when the catalogue cannot be read at all.
  */
-const CATEGORY_LABELS: Record<string, string> = {
-  KITCHEN: "Khu pha chế",
-  COLD_STORAGE: "Bảo quản lạnh",
-  FURNITURE: "Nội thất",
-  ELECTRICAL: "Thiết bị điện",
-  CLEANING: "Vệ sinh",
-  OTHER: "Khác",
+const CATEGORY_KEYS: Record<string, MessageKey> = {
+  KITCHEN: "facilities.category.kitchen",
+  COLD_STORAGE: "facilities.category.coldStorage",
+  FURNITURE: "facilities.category.furniture",
+  ELECTRICAL: "facilities.category.electrical",
+  CLEANING: "facilities.category.cleaning",
+  OTHER: "facilities.category.other",
 };
 
-const CONDITION_LABELS: Record<FacilityCondition, string> = {
-  GOOD: "Hoạt động tốt",
-  FAIR: "Cần theo dõi",
-  MAINTENANCE: "Đang sửa chữa",
-  BROKEN: "Hỏng, chờ xử lý",
+/** A stored `category` code as an operator reads it, when the catalogue has no row for it. */
+function categoryFallbackLabel(code: string, t: Translate): string {
+  const key = CATEGORY_KEYS[code];
+
+  return key ? t(key) : code;
+}
+
+const CONDITION_KEYS: Record<FacilityCondition, MessageKey> = {
+  GOOD: "facilities.condition.good",
+  FAIR: "facilities.condition.fair",
+  MAINTENANCE: "facilities.condition.maintenance",
+  BROKEN: "facilities.condition.broken",
 };
+
+function conditionLabel(condition: FacilityCondition, t: Translate): string {
+  return t(CONDITION_KEYS[condition]);
+}
 
 const CONDITION_BADGES: Record<FacilityCondition, string> = {
   GOOD: "bg-emerald-50 text-emerald-700",
@@ -118,17 +133,6 @@ const fieldClassName =
 /** The same field, with the spacing a `<label>` block adds above its control. */
 const inputClassName = `mt-1 ${fieldClassName}`;
 
-/** Formats the `date` column (`YYYY-MM-DD`) without going through `Date`, so no timezone shifts it. */
-function formatCheckedAt(value: string | null): string {
-  if (!value) {
-    return "Chưa kiểm tra";
-  }
-
-  const [year, month, day] = value.split("-");
-
-  return `${day}/${month}/${year}`;
-}
-
 function toForm(facility: Facility): FacilityForm {
   return {
     branchId: facility.branch_id,
@@ -145,6 +149,7 @@ export default function FacilitiesPage() {
   // SCRUM-61: the inventory of a branch belongs to the branch head. The owner manages every branch;
   // a manager only their own, so the rows and the picker of another branch are read-only.
   const { profile, can } = useProfile();
+  const { locale, t } = useLocale();
   const viewerId = profile?.id ?? null;
   const managesAllBranches = can("branch:manage");
 
@@ -213,7 +218,7 @@ export default function FacilitiesPage() {
           facilities: [],
           branches: [],
           categories,
-          error: data?.error ?? "Không thể tải danh sách cơ sở vật chất.",
+          error: errorMessageFor(facilitiesResponse.status, data, t),
         };
       }
 
@@ -246,14 +251,14 @@ export default function FacilitiesPage() {
 
         setFacilities([]);
         setBranches([]);
-        setPageError("Không thể kết nối tới máy chủ. Vui lòng thử lại.");
+        setPageError(t("error.network"));
         setLoading(false);
       });
 
     return () => {
       cancelled = true;
     };
-  }, [reloadToken]);
+  }, [reloadToken, t]);
 
   function refresh() {
     setLoading(true);
@@ -280,17 +285,19 @@ export default function FacilitiesPage() {
             code: category.code,
             name: category.name,
           }))
-        : FACILITY_CATEGORIES.map((code) => ({ code, name: CATEGORY_LABELS[code] })),
-    [categories],
+        : FACILITY_CATEGORIES.map((code) => ({
+            code,
+            name: categoryFallbackLabel(code, t),
+          })),
+    [categories, t],
   );
 
   /** A code as an operator reads it: the catalogue's name, the built-in label, or the code itself. */
   const categoryLabel = useCallback(
     (code: string): string =>
       categoryOptions.find((option) => option.code === code)?.name ??
-      CATEGORY_LABELS[code] ??
-      code,
-    [categoryOptions],
+      categoryFallbackLabel(code, t),
+    [categoryOptions, t],
   );
 
   /** The row being edited, if any: its own tag must not push the preview's number up (SCRUM-67). */
@@ -330,12 +337,12 @@ export default function FacilitiesPage() {
     FACILITY_ASSET_CODE_PATTERN.test(storedAssetCode);
   const assetCodeField = keepsStoredAssetCode ? storedAssetCode : assetCodePreview;
   const assetCodeHint = keepsStoredAssetCode
-    ? "Mã đang dùng được giữ nguyên — hệ thống cấp và không sửa được."
+    ? t("facilities.codeHintKeep")
     : !assetCodePreview
-      ? "Chọn chi nhánh để hệ thống cấp mã tài sản."
+      ? t("facilities.codeHintChooseBranch")
       : modal?.mode === "edit"
-        ? `Hệ thống sẽ cấp mã mới cho chi nhánh này khi lưu — ${assetCodePreview}.`
-        : `Hệ thống tự cấp mã theo chi nhánh khi lưu — ${assetCodePreview}.`;
+        ? t("facilities.codeHintNew", { code: assetCodePreview })
+        : t("facilities.codeHintAuto", { code: assetCodePreview });
 
   const filtered = useMemo(() => {
     const keyword = query.trim().toLowerCase();
@@ -436,7 +443,7 @@ export default function FacilitiesPage() {
     const name = categoryName.trim();
 
     if (!name) {
-      setCategoryError("Vui lòng nhập tên nhóm thiết bị.");
+      setCategoryError(t("facilities.error.categoryName"));
       return;
     }
 
@@ -456,9 +463,9 @@ export default function FacilitiesPage() {
         } | null;
 
         setCategoryError(
-          response.status === 409
-            ? "Nhóm thiết bị này đã có trong danh mục."
-            : (data?.error ?? "Không thể thêm nhóm thiết bị."),
+          errorMessageFor(response.status, data, t, {
+            409: "facilities.error.categoryExists",
+          }),
         );
         return;
       }
@@ -468,7 +475,7 @@ export default function FacilitiesPage() {
       setCategoryDialogOpen(false);
       refresh();
     } catch {
-      setCategoryError("Không thể kết nối tới máy chủ. Vui lòng thử lại.");
+      setCategoryError(t("error.network"));
     } finally {
       setCategorySaving(false);
     }
@@ -476,12 +483,12 @@ export default function FacilitiesPage() {
 
   async function submit() {
     if (!form.branchId) {
-      setFormError("Vui lòng chọn chi nhánh.");
+      setFormError(t("facilities.error.branch"));
       return;
     }
 
     if (!form.name.trim()) {
-      setFormError("Vui lòng nhập tên thiết bị.");
+      setFormError(t("facilities.error.name"));
       return;
     }
 
@@ -489,7 +496,7 @@ export default function FacilitiesPage() {
     const isEdit = modal?.mode === "edit";
 
     if (!Number.isInteger(quantity) || quantity < 1 || quantity > 9999) {
-      setFormError("Số lượng phải là số nguyên từ 1 đến 9999.");
+      setFormError(t("facilities.error.quantity"));
       return;
     }
 
@@ -518,14 +525,14 @@ export default function FacilitiesPage() {
         const data = (await response.json().catch(() => null)) as {
           error?: string;
         } | null;
-        setFormError(data?.error ?? "Không thể lưu thông tin thiết bị.");
+        setFormError(errorMessageFor(response.status, data, t));
         return;
       }
 
       closeModal();
       refresh();
     } catch {
-      setFormError("Không thể kết nối tới máy chủ. Vui lòng thử lại.");
+      setFormError(t("error.network"));
     } finally {
       setSaving(false);
     }
@@ -533,9 +540,7 @@ export default function FacilitiesPage() {
 
   async function remove(facility: Facility) {
     if (
-      !window.confirm(
-        `Xoá "${facility.name}" khỏi danh sách cơ sở vật chất? Thao tác này không thể hoàn tác.`,
-      )
+      !window.confirm(t("facilities.confirmDelete", { name: facility.name }))
     ) {
       return;
     }
@@ -552,13 +557,13 @@ export default function FacilitiesPage() {
         const data = (await response.json().catch(() => null)) as {
           error?: string;
         } | null;
-        setPageError(data?.error ?? "Không thể xoá thiết bị.");
+        setPageError(errorMessageFor(response.status, data, t));
         return;
       }
 
       refresh();
     } catch {
-      setPageError("Không thể kết nối tới máy chủ. Vui lòng thử lại.");
+      setPageError(t("error.network"));
     } finally {
       setDeletingId("");
     }
@@ -569,14 +574,13 @@ export default function FacilitiesPage() {
       <div className="flex flex-col justify-between gap-3 lg:flex-row lg:items-end">
         <div>
           <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-slate-400">
-            Cơ sở hạ tầng / SCRUM-45
+            {t("facilities.eyebrow")}
           </p>
           <h1 className="text-2xl font-bold tracking-tight text-slate-900">
-            Cơ sở vật chất
+            {t("facilities.title")}
           </h1>
           <p className="mt-1 text-xs text-slate-500">
-            Danh mục thiết bị theo từng chi nhánh kèm tình trạng và ngày kiểm tra gần
-            nhất.
+            {t("facilities.subtitle")}
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -587,21 +591,21 @@ export default function FacilitiesPage() {
             className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-surface px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
           >
             <RefreshCw size={14} className={loading ? "animate-spin" : undefined} />
-            Làm mới
+            {t("common.reload")}
           </button>
           <button
             type="button"
             onClick={openCategoryDialog}
             className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-surface px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50"
           >
-            <Tags size={14} /> Nhóm thiết bị
+            <Tags size={14} /> {t("facilities.categories")}
           </button>
           <button
             type="button"
             onClick={openCreate}
             className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-xs font-semibold text-white shadow-sm transition-colors hover:bg-primary-strong"
           >
-            <Plus size={14} /> Thêm thiết bị
+            <Plus size={14} /> {t("facilities.create")}
           </button>
         </div>
       </div>
@@ -610,7 +614,7 @@ export default function FacilitiesPage() {
         <article className="rounded-xl border border-slate-200/80 border-b-2 border-b-blue-200 bg-surface p-4 shadow-sm">
           <div className="flex items-start justify-between gap-3">
             <p className="max-w-44 text-[10px] font-semibold uppercase leading-relaxed tracking-wide text-slate-500">
-              Tổng thiết bị đang quản lý
+              {t("facilities.kpiTotal")}
             </p>
             <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-blue-50 text-primary">
               <PackageSearch size={16} />
@@ -620,14 +624,14 @@ export default function FacilitiesPage() {
             {totalQuantity}
           </p>
           <p className="mt-1 text-[10px] text-slate-500">
-            {goodCount} hạng mục hoạt động tốt
+            {t("facilities.kpiTotalNote", { count: goodCount })}
           </p>
         </article>
 
         <article className="rounded-xl border border-slate-200/80 border-b-2 border-b-rose-200 bg-surface p-4 shadow-sm">
           <div className="flex items-start justify-between gap-3">
             <p className="max-w-44 text-[10px] font-semibold uppercase leading-relaxed tracking-wide text-slate-500">
-              Hạng mục cần xử lý
+              {t("facilities.kpiAttention")}
             </p>
             <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-rose-50 text-rose-600">
               <TriangleAlert size={16} />
@@ -637,14 +641,14 @@ export default function FacilitiesPage() {
             {attentionCount}
           </p>
           <p className="mt-1 text-[10px] text-rose-600">
-            Đang sửa chữa hoặc hỏng
+            {t("facilities.kpiAttentionNote")}
           </p>
         </article>
 
         <article className="rounded-xl border border-slate-200/80 border-b-2 border-b-amber-200 bg-surface p-4 shadow-sm">
           <div className="flex items-start justify-between gap-3">
             <p className="max-w-44 text-[10px] font-semibold uppercase leading-relaxed tracking-wide text-slate-500">
-              Đang sửa chữa
+              {t("facilities.condition.maintenance")}
             </p>
             <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-amber-50 text-amber-600">
               <Wrench size={16} />
@@ -654,14 +658,14 @@ export default function FacilitiesPage() {
             {maintenanceCount}
           </p>
           <p className="mt-1 text-[10px] text-amber-600">
-            Theo dõi tiến độ bảo trì
+            {t("facilities.kpiMaintenanceNote")}
           </p>
         </article>
 
         <article className="rounded-xl border border-slate-200/80 border-b-2 border-b-emerald-200 bg-surface p-4 shadow-sm">
           <div className="flex items-start justify-between gap-3">
             <p className="max-w-44 text-[10px] font-semibold uppercase leading-relaxed tracking-wide text-slate-500">
-              Chi nhánh có thiết bị
+              {t("facilities.kpiBranches")}
             </p>
             <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-emerald-50 text-emerald-600">
               <Building2 size={16} />
@@ -671,7 +675,7 @@ export default function FacilitiesPage() {
             {branchCount}
           </p>
           <p className="mt-1 text-[10px] text-emerald-600">
-            Trên tổng số {branches.length} chi nhánh
+            {t("common.outOfBranches", { count: branches.length })}
           </p>
         </article>
       </div>
@@ -687,20 +691,20 @@ export default function FacilitiesPage() {
           <label className="flex items-center gap-2 rounded-lg border border-slate-200 bg-app px-3 py-2 text-xs xl:w-96">
             <Search size={14} className="shrink-0 text-slate-400" />
             <input
-              aria-label="Tìm thiết bị"
+              aria-label={t("facilities.searchAria")}
               value={query}
               onChange={(event) => {
                 setQuery(event.target.value);
                 setPage(1);
               }}
-              placeholder="Tìm tên thiết bị, mã tài sản, nhóm thiết bị"
+              placeholder={t("facilities.searchPlaceholder")}
               className="w-full bg-transparent outline-none placeholder:text-slate-400"
             />
           </label>
 
           <div className="flex flex-wrap items-center gap-2">
             <select
-              aria-label="Lọc theo chi nhánh"
+              aria-label={t("common.filterBranchAria")}
               value={branchFilter}
               onChange={(event) => {
                 setBranchFilter(event.target.value);
@@ -708,7 +712,7 @@ export default function FacilitiesPage() {
               }}
               className="rounded-lg border border-slate-200 bg-surface px-3 py-2 text-xs outline-none focus:border-primary"
             >
-              <option value={ALL}>Tất cả chi nhánh</option>
+              <option value={ALL}>{t("common.allBranches")}</option>
               {branches.map((branch) => (
                 <option key={branch.id} value={branch.id}>
                   {branch.name}
@@ -717,7 +721,7 @@ export default function FacilitiesPage() {
             </select>
 
             <select
-              aria-label="Lọc theo nhóm thiết bị"
+              aria-label={t("facilities.filterCategoryAria")}
               value={categoryFilter}
               onChange={(event) => {
                 setCategoryFilter(event.target.value);
@@ -725,7 +729,7 @@ export default function FacilitiesPage() {
               }}
               className="rounded-lg border border-slate-200 bg-surface px-3 py-2 text-xs outline-none focus:border-primary"
             >
-              <option value={ALL}>Tất cả nhóm thiết bị</option>
+              <option value={ALL}>{t("facilities.allCategories")}</option>
               {categoryOptions.map((option) => (
                 <option key={option.code} value={option.code}>
                   {option.name}
@@ -748,7 +752,7 @@ export default function FacilitiesPage() {
                 : "text-slate-500 hover:bg-slate-50"
             }`}
           >
-            Tất cả tình trạng
+            {t("facilities.allConditions")}
           </button>
           {FACILITY_CONDITIONS.map((condition) => (
             <button
@@ -764,11 +768,15 @@ export default function FacilitiesPage() {
                   : "text-slate-500 hover:bg-slate-50"
               }`}
             >
-              {CONDITION_LABELS[condition]}
+              {conditionLabel(condition, t)}
             </button>
           ))}
           <p className="ml-auto text-[10px] text-slate-400">
-            Hiển thị {rangeStart} – {rangeEnd} trên tổng số {filtered.length} hạng mục
+            {t("facilities.range", {
+              from: rangeStart,
+              to: rangeEnd,
+              total: filtered.length,
+            })}
           </p>
         </div>
 
@@ -776,13 +784,13 @@ export default function FacilitiesPage() {
           <table className="w-full min-w-[980px] text-left text-xs">
             <thead className="bg-surface-muted text-[9px] font-semibold uppercase tracking-wide text-slate-500">
               <tr>
-                <th className="px-4 py-3">Thiết bị</th>
-                <th className="px-4 py-3">Chi nhánh</th>
-                <th className="px-4 py-3">Nhóm</th>
-                <th className="px-4 py-3 text-right">Số lượng</th>
-                <th className="px-4 py-3">Tình trạng</th>
-                <th className="px-4 py-3">Kiểm tra gần nhất</th>
-                <th className="px-4 py-3 text-right">Thao tác</th>
+                <th className="px-4 py-3">{t("facilities.columnItem")}</th>
+                <th className="px-4 py-3">{t("common.branch")}</th>
+                <th className="px-4 py-3">{t("facilities.columnCategory")}</th>
+                <th className="px-4 py-3 text-right">{t("facilities.columnQuantity")}</th>
+                <th className="px-4 py-3">{t("facilities.columnCondition")}</th>
+                <th className="px-4 py-3">{t("facilities.columnLastChecked")}</th>
+                <th className="px-4 py-3 text-right">{t("common.actions")}</th>
               </tr>
             </thead>
             <tbody>
@@ -791,7 +799,7 @@ export default function FacilitiesPage() {
                   <td colSpan={7} className="px-4 py-10 text-center text-slate-400">
                     <span className="inline-flex items-center gap-2">
                       <Loader2 size={14} className="animate-spin text-primary" />
-                      Đang tải danh sách thiết bị...
+                      {t("facilities.loading")}
                     </span>
                   </td>
                 </tr>
@@ -804,8 +812,8 @@ export default function FacilitiesPage() {
                     branchFilter !== ALL ||
                     categoryFilter !== ALL ||
                     conditionFilter !== ALL
-                      ? "Không tìm thấy thiết bị phù hợp"
-                      : "Chưa có thiết bị nào được đăng ký"}
+                      ? t("facilities.emptyFiltered")
+                      : t("facilities.empty")}
                   </td>
                 </tr>
               )}
@@ -826,13 +834,13 @@ export default function FacilitiesPage() {
                             {facility.name}
                           </p>
                           <p className="mt-0.5 text-[11px] text-slate-500">
-                            {facility.code ?? "Chưa gắn mã tài sản"}
+                            {facility.code ?? t("facilities.noAssetCode")}
                           </p>
                         </div>
                       </div>
                     </td>
                     <td className="px-4 py-4 text-slate-600">
-                      {branchNames.get(facility.branch_id) ?? "Chi nhánh đã xoá"}
+                      {branchNames.get(facility.branch_id) ?? t("common.deletedBranch")}
                     </td>
                     <td className="px-4 py-4 text-slate-600">
                       {categoryLabel(facility.category)}
@@ -846,11 +854,15 @@ export default function FacilitiesPage() {
                           CONDITION_BADGES[facility.condition]
                         }`}
                       >
-                        {CONDITION_LABELS[facility.condition]}
+                        {conditionLabel(facility.condition, t)}
                       </span>
                     </td>
                     <td className="px-4 py-4 tabular-nums text-slate-600">
-                      {formatCheckedAt(facility.last_checked_at)}
+                      {formatDate(
+                        facility.last_checked_at,
+                        locale,
+                        t("facilities.noCheck"),
+                      )}
                     </td>
                     <td className="px-4 py-4 text-right">
                       {manageableIds.has(facility.branch_id) ? (
@@ -860,7 +872,7 @@ export default function FacilitiesPage() {
                             onClick={() => openEdit(facility)}
                             className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-1.5 text-[11px] font-semibold text-slate-700 transition-colors hover:bg-slate-50"
                           >
-                            <Pencil size={13} /> Chỉnh sửa
+                            <Pencil size={13} /> {t("common.edit")}
                           </button>
                           <button
                             type="button"
@@ -873,13 +885,13 @@ export default function FacilitiesPage() {
                             ) : (
                               <Trash2 size={13} />
                             )}
-                            Xoá
+                            {t("common.delete")}
                           </button>
                         </div>
                       ) : (
                         // SCRUM-61: this row belongs to a branch the caller does not head.
                         <span className="text-[11px] font-medium text-slate-400">
-                          Chỉ xem
+                          {t("common.viewOnly")}
                         </span>
                       )}
                     </td>
@@ -892,26 +904,26 @@ export default function FacilitiesPage() {
         {pageCount > 1 && (
           <div className="flex items-center justify-between border-t border-slate-100 px-4 py-3">
             <p className="text-[10px] text-slate-400">
-              Trang {currentPage} / {pageCount}
+              {t("common.pageOf", { page: currentPage, count: pageCount })}
             </p>
             <div className="flex items-center gap-2">
               <button
                 type="button"
-                aria-label="Trang trước"
+                aria-label={t("common.previousPage")}
                 onClick={() => setPage(Math.max(1, currentPage - 1))}
                 disabled={currentPage === 1}
                 className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-3 py-1.5 text-[11px] font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-40"
               >
-                <ChevronLeft size={13} /> Trước
+                <ChevronLeft size={13} /> {t("facilities.pageBack")}
               </button>
               <button
                 type="button"
-                aria-label="Trang sau"
+                aria-label={t("common.nextPage")}
                 onClick={() => setPage(Math.min(pageCount, currentPage + 1))}
                 disabled={currentPage === pageCount}
                 className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-3 py-1.5 text-[11px] font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-40"
               >
-                Sau <ChevronRight size={13} />
+                {t("facilities.pageForward")} <ChevronRight size={13} />
               </button>
             </div>
           </div>
@@ -929,22 +941,22 @@ export default function FacilitiesPage() {
                 <div>
                   <h2 className="font-bold text-slate-900">
                     {modal.mode === "create"
-                      ? "Thêm thiết bị vào chi nhánh"
-                      : "Cập nhật thiết bị"}
+                      ? t("facilities.modalCreate")
+                      : t("facilities.modalEdit")}
                   </h2>
                   <p className="mt-1 text-xs text-slate-500">
-                    Thiết bị luôn thuộc một chi nhánh để phục vụ kiểm kê và bảo trì.
+                    {t("facilities.modalSubtitle")}
                   </p>
                 </div>
               </div>
-              <button type="button" aria-label="Đóng" onClick={closeModal}>
+              <button type="button" aria-label={t("common.close")} onClick={closeModal}>
                 <X size={18} className="text-slate-400" />
               </button>
             </div>
 
             <div className="mt-5 space-y-4">
               <label className="block text-xs font-semibold text-slate-600">
-                Chi nhánh <span className="text-rose-500">*</span>
+                {t("common.branch")} <span className="text-rose-500">*</span>
                 <select
                   value={form.branchId}
                   onChange={(event) =>
@@ -952,7 +964,7 @@ export default function FacilitiesPage() {
                   }
                   className={inputClassName}
                 >
-                  <option value="">Chọn chi nhánh</option>
+                  <option value="">{t("facilities.chooseBranch")}</option>
                   {branches.map((branch) => {
                     const manageable = manageableIds.has(branch.id);
 
@@ -965,40 +977,41 @@ export default function FacilitiesPage() {
                       >
                         {branch.asset_prefix ? `${String(branch.asset_prefix).padStart(2, "0")} · ` : ""}
                         {branch.name}
-                        {manageable ? "" : " — chỉ xem"}
+                        {manageable ? "" : t("common.readOnlySuffix")}
                       </option>
                     );
                   })}
                 </select>
                 {!manageableIds.has(form.branchId) && (
                   <span className="mt-1 block text-[11px] font-normal text-amber-600">
-                    Bạn chỉ cập nhật thiết bị của chi nhánh mình phụ trách (chi nhánh trưởng).
+                    {t("facilities.headWarning")}
                   </span>
                 )}
                 {modal.mode === "edit" && form.branchId !== modal.facility.branch_id && (
                   <span className="mt-1 block text-[11px] font-normal text-amber-600">
-                    Chuyển sang chi nhánh khác sẽ cấp lại mã tài sản theo chi nhánh mới
-                    {assetCodePreview ? ` (${assetCodePreview})` : ""} — tem cũ không còn đúng.
+                    {t("facilities.moveWarningLead")}
+                    {assetCodePreview ? ` (${assetCodePreview})` : ""}
+                    {t("facilities.moveWarningTail")}
                   </span>
                 )}
               </label>
 
               <label className="block text-xs font-semibold text-slate-600">
-                Tên thiết bị <span className="text-rose-500">*</span>
+                {t("facilities.nameLabel")} <span className="text-rose-500">*</span>
                 <input
                   value={form.name}
                   onChange={(event) =>
                     setForm((value) => ({ ...value, name: event.target.value }))
                   }
                   maxLength={120}
-                  placeholder="Máy pha cà phê Breville"
+                  placeholder={t("facilities.namePlaceholder")}
                   className={inputClassName}
                 />
               </label>
 
               <div className="grid gap-4 sm:grid-cols-2">
                 <div className="block text-xs font-semibold text-slate-600">
-                  <label htmlFor="facility-code">Mã tài sản</label>
+                  <label htmlFor="facility-code">{t("facilities.codeLabel")}</label>
                   <input
                     id="facility-code"
                     value={assetCodeField}
@@ -1007,7 +1020,7 @@ export default function FacilitiesPage() {
                     readOnly
                     tabIndex={-1}
                     aria-readonly="true"
-                    placeholder="Hệ thống cấp khi lưu"
+                    placeholder={t("facilities.codePlaceholder")}
                     className={`${inputClassName} bg-slate-50 text-slate-500`}
                   />
                   <span className="mt-1 block text-[11px] font-normal text-slate-500">
@@ -1016,7 +1029,7 @@ export default function FacilitiesPage() {
                 </div>
 
                 <label className="block text-xs font-semibold text-slate-600">
-                  Nhóm thiết bị
+                  {t("facilities.categories")}
                   <div className="mt-1 flex items-center gap-2">
                     <select
                       value={form.category}
@@ -1049,10 +1062,10 @@ export default function FacilitiesPage() {
                     <button
                       type="button"
                       onClick={openCategoryDialog}
-                      title="Thêm nhóm thiết bị"
+                      title={t("facilities.createCategory")}
                       className="inline-flex shrink-0 items-center gap-1 rounded-lg border border-slate-200 px-2.5 py-2 text-[11px] font-semibold text-slate-700 hover:bg-slate-50"
                     >
-                      <Plus size={12} /> Thêm
+                      <Plus size={12} /> {t("facilities.categoryAdd")}
                     </button>
                   </div>
                 </label>
@@ -1060,7 +1073,7 @@ export default function FacilitiesPage() {
 
               <div className="grid gap-4 sm:grid-cols-2">
                 <label className="block text-xs font-semibold text-slate-600">
-                  Số lượng
+                  {t("facilities.columnQuantity")}
                   <input
                     type="number"
                     min={1}
@@ -1077,7 +1090,7 @@ export default function FacilitiesPage() {
                 </label>
 
                 <label className="block text-xs font-semibold text-slate-600">
-                  Tình trạng
+                  {t("facilities.columnCondition")}
                   <select
                     value={form.condition}
                     onChange={(event) =>
@@ -1090,7 +1103,7 @@ export default function FacilitiesPage() {
                   >
                     {FACILITY_CONDITIONS.map((condition) => (
                       <option key={condition} value={condition}>
-                        {CONDITION_LABELS[condition]}
+                        {conditionLabel(condition, t)}
                       </option>
                     ))}
                   </select>
@@ -1098,7 +1111,7 @@ export default function FacilitiesPage() {
               </div>
 
               <label className="block text-xs font-semibold text-slate-600">
-                Ngày kiểm tra gần nhất
+                {t("facilities.lastCheckedLabel")}
                 <input
                   type="date"
                   value={form.lastCheckedAt}
@@ -1113,7 +1126,7 @@ export default function FacilitiesPage() {
               </label>
 
               <label className="block text-xs font-semibold text-slate-600">
-                Ghi chú
+                {t("common.note")}
                 <textarea
                   value={form.note}
                   onChange={(event) =>
@@ -1121,7 +1134,7 @@ export default function FacilitiesPage() {
                   }
                   maxLength={500}
                   rows={3}
-                  placeholder="Ví dụ: gioăng cao su yếu, cần thay trong tháng này"
+                  placeholder={t("facilities.notePlaceholder")}
                   className={`${inputClassName} resize-none`}
                 />
               </label>
@@ -1139,7 +1152,7 @@ export default function FacilitiesPage() {
                 onClick={closeModal}
                 className="rounded-lg border border-slate-200 px-4 py-2 text-xs font-semibold"
               >
-                Hủy bỏ
+                {t("common.cancel")}
               </button>
               <button
                 type="button"
@@ -1148,7 +1161,7 @@ export default function FacilitiesPage() {
                 className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-xs font-semibold text-white shadow-sm transition-colors hover:bg-primary-strong disabled:opacity-50"
               >
                 {saving && <Loader2 size={13} className="animate-spin" />}
-                {saving ? "Đang lưu..." : "Lưu thiết bị"}
+                {saving ? t("common.saving") : t("facilities.save")}
               </button>
             </div>
           </div>
@@ -1164,16 +1177,15 @@ export default function FacilitiesPage() {
                   <Tags size={18} />
                 </span>
                 <div>
-                  <h2 className="font-bold text-slate-900">Thêm nhóm thiết bị</h2>
+                  <h2 className="font-bold text-slate-900">{t("facilities.createCategory")}</h2>
                   <p className="mt-1 text-xs text-slate-500">
-                    Nhóm thiết bị dùng chung cho cả tổ chức: sau khi thêm, nhóm này xuất hiện
-                    trong bộ lọc và trong ô chọn nhóm khi thêm thiết bị.
+                    {t("facilities.categoryDialogHint")}
                   </p>
                 </div>
               </div>
               <button
                 type="button"
-                aria-label="Đóng"
+                aria-label={t("common.close")}
                 onClick={closeCategoryDialog}
               >
                 <X size={18} className="text-slate-400" />
@@ -1182,19 +1194,19 @@ export default function FacilitiesPage() {
 
             <div className="mt-5 space-y-4">
               <label className="block text-xs font-semibold text-slate-600">
-                Tên nhóm <span className="text-rose-500">*</span>
+                {t("facilities.categoryNameLabel")} <span className="text-rose-500">*</span>
                 <input
                   value={categoryName}
                   onChange={(event) => setCategoryName(event.target.value)}
                   maxLength={MAX_FACILITY_CATEGORY_NAME_LENGTH}
-                  placeholder="Ví dụ: Máy móc"
+                  placeholder={t("facilities.categoryNamePlaceholder")}
                   className={inputClassName}
                 />
               </label>
 
               <div>
                 <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
-                  Nhóm hiện có
+                  {t("facilities.categoryExisting")}
                 </p>
                 <div className="mt-2 flex flex-wrap gap-1.5">
                   {categoryOptions.map((option) => (
@@ -1221,7 +1233,7 @@ export default function FacilitiesPage() {
                 onClick={closeCategoryDialog}
                 className="rounded-lg border border-slate-200 px-4 py-2 text-xs font-semibold"
               >
-                Hủy bỏ
+                {t("common.cancel")}
               </button>
               <button
                 type="button"
@@ -1230,7 +1242,7 @@ export default function FacilitiesPage() {
                 className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-xs font-semibold text-white shadow-sm transition-colors hover:bg-primary-strong disabled:opacity-50"
               >
                 {categorySaving && <Loader2 size={13} className="animate-spin" />}
-                {categorySaving ? "Đang lưu..." : "Thêm nhóm"}
+                {categorySaving ? t("common.saving") : t("facilities.categorySave")}
               </button>
             </div>
           </div>

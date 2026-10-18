@@ -297,6 +297,36 @@
           }
         }
       },
+      "PasswordResetRequest": {
+        "type": "object",
+        "required": [
+          "email"
+        ],
+        "properties": {
+          "email": {
+            "type": "string",
+            "format": "email",
+            "example": "hr.lead@humora.vn"
+          }
+        }
+      },
+      "PasswordResetResult": {
+        "type": "object",
+        "required": [
+          "success",
+          "email"
+        ],
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "description": "Luôn true khi yêu cầu đã được chuyển cho Supabase Auth — câu trả lời không thay đổi dù email có tồn tại hay không, để không ai dò được danh sách nhân sự."
+          },
+          "email": {
+            "type": "string",
+            "format": "email"
+          }
+        }
+      },
       "Branch": {
         "type": "object",
         "required": [
@@ -1949,7 +1979,7 @@
             }
           },
           "401": {
-            "description": "Authentication is required.",
+            "description": "Bạn cần đăng nhập để thực hiện thao tác này.",
             "content": {
               "application/json": {
                 "schema": {
@@ -2065,7 +2095,7 @@
             }
           },
           "401": {
-            "description": "Authentication is required.",
+            "description": "Bạn cần đăng nhập để thực hiện thao tác này.",
             "content": {
               "application/json": {
                 "schema": {
@@ -2129,7 +2159,7 @@
             }
           },
           "401": {
-            "description": "Authentication is required.",
+            "description": "Bạn cần đăng nhập để thực hiện thao tác này.",
             "content": {
               "application/json": {
                 "schema": {
@@ -2207,7 +2237,7 @@
             }
           },
           "401": {
-            "description": "Authentication is required.",
+            "description": "Bạn cần đăng nhập để thực hiện thao tác này.",
             "content": {
               "application/json": {
                 "schema": {
@@ -2295,7 +2325,7 @@
             }
           },
           "401": {
-            "description": "Authentication is required.",
+            "description": "Bạn cần đăng nhập để thực hiện thao tác này.",
             "content": {
               "application/json": {
                 "schema": {
@@ -2410,7 +2440,7 @@
             }
           },
           "401": {
-            "description": "Authentication is required.",
+            "description": "Bạn cần đăng nhập để thực hiện thao tác này.",
             "content": {
               "application/json": {
                 "schema": {
@@ -2520,7 +2550,7 @@
             }
           },
           "401": {
-            "description": "Authentication is required.",
+            "description": "Bạn cần đăng nhập để thực hiện thao tác này.",
             "content": {
               "application/json": {
                 "schema": {
@@ -2612,7 +2642,7 @@
             }
           },
           "401": {
-            "description": "Authentication is required.",
+            "description": "Bạn cần đăng nhập để thực hiện thao tác này.",
             "content": {
               "application/json": {
                 "schema": {
@@ -2743,7 +2773,7 @@
             }
           },
           "401": {
-            "description": "Authentication is required.",
+            "description": "Bạn cần đăng nhập để thực hiện thao tác này.",
             "content": {
               "application/json": {
                 "schema": {
@@ -2832,7 +2862,7 @@
             }
           },
           "401": {
-            "description": "Authentication is required.",
+            "description": "Bạn cần đăng nhập để thực hiện thao tác này.",
             "content": {
               "application/json": {
                 "schema": {
@@ -2937,7 +2967,7 @@
             }
           },
           "401": {
-            "description": "Authentication is required.",
+            "description": "Bạn cần đăng nhập để thực hiện thao tác này.",
             "content": {
               "application/json": {
                 "schema": {
@@ -3028,7 +3058,7 @@
             }
           },
           "401": {
-            "description": "Authentication is required.",
+            "description": "Bạn cần đăng nhập để thực hiện thao tác này.",
             "content": {
               "application/json": {
                 "schema": {
@@ -3130,7 +3160,7 @@
             "description": "The search query or type is invalid."
           },
           "401": {
-            "description": "Authentication is required."
+            "description": "Bạn cần đăng nhập để thực hiện thao tác này."
           },
           "403": {
             "description": "The authenticated account has no eligible user profile."
@@ -3209,7 +3239,7 @@
             }
           },
           "401": {
-            "description": "Authentication is required.",
+            "description": "Bạn cần đăng nhập để thực hiện thao tác này.",
             "content": {
               "application/json": {
                 "schema": {
@@ -3268,7 +3298,7 @@
             }
           },
           "401": {
-            "description": "Authentication is required.",
+            "description": "Bạn cần đăng nhập để thực hiện thao tác này.",
             "content": {
               "application/json": {
                 "schema": {
@@ -3370,7 +3400,7 @@
             }
           },
           "401": {
-            "description": "Authentication is required.",
+            "description": "Bạn cần đăng nhập để thực hiện thao tác này.",
             "content": {
               "application/json": {
                 "schema": {
@@ -3468,7 +3498,7 @@
             }
           },
           "401": {
-            "description": "Authentication is required.",
+            "description": "Bạn cần đăng nhập để thực hiện thao tác này.",
             "content": {
               "application/json": {
                 "schema": {
@@ -3581,7 +3611,7 @@
             }
           },
           "401": {
-            "description": "Authentication is required.",
+            "description": "Bạn cần đăng nhập để thực hiện thao tác này.",
             "content": {
               "application/json": {
                 "schema": {
@@ -3664,7 +3694,7 @@
             "description": "One or more query parameters are invalid."
           },
           "401": {
-            "description": "Authentication is required."
+            "description": "Bạn cần đăng nhập để thực hiện thao tác này."
           },
           "403": {
             "description": "The caller has no user profile, or their role may not read the report (SCRUM-59)."
@@ -3723,7 +3753,7 @@
             "description": "The request body is invalid."
           },
           "401": {
-            "description": "Authentication is required."
+            "description": "Bạn cần đăng nhập để thực hiện thao tác này."
           },
           "403": {
             "description": "The caller has no user profile, their role may not declare revenue (SCRUM-59), or they do not head that branch (SCRUM-61)."
@@ -3812,7 +3842,7 @@
             "description": "The request body is invalid."
           },
           "401": {
-            "description": "Authentication is required."
+            "description": "Bạn cần đăng nhập để thực hiện thao tác này."
           },
           "403": {
             "description": "The caller has no user profile, their role may not declare revenue (SCRUM-59), or they do not head that branch (SCRUM-61)."
@@ -3882,7 +3912,7 @@
             }
           },
           "401": {
-            "description": "Authentication is required.",
+            "description": "Bạn cần đăng nhập để thực hiện thao tác này.",
             "content": {
               "application/json": {
                 "schema": {
@@ -3974,7 +4004,7 @@
             }
           },
           "401": {
-            "description": "Authentication is required.",
+            "description": "Bạn cần đăng nhập để thực hiện thao tác này.",
             "content": {
               "application/json": {
                 "schema": {
@@ -4084,7 +4114,7 @@
             }
           },
           "401": {
-            "description": "Authentication is required.",
+            "description": "Bạn cần đăng nhập để thực hiện thao tác này.",
             "content": {
               "application/json": {
                 "schema": {
@@ -4175,7 +4205,7 @@
             }
           },
           "401": {
-            "description": "Authentication is required.",
+            "description": "Bạn cần đăng nhập để thực hiện thao tác này.",
             "content": {
               "application/json": {
                 "schema": {
@@ -4185,7 +4215,7 @@
             }
           },
           "403": {
-            "description": "The account has no user profile.",
+            "description": "Tài khoản chưa có hồ sơ người dùng.",
             "content": {
               "application/json": {
                 "schema": {
@@ -4265,7 +4295,7 @@
             }
           },
           "401": {
-            "description": "Authentication is required.",
+            "description": "Bạn cần đăng nhập để thực hiện thao tác này.",
             "content": {
               "application/json": {
                 "schema": {
@@ -4339,7 +4369,7 @@
             }
           },
           "401": {
-            "description": "Authentication is required.",
+            "description": "Bạn cần đăng nhập để thực hiện thao tác này.",
             "content": {
               "application/json": {
                 "schema": {
@@ -4440,7 +4470,7 @@
             }
           },
           "401": {
-            "description": "Authentication is required.",
+            "description": "Bạn cần đăng nhập để thực hiện thao tác này.",
             "content": {
               "application/json": {
                 "schema": {
@@ -4540,7 +4570,7 @@
             }
           },
           "401": {
-            "description": "Authentication is required.",
+            "description": "Bạn cần đăng nhập để thực hiện thao tác này.",
             "content": {
               "application/json": {
                 "schema": {
@@ -4601,7 +4631,7 @@
             }
           },
           "401": {
-            "description": "Authentication is required.",
+            "description": "Bạn cần đăng nhập để thực hiện thao tác này.",
             "content": {
               "application/json": {
                 "schema": {
@@ -4611,7 +4641,7 @@
             }
           },
           "403": {
-            "description": "The account has no user profile.",
+            "description": "Tài khoản chưa có hồ sơ người dùng.",
             "content": {
               "application/json": {
                 "schema": {
@@ -4679,7 +4709,7 @@
             }
           },
           "401": {
-            "description": "Authentication is required.",
+            "description": "Bạn cần đăng nhập để thực hiện thao tác này.",
             "content": {
               "application/json": {
                 "schema": {
@@ -4765,7 +4795,7 @@
             }
           },
           "401": {
-            "description": "Authentication is required.",
+            "description": "Bạn cần đăng nhập để thực hiện thao tác này.",
             "content": {
               "application/json": {
                 "schema": {
@@ -4775,7 +4805,7 @@
             }
           },
           "403": {
-            "description": "The account has no user profile.",
+            "description": "Tài khoản chưa có hồ sơ người dùng.",
             "content": {
               "application/json": {
                 "schema": {
@@ -4852,7 +4882,7 @@
             }
           },
           "401": {
-            "description": "Authentication is required.",
+            "description": "Bạn cần đăng nhập để thực hiện thao tác này.",
             "content": {
               "application/json": {
                 "schema": {
@@ -4967,7 +4997,7 @@
             }
           },
           "401": {
-            "description": "Authentication is required.",
+            "description": "Bạn cần đăng nhập để thực hiện thao tác này.",
             "content": {
               "application/json": {
                 "schema": {
@@ -5096,7 +5126,7 @@
             "description": "A query parameter is invalid (a non-positive page size or an unknown `type`)."
           },
           "401": {
-            "description": "Authentication is required."
+            "description": "Bạn cần đăng nhập để thực hiện thao tác này."
           },
           "500": {
             "description": "An unexpected server error occurred."
@@ -5144,7 +5174,7 @@
             "description": "The ID is not a valid UUID."
           },
           "401": {
-            "description": "Authentication is required."
+            "description": "Bạn cần đăng nhập để thực hiện thao tác này."
           },
           "404": {
             "description": "The notification was not found or does not belong to the user."
@@ -5177,7 +5207,7 @@
             }
           },
           "401": {
-            "description": "Authentication is required."
+            "description": "Bạn cần đăng nhập để thực hiện thao tác này."
           },
           "500": {
             "description": "An unexpected server error occurred."
@@ -5243,7 +5273,7 @@
             "description": "The request body is invalid."
           },
           "401": {
-            "description": "Authentication is required."
+            "description": "Bạn cần đăng nhập để thực hiện thao tác này."
           },
           "500": {
             "description": "An unexpected server error occurred."
@@ -5301,7 +5331,7 @@
             "description": "The JSON body is invalid, or `types` names a code the catalog does not know."
           },
           "401": {
-            "description": "Authentication is required."
+            "description": "Bạn cần đăng nhập để thực hiện thao tác này."
           },
           "500": {
             "description": "An unexpected server error occurred."
@@ -5362,7 +5392,7 @@
             }
           },
           "401": {
-            "description": "Authentication is required.",
+            "description": "Bạn cần đăng nhập để thực hiện thao tác này.",
             "content": {
               "application/json": {
                 "schema": {
@@ -5416,7 +5446,7 @@
             }
           },
           "401": {
-            "description": "Authentication is required.",
+            "description": "Bạn cần đăng nhập để thực hiện thao tác này.",
             "content": {
               "application/json": {
                 "schema": {
@@ -5485,7 +5515,7 @@
             }
           },
           "401": {
-            "description": "Authentication is required.",
+            "description": "Bạn cần đăng nhập để thực hiện thao tác này.",
             "content": {
               "application/json": {
                 "schema": {
@@ -5570,7 +5600,7 @@
             }
           },
           "401": {
-            "description": "Authentication is required.",
+            "description": "Bạn cần đăng nhập để thực hiện thao tác này.",
             "content": {
               "application/json": {
                 "schema": {
@@ -5639,7 +5669,7 @@
             }
           },
           "401": {
-            "description": "Authentication is required.",
+            "description": "Bạn cần đăng nhập để thực hiện thao tác này.",
             "content": {
               "application/json": {
                 "schema": {
@@ -5734,7 +5764,7 @@
             }
           },
           "401": {
-            "description": "Authentication is required.",
+            "description": "Bạn cần đăng nhập để thực hiện thao tác này.",
             "content": {
               "application/json": {
                 "schema": {
@@ -5832,7 +5862,7 @@
             }
           },
           "401": {
-            "description": "Authentication is required.",
+            "description": "Bạn cần đăng nhập để thực hiện thao tác này.",
             "content": {
               "application/json": {
                 "schema": {
@@ -5944,7 +5974,7 @@
             }
           },
           "401": {
-            "description": "Authentication is required.",
+            "description": "Bạn cần đăng nhập để thực hiện thao tác này.",
             "content": {
               "application/json": {
                 "schema": {
@@ -6100,7 +6130,7 @@
             }
           },
           "401": {
-            "description": "Authentication is required."
+            "description": "Bạn cần đăng nhập để thực hiện thao tác này."
           },
           "500": {
             "description": "An unexpected server error occurred."
@@ -6183,7 +6213,7 @@
             "description": "The request body is invalid, including a manager_id that names no account in your organization or names an account that is not a MANAGER (SCRUM-63)."
           },
           "401": {
-            "description": "Authentication is required."
+            "description": "Bạn cần đăng nhập để thực hiện thao tác này."
           },
           "403": {
             "description": "The caller's role may not manage branches (SCRUM-59, owner only)."
@@ -6288,7 +6318,7 @@
             "description": "The route parameter or request body is invalid, including a manager_id that names no account in your organization or names an account that is not an OWNER/MANAGER (SCRUM-61)."
           },
           "401": {
-            "description": "Authentication is required."
+            "description": "Bạn cần đăng nhập để thực hiện thao tác này."
           },
           "403": {
             "description": "The caller may not update this branch — neither the organization's OWNER nor its chi nhánh trưởng (SCRUM-61) — or tried to change who heads it."
@@ -6349,7 +6379,7 @@
             }
           },
           "401": {
-            "description": "Authentication is required."
+            "description": "Bạn cần đăng nhập để thực hiện thao tác này."
           },
           "403": {
             "description": "The caller's role may not manage branches (SCRUM-59, owner only)."
@@ -6439,7 +6469,7 @@
             }
           },
           "409": {
-            "description": "An account already exists for this email address.",
+            "description": "Email này đã có tài khoản đăng nhập.",
             "content": {
               "application/json": {
                 "schema": {
@@ -6596,7 +6626,7 @@
             }
           },
           "401": {
-            "description": "Authentication is required.",
+            "description": "Bạn cần đăng nhập để thực hiện thao tác này.",
             "content": {
               "application/json": {
                 "schema": {
@@ -6607,6 +6637,101 @@
           },
           "404": {
             "description": "The account has no row in the users table.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "An unexpected server error occurred.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/recovery": {
+      "get": {
+        "summary": "Complete a password reset link",
+        "description": "The page a Supabase Auth recovery email returns to. It exchanges the one-time `code` for a\nrecovery session and redirects to `/reset-password`, where the new password is saved through\n`POST /api/auth/change-password`. A link that is missing, expired or already used lands on\n`/login?recovery=failed` instead of a screen whose save would be refused.\n\nThe `code` is PKCE-bound (`@supabase/ssr` pins `flowType: \"pkce\"` for both of its clients), so\nthe link completes only in the browser that requested it — the code verifier is a cookie there.\n",
+        "tags": [
+          "Authentication"
+        ],
+        "parameters": [
+          {
+            "in": "query",
+            "name": "code",
+            "required": true,
+            "description": "The one-time code Supabase Auth appends to the recovery link.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "sb_flow_id",
+            "required": false,
+            "description": "The PKCE flow the code belongs to, appended by `resetPasswordForEmail`.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "307": {
+            "description": "Redirect to `/reset-password` when the link was usable, or to `/login?recovery=failed`\nwhen it was not.\n"
+          }
+        }
+      }
+    },
+    "/api/auth/forgot-password": {
+      "post": {
+        "summary": "Send a password reset email",
+        "description": "Sends the Supabase Auth recovery email for the given address. The answer is identical whether\nor not that address has an account, so this endpoint cannot be used to enumerate the staff of\nan organization. The link in the email returns to `GET /api/auth/recovery`, which turns it into\na recovery session.\n",
+        "tags": [
+          "Authentication"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PasswordResetRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The request was accepted and the email is on its way, if the address exists.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PasswordResetResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The JSON body is invalid, or email is not a valid address.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Bạn đã yêu cầu quá nhiều lần. Vui lòng thử lại sau.",
             "content": {
               "application/json": {
                 "schema": {
@@ -6684,7 +6809,7 @@
             }
           },
           "401": {
-            "description": "Authentication is required.",
+            "description": "Bạn cần đăng nhập để thực hiện thao tác này.",
             "content": {
               "application/json": {
                 "schema": {
@@ -6788,7 +6913,7 @@
             }
           },
           "401": {
-            "description": "Authentication is required.",
+            "description": "Bạn cần đăng nhập để thực hiện thao tác này.",
             "content": {
               "application/json": {
                 "schema": {
@@ -6895,7 +7020,7 @@
             }
           },
           "401": {
-            "description": "Authentication is required.",
+            "description": "Bạn cần đăng nhập để thực hiện thao tác này.",
             "content": {
               "application/json": {
                 "schema": {
@@ -6977,7 +7102,7 @@
             }
           },
           "401": {
-            "description": "Authentication is required.",
+            "description": "Bạn cần đăng nhập để thực hiện thao tác này.",
             "content": {
               "application/json": {
                 "schema": {
@@ -7073,7 +7198,7 @@
             }
           },
           "401": {
-            "description": "Authentication is required.",
+            "description": "Bạn cần đăng nhập để thực hiện thao tác này.",
             "content": {
               "application/json": {
                 "schema": {
@@ -7177,7 +7302,7 @@
             }
           },
           "401": {
-            "description": "Authentication is required.",
+            "description": "Bạn cần đăng nhập để thực hiện thao tác này.",
             "content": {
               "application/json": {
                 "schema": {
@@ -7279,7 +7404,7 @@
             }
           },
           "401": {
-            "description": "Authentication is required.",
+            "description": "Bạn cần đăng nhập để thực hiện thao tác này.",
             "content": {
               "application/json": {
                 "schema": {
@@ -7412,7 +7537,7 @@
             }
           },
           "401": {
-            "description": "Authentication is required.",
+            "description": "Bạn cần đăng nhập để thực hiện thao tác này.",
             "content": {
               "application/json": {
                 "schema": {

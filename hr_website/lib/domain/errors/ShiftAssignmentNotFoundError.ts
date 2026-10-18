@@ -1,6 +1,6 @@
 export class ShiftAssignmentNotFoundError extends Error {
   constructor() {
-    super("Shift assignment not found.");
+    super("Không tìm thấy ca đã xếp.");
     this.name = "ShiftAssignmentNotFoundError";
   }
 }

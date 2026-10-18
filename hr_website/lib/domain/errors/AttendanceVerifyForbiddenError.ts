@@ -1,6 +1,6 @@
 export class AttendanceVerifyForbiddenError extends Error {
   constructor() {
-    super("Only a manager (OWNER/MANAGER) may verify an attendance record.");
+    super("Chỉ chủ sở hữu hoặc quản lý chi nhánh mới xác nhận được bản ghi chấm công.");
     this.name = "AttendanceVerifyForbiddenError";
   }
 }

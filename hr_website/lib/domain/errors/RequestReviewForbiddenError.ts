@@ -1,6 +1,6 @@
 export class RequestReviewForbiddenError extends Error {
   constructor() {
-    super("Only a manager (OWNER/MANAGER) may review requests.");
+    super("Chỉ chủ sở hữu hoặc quản lý chi nhánh mới duyệt được đơn từ.");
     this.name = "RequestReviewForbiddenError";
   }
 }

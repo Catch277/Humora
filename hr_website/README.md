@@ -540,6 +540,14 @@ An honest snapshot of what is real and what is still a prototype:
   input is 16px so Safari does not zoom the page on focus. The wide data tables keep their horizontal
   scroll on purpose instead of a card rewrite, so `/schedules`, `/attendance` and `/reports` are swiped
   sideways on a phone; a sticky first column and per-screen mobile layouts would be the next step.
+- **Server messages are Vietnamese, and the UI can switch language.** Every sentence a caller can see — an
+  `error` payload, a domain error, the `staff-account` Edge Function's answers — is Vietnamese now; the
+  repository/`console.error` diagnostics stay English on purpose, because they only reach the log next to
+  Postgres' own English text. `lib/i18n/` holds the dictionaries (`vi` is the source, `en` is checked against
+  it by the compiler, so a missing key fails `npx tsc --noEmit`), `components/LocaleProvider.tsx` serves them
+  through `t()`, and the header's language button (Tiếng Việt / English) stores the choice in the
+  `humora-locale` cookie — which `app/layout.tsx` reads so `<html lang>` is right in the first byte. The shell
+  is translated today; each screen is migrated in its own commit and keeps its Vietnamese copy until then.
 - **No demo data left:** `lib/mock/adminStore.ts` was deleted together with its last consumer, once
   trạng thái nhân viên moved to `get_employee_status`. Every screen now reads a table or an RPC, and the
   last simulated thing — the header search box — is wired to `GET /api/search` too:

@@ -39,7 +39,7 @@ export async function POST() {
   } catch (error) {
     console.error("Failed to sign out", error);
     return NextResponse.json(
-      { error: "Unable to sign out." },
+      { error: "Không thể đăng xuất." },
       { status: 500 },
     );
   }

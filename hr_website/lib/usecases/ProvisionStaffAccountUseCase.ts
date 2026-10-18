@@ -45,7 +45,7 @@ export class ProvisionStaffAccountUseCase {
       emailValidationError(email) ??
       newPasswordValidationError(input.password) ??
       (fullName.length > MAX_NAME_LENGTH
-        ? `full_name must be at most ${MAX_NAME_LENGTH} characters.`
+        ? `full_name tối đa ${MAX_NAME_LENGTH} ký tự.`
         : null);
 
     if (validationError) {
@@ -53,7 +53,7 @@ export class ProvisionStaffAccountUseCase {
     }
 
     if (!ROLE_SET.has(input.role)) {
-      throw new Error(`role must be one of ${INVITE_ROLES.join(", ")}.`);
+      throw new Error(`role phải là một trong: ${INVITE_ROLES.join(", ")}.`);
     }
 
     return this.staffProvisioningService.createAccount({

@@ -79,7 +79,7 @@
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  *       401:
- *         description: Authentication is required.
+ *         description: Bạn cần đăng nhập để thực hiện thao tác này.
  *         content:
  *           application/json:
  *             schema:
@@ -133,7 +133,7 @@ export async function POST(request: Request) {
   try {
     body = await request.json();
   } catch {
-    return NextResponse.json({ error: "Invalid JSON body." }, { status: 400 });
+    return NextResponse.json({ error: "Nội dung yêu cầu phải là JSON hợp lệ." }, { status: 400 });
   }
 
   const parsed = parseCheckInRequest(body);
@@ -204,7 +204,7 @@ export async function POST(request: Request) {
 
     console.error("Failed to record check-in", error);
     return NextResponse.json(
-      { error: "Unable to record the check-in." },
+      { error: "Không thể ghi nhận vào ca." },
       { status: 500 },
     );
   }

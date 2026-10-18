@@ -38,7 +38,7 @@
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  *       401:
- *         description: Authentication is required.
+ *         description: Bạn cần đăng nhập để thực hiện thao tác này.
  *         content:
  *           application/json:
  *             schema:
@@ -83,12 +83,12 @@ export async function POST(request: Request) {
   try {
     body = await request.json();
   } catch {
-    return NextResponse.json({ error: "Invalid JSON body." }, { status: 400 });
+    return NextResponse.json({ error: "Nội dung yêu cầu phải là JSON hợp lệ." }, { status: 400 });
   }
 
   if (typeof body.code !== "string") {
     return NextResponse.json(
-      { error: "code is required and must be a string." },
+      { error: "code là bắt buộc và phải là chuỗi." },
       { status: 400 },
     );
   }
@@ -122,7 +122,7 @@ export async function POST(request: Request) {
     }
 
     return NextResponse.json(
-      { error: "Unable to join the organization." },
+      { error: "Không thể tham gia tổ chức." },
       { status: 500 },
     );
   }

@@ -11,6 +11,7 @@ import {
   Users,
 } from "lucide-react";
 
+import { useLocale } from "@/components/LocaleProvider";
 import { useProfile } from "@/components/ProfileProvider";
 import { asArray, asArrayField } from "@/lib/asArray";
 import type { Attendance } from "@/lib/domain/entities/Attendance";
@@ -20,21 +21,17 @@ import type {
   RevenueReportPoint,
   RevenueReportResult,
 } from "@/lib/domain/entities/RevenueReport";
+import { formatCurrency, formatDateTime, formatPercent } from "@/lib/i18n/format";
+import { requestStatusLabel } from "@/lib/i18n/labels";
+import type { Locale } from "@/lib/i18n/locales";
+import type { Translate } from "@/lib/i18n/translate";
 import { getBusinessDay } from "@/lib/usecases/businessDay";
-
-const REQUEST_STATUS_LABELS: Record<string, string> = {
-  PENDING: "Chờ duyệt",
-  APPROVED: "Đã duyệt",
-  REJECTED: "Từ chối",
-};
 
 const REQUEST_STATUS_TONES: Record<string, string> = {
   PENDING: "bg-amber-50 text-amber-700",
   APPROVED: "bg-emerald-50 text-emerald-700",
   REJECTED: "bg-rose-50 text-rose-700",
 };
-
-const currency = new Intl.NumberFormat("vi-VN");
 
 /**
  * The dashboard tile row is smaller for a role that may not see the roster (`employee-status:view`) or
@@ -46,32 +43,22 @@ const TILE_GRID_CLASSES: Record<number, string> = {
   4: "lg:grid-cols-4",
 };
 
-function formatCurrency(value: number): string {
-  return `${currency.format(Math.round(value))} ₫`;
-}
-
-function formatPercent(value: number | null): string {
-  if (value === null || !Number.isFinite(value)) {
-    return "chưa có kỳ so sánh";
+/**
+ * `+4,2% so với kỳ trước`, or the "nothing to compare yet" sentence.
+ *
+ * One helper on purpose: a missing comparison rendered as `0%` would read as "no change" instead of "we
+ * have no previous period to compare with".
+ */
+function comparisonLabel(
+  value: number | null | undefined,
+  locale: Locale,
+  t: Translate,
+): string {
+  if (value === null || value === undefined || !Number.isFinite(value)) {
+    return t("dashboard.noComparison");
   }
 
-  return `${value > 0 ? "+" : ""}${value.toFixed(1).replace(".", ",")}%`;
-}
-
-function formatDateTime(value: string): string {
-  const parsed = new Date(value);
-
-  if (Number.isNaN(parsed.getTime())) {
-    return "—";
-  }
-
-  return new Intl.DateTimeFormat("vi-VN", {
-    day: "2-digit",
-    month: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    timeZone: "Asia/Bangkok",
-  }).format(parsed);
+  return `${formatPercent(value, locale)} ${t("dashboard.vsPrevious")}`;
 }
 
 /** `/api/employee-status` answers the snapshot the giám sát screen polls, not a bare array. */
@@ -95,6 +82,7 @@ export default function Dashboard() {
   // neither fetch them (that would render a permanent "Không tải được" banner for a `403` the role
   // cannot avoid) nor show a tile that would read zero. The two tiles are therefore derived from the
   // same capability table the sidebar uses.
+  const { locale, t } = useLocale();
   const { can, loading: profileLoading } = useProfile();
   const canViewRoster = can("employee-status:view");
   const canViewReport = can("report:view");
@@ -140,9 +128,9 @@ export default function Dashboard() {
       // read on its own and the note names the part that is missing. A tile this role may not see was
       // never fetched, so `null` here is not a failure.
       const failed = [
-        rosterResponse && !rosterResponse.ok ? "tình trạng nhân viên" : "",
-        requestsResponse.ok ? "" : "đơn từ",
-        attendanceResponse.ok ? "" : "bảng công hôm nay",
+        rosterResponse && !rosterResponse.ok ? t("dashboard.part.roster") : "",
+        requestsResponse.ok ? "" : t("dashboard.part.requests"),
+        attendanceResponse.ok ? "" : t("dashboard.part.attendance"),
       ].filter(Boolean);
 
       // `/api/employee-status` answers `{ updated_at, work_date, data }`; the other three answer bare
@@ -165,9 +153,9 @@ export default function Dashboard() {
           : null,
         error:
           failed.length > 0
-            ? `Không tải được: ${failed.join(", ")}.`
+            ? t("dashboard.loadFailed", { parts: failed.join(", ") })
             : reportResponse && !reportResponse.ok
-              ? "Không tải được báo cáo doanh thu."
+              ? t("dashboard.reportFailed")
               : "",
       };
     }
@@ -193,14 +181,14 @@ export default function Dashboard() {
           return;
         }
 
-        setPageError("Không thể kết nối tới máy chủ. Vui lòng thử lại.");
+        setPageError(t("error.network"));
         setLoading(false);
       });
 
     return () => {
       cancelled = true;
     };
-  }, [today, reloadToken, profileLoading, canViewRoster, canViewReport]);
+  }, [today, reloadToken, profileLoading, canViewRoster, canViewReport, t]);
 
   function refresh() {
     setLoading(true);
@@ -235,12 +223,12 @@ export default function Dashboard() {
           <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-slate-400">
             Humora HR
           </p>
-          <h1 className="text-2xl font-bold tracking-tight text-slate-900">Tổng quan</h1>
+          <h1 className="text-2xl font-bold tracking-tight text-slate-900">
+            {t("nav.dashboard")}
+          </h1>
           <p className="mt-1 text-xs text-slate-500">
-            Ngày làm việc {businessDate} (giờ Việt Nam) — số liệu lấy trực tiếp từ{" "}
-            {canViewReport
-              ? "bảng công, đơn từ và doanh thu."
-              : "bảng công và đơn từ của chính bạn."}
+            {t("dashboard.subtitle", { date: businessDate })}
+            {canViewReport ? t("dashboard.sourcesAll") : t("dashboard.sourcesOwn")}
           </p>
         </div>
         <button
@@ -250,7 +238,7 @@ export default function Dashboard() {
           className="inline-flex shrink-0 items-center gap-2 rounded-lg border border-slate-200 bg-surface px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
         >
           <RefreshCw size={14} className={loading ? "animate-spin" : ""} />
-          Tải lại
+          {t("common.reload")}
         </button>
       </section>
 
@@ -268,7 +256,7 @@ export default function Dashboard() {
           <div className="rounded-xl border border-slate-200/80 bg-surface p-4 shadow-sm">
             <div className="flex items-center justify-between">
               <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">
-                Nhân sự trong ngày
+                {t("dashboard.tileRoster")}
               </p>
               <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-50 text-primary">
                 <Users size={16} />
@@ -278,7 +266,7 @@ export default function Dashboard() {
               {data.roster.length}
             </p>
             <p className="mt-1 text-[10px] text-slate-500">
-              {workingCount} đang trong ca
+              {t("dashboard.tileRosterNote", { count: workingCount })}
             </p>
           </div>
         )}
@@ -287,14 +275,14 @@ export default function Dashboard() {
           <div className="rounded-xl border border-slate-200/80 bg-surface p-4 shadow-sm">
             <div className="flex items-center justify-between">
               <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">
-                Doanh thu tháng
+                {t("dashboard.tileRevenue")}
               </p>
               <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-50 text-emerald-600">
                 <CircleDollarSign size={16} />
               </span>
             </div>
             <p className="mt-2 text-3xl font-bold tabular-nums text-slate-900">
-              {formatCurrency(monthRevenue)}
+              {formatCurrency(monthRevenue, locale)}
             </p>
             <p
               className={`mt-1 flex items-center gap-1 text-[10px] ${
@@ -304,7 +292,7 @@ export default function Dashboard() {
               }`}
             >
               <TrendingUp size={11} />
-              {formatPercent(comparison?.percentage_change ?? null)} so với kỳ trước
+              {comparisonLabel(comparison?.percentage_change ?? null, locale, t)}
             </p>
           </div>
         )}
@@ -312,7 +300,7 @@ export default function Dashboard() {
         <div className="rounded-xl border border-slate-200/80 bg-surface p-4 shadow-sm">
           <div className="flex items-center justify-between">
             <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">
-              Đơn chờ duyệt
+              {t("dashboard.tileRequests")}
             </p>
             <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-amber-50 text-amber-600">
               <CalendarDays size={16} />
@@ -322,14 +310,14 @@ export default function Dashboard() {
             {pendingRequests.length}
           </p>
           <p className="mt-1 text-[10px] text-amber-600">
-            trên tổng {data.requests.length} đơn
+            {t("dashboard.tileRequestsNote", { count: data.requests.length })}
           </p>
         </div>
 
         <div className="rounded-xl border border-slate-200/80 bg-surface p-4 shadow-sm">
           <div className="flex items-center justify-between">
             <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">
-              Chấm công hôm nay
+              {t("dashboard.tileAttendance")}
             </p>
             <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-50 text-indigo-600">
               <CalendarCheck size={16} />
@@ -339,7 +327,10 @@ export default function Dashboard() {
             {data.attendance.length}
           </p>
           <p className="mt-1 text-[10px] text-slate-500">
-            {onTimeCount} đúng giờ · <span className="text-amber-600">{lateCount} đi muộn</span>
+            {t("dashboard.tileAttendanceNoteBefore", { onTime: onTimeCount })}
+            <span className="text-amber-600">
+              {t("dashboard.tileAttendanceNoteAfter", { late: lateCount })}
+            </span>
           </p>
         </div>
       </div>
@@ -347,18 +338,20 @@ export default function Dashboard() {
       <div className={`grid gap-4 ${canViewReport ? "lg:grid-cols-2" : ""}`}>
         <section className="flex flex-col rounded-xl border border-slate-200/80 bg-surface p-5 shadow-sm">
           <div className="flex items-center justify-between">
-            <h2 className="text-sm font-bold text-slate-900">Đơn từ gần đây</h2>
+            <h2 className="text-sm font-bold text-slate-900">
+              {t("dashboard.recentRequests")}
+            </h2>
             <a
               href="/requests"
               className="text-[11px] font-semibold text-primary hover:underline"
             >
-              Xem tất cả
+              {t("common.viewAll")}
             </a>
           </div>
 
           {recentRequests.length === 0 ? (
             <p className="flex flex-1 items-center justify-center py-12 text-center text-xs text-slate-400">
-              Chưa có đơn nào được gửi.
+              {t("dashboard.noRequests")}
             </p>
           ) : (
             <ul className="mt-3 divide-y divide-slate-100">
@@ -372,8 +365,8 @@ export default function Dashboard() {
                       {request.title ?? request.request_type}
                     </p>
                     <p className="mt-0.5 text-[10px] text-slate-500">
-                      {request.requester?.full_name ?? "Không xem được tên"} ·{" "}
-                      {formatDateTime(request.created_at)}
+                      {request.requester?.full_name ?? t("dashboard.unknownRequester")} ·{" "}
+                      {formatDateTime(request.created_at, locale)}
                     </p>
                   </div>
                   <span
@@ -382,7 +375,7 @@ export default function Dashboard() {
                       "bg-slate-100 text-slate-600"
                     }`}
                   >
-                    {REQUEST_STATUS_LABELS[request.status] ?? request.status}
+                    {requestStatusLabel(request.status, t)}
                   </span>
                 </li>
               ))}
@@ -394,16 +387,16 @@ export default function Dashboard() {
         <section className="flex flex-col rounded-xl border border-slate-200/80 bg-surface p-5 shadow-sm">
           <div className="flex items-center justify-between">
             <h2 className="text-sm font-bold text-slate-900">
-              Doanh thu theo ngày (tháng này)
+              {t("dashboard.revenueByDay")}
             </h2>
             <span className="text-[11px] font-semibold tabular-nums text-slate-600">
-              {formatCurrency(monthRevenue)}
+              {formatCurrency(monthRevenue, locale)}
             </span>
           </div>
 
           {series.length === 0 ? (
             <p className="flex flex-1 items-center justify-center py-12 text-center text-xs text-slate-400">
-              Chưa có ca nào được chốt trong tháng này.
+              {t("dashboard.noRevenue")}
             </p>
           ) : (
             <>
@@ -422,7 +415,11 @@ export default function Dashboard() {
                   return (
                     <div
                       key={point.bucket_start}
-                      title={`${point.bucket_start}: ${formatCurrency(point.total_revenue_amount)} (${point.record_count} ca)`}
+                      title={t("dashboard.pointTitle", {
+                        date: point.bucket_start,
+                        amount: formatCurrency(point.total_revenue_amount, locale),
+                        count: point.record_count,
+                      })}
                       className="flex-1 rounded-t bg-primary/80 transition-colors hover:bg-primary"
                       style={{ height: `${height}%` }}
                     />
@@ -432,8 +429,10 @@ export default function Dashboard() {
               <div className="mt-2 flex items-center justify-between text-[10px] text-slate-500">
                 <span>{series[0]?.bucket_start}</span>
                 <span>
-                  {series.length} ngày có doanh thu ·{" "}
-                  {summary?.record_count ?? 0} ca đã chốt
+                  {t("dashboard.seriesSummary", {
+                    days: series.length,
+                    shifts: summary?.record_count ?? 0,
+                  })}
                 </span>
                 <span>{series[series.length - 1]?.bucket_start}</span>
               </div>

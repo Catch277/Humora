@@ -14,17 +14,26 @@ import {
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
+import { useLocale } from "@/components/LocaleProvider";
 import { useProfile } from "@/components/ProfileProvider";
 import { canManageBranch } from "@/lib/domain/branchScope";
 import type { Attendance, AttendanceStatus } from "@/lib/domain/entities/Attendance";
 import type { Branch } from "@/lib/domain/entities/Branch";
 import type { Shift, ShiftAssignment } from "@/lib/domain/entities/Shift";
 import { isManagerRole } from "@/lib/domain/roles";
-import { isShiftStillRunning } from "@/lib/usecases/attendanceStatus";
+import {
+  formatClockTime,
+  formatDayMonth,
+  formatTime,
+  weekdayShort,
+} from "@/lib/i18n/format";
+import { attendanceStatusLabel, geofenceLabel } from "@/lib/i18n/labels";
+import type { Translate } from "@/lib/i18n/translate";
 import {
   effectiveCheckOut,
   effectiveWorkedHours,
 } from "@/lib/usecases/attendanceAutoClose";
+import { isShiftStillRunning } from "@/lib/usecases/attendanceStatus";
 
 // SCRUM-61 needs `manager_id`: it is what says whether the caller heads the branch.
 type BranchOption = Pick<Branch, "id" | "name" | "manager_id">;
@@ -44,57 +53,9 @@ function addDays(date: string, days: number): string {
   return shifted.toISOString().slice(0, 10);
 }
 
-const timeFormatter = new Intl.DateTimeFormat("vi-VN", {
-  timeZone: "Asia/Bangkok",
-  hour: "2-digit",
-  minute: "2-digit",
-});
-
-/** A stored timestamp as the clock reads in Vietnam; `--:--` while the ca is still open. */
-function formatTime(value: string | null): string {
-  if (!value) {
-    return "--:--";
-  }
-
-  const parsed = new Date(value);
-
-  return Number.isNaN(parsed.getTime()) ? "--:--" : timeFormatter.format(parsed);
-}
-
-/** A `shifts.start_time` (`HH:MM:SS`) as a label; `--:--` when the template carries no hours. */
-function formatShiftTime(value: string | null): string {
-  if (!value) {
-    return "--:--";
-  }
-
-  const match = /^(\d{1,2}):(\d{2})/.exec(value);
-
-  return match ? `${match[1].padStart(2, "0")}:${match[2]}` : "--:--";
-}
-
-/** `YYYY-MM-DD` → `DD/MM`, without going through `Date` so no timezone shifts the day. */
-function formatDayDate(value: string): string {
-  const [, month, day] = value.split("-");
-
-  return `${day}/${month}`;
-}
-
-const WEEKDAY_SHORT = ["CN", "T2", "T3", "T4", "T5", "T6", "T7"];
-
-function weekdayShort(value: string): string {
-  const [year, month, day] = value.split("-").map(Number);
-  const weekday = new Date(Date.UTC(year, month - 1, day)).getUTCDay();
-
-  return WEEKDAY_SHORT[weekday];
-}
-
-const STATUS_LABELS: Record<AttendanceStatus, string> = {
-  ON_TIME: "Đúng giờ",
-  LATE: "Đi muộn",
-  EARLY_LEAVE: "Về sớm",
-  ABSENT: "Vắng mặt",
-  INCOMPLETE: "Thiếu giờ ra",
-};
+// The time / day / clock labels come from `lib/i18n/format.ts` and the attendance status from
+// `lib/i18n/labels.ts`: one copy each, shared with `/attendance` and the dashboard. Every call passes
+// `"--:--"` as the fallback, which is what this screen has always shown for a missing time.
 
 // The tones DESIGN.md §7.6 lists for the attendance statuses.
 const STATUS_BADGES: Record<AttendanceStatus, string> = {
@@ -125,12 +86,6 @@ function geofenceVerdict(record: Attendance): GeofenceVerdict {
     ? "INSIDE"
     : "OUTSIDE";
 }
-
-const GEOFENCE_LABELS: Record<GeofenceVerdict, string> = {
-  INSIDE: "Trong vùng",
-  OUTSIDE: "Ngoài vùng",
-  UNKNOWN: "Thiếu toạ độ",
-};
 
 const GEOFENCE_BADGES: Record<GeofenceVerdict, string> = {
   INSIDE: "bg-emerald-50 text-emerald-700",
@@ -165,6 +120,7 @@ type LoadResult = {
  * capabilities, so `proxy.ts` bounces the deep link and the sidebar shows no link at all.
  */
 export default function CheckInPage() {
+  const { locale, t } = useLocale();
   const { profile, can } = useProfile();
   const [assignments, setAssignments] = useState<ShiftAssignment[]>([]);
   const [shifts, setShifts] = useState<Shift[]>([]);
@@ -229,7 +185,7 @@ export default function CheckInPage() {
           shifts: [],
           branches: [],
           records: [],
-          error: data?.error ?? "Không thể tải lịch sử chấm công của bạn.",
+          error: data?.error ?? t("checkIn.error.history"),
         };
       }
 
@@ -246,7 +202,7 @@ export default function CheckInPage() {
           ? ((await branchesResponse.json()) as BranchOption[])
           : [],
         records: (await recordsResponse.json()) as Attendance[],
-        error: scheduleFailed ? "Không thể tải ca làm việc hôm nay." : null,
+        error: scheduleFailed ? t("checkIn.error.schedule") : null,
       };
     }
 
@@ -272,14 +228,14 @@ export default function CheckInPage() {
         setShifts([]);
         setBranches([]);
         setRecords([]);
-        setPageError("Không thể kết nối tới máy chủ. Vui lòng thử lại.");
+        setPageError(t("error.network"));
         setLoading(false);
       });
 
     return () => {
       cancelled = true;
     };
-  }, [viewerId, isManager, historyStart, today, reloadToken]);
+  }, [viewerId, isManager, historyStart, today, reloadToken, t]);
 
   function refresh() {
     setLoading(true);
@@ -356,18 +312,19 @@ export default function CheckInPage() {
   function actionErrorMessage(
     status: number,
     data: { error?: string } | null,
+    t: Translate,
   ): string {
     if (status === 401) {
-      return "Phiên làm việc đã hết hạn. Vui lòng đăng nhập lại.";
+      return t("error.sessionExpired");
     }
 
     if (status === 403) {
-      return "Tài khoản của bạn không thể chấm công (chủ sở hữu không chấm công, và bạn cần thuộc một chi nhánh).";
+      return t("checkIn.error.forbidden");
     }
 
     // 400/404/409 carry the real reason from the API (no ca today, already checked in, …), so that
     // sentence is shown rather than a generic one.
-    return data?.error ?? "Không thể thực hiện thao tác. Vui lòng thử lại.";
+    return data?.error ?? t("error.generic");
   }
 
   /**
@@ -404,9 +361,7 @@ export default function CheckInPage() {
 
     if (
       !position &&
-      !window.confirm(
-        "Không lấy được vị trí hiện tại. Vẫn chấm công mà không kèm toạ độ?",
-      )
+      !window.confirm(t("checkIn.confirm.noLocationCheckIn"))
     ) {
       return;
     }
@@ -430,19 +385,23 @@ export default function CheckInPage() {
         const data = (await response.json().catch(() => null)) as {
           error?: string;
         } | null;
-        setActionError(actionErrorMessage(response.status, data));
+        setActionError(actionErrorMessage(response.status, data, t));
         return;
       }
 
       const record = (await response.json()) as Attendance;
       setNotice(
         rejoin
-          ? `Đã vào ca lại — giờ vào vẫn là ${formatTime(record.check_in_at)}.`
-          : `Đã ghi nhận vào ca lúc ${formatTime(record.check_in_at)}.`,
+          ? t("checkIn.notice.rejoined", {
+              time: formatTime(record.check_in_at, locale, "--:--"),
+            })
+          : t("checkIn.notice.checkedIn", {
+              time: formatTime(record.check_in_at, locale, "--:--"),
+            }),
       );
       refresh();
     } catch {
-      setActionError("Không thể kết nối tới máy chủ. Vui lòng thử lại.");
+      setActionError(t("error.network"));
     } finally {
       setBusy("");
     }
@@ -456,9 +415,7 @@ export default function CheckInPage() {
 
     if (
       !position &&
-      !window.confirm(
-        "Không lấy được vị trí hiện tại. Vẫn kết thúc ca mà không kèm toạ độ?",
-      )
+      !window.confirm(t("checkIn.confirm.noLocationCheckOut"))
     ) {
       return;
     }
@@ -480,15 +437,19 @@ export default function CheckInPage() {
         const data = (await response.json().catch(() => null)) as {
           error?: string;
         } | null;
-        setActionError(actionErrorMessage(response.status, data));
+        setActionError(actionErrorMessage(response.status, data, t));
         return;
       }
 
       const closed = (await response.json()) as Attendance;
-      setNotice(`Đã ghi nhận ra ca lúc ${formatTime(closed.check_out_at)}.`);
+      setNotice(
+        t("checkIn.notice.checkedOut", {
+          time: formatTime(closed.check_out_at, locale, "--:--"),
+        }),
+      );
       refresh();
     } catch {
-      setActionError("Không thể kết nối tới máy chủ. Vui lòng thử lại.");
+      setActionError(t("error.network"));
     } finally {
       setBusy("");
     }
@@ -498,7 +459,7 @@ export default function CheckInPage() {
     return (
       <div className="flex items-center justify-center gap-2 rounded-xl border border-slate-200/80 bg-surface p-10 text-xs text-slate-400">
         <Loader2 size={16} className="animate-spin text-primary" />
-        Đang tải dữ liệu chấm công...
+        {t("checkIn.loading")}
       </div>
     );
   }
@@ -508,15 +469,13 @@ export default function CheckInPage() {
       <div className="flex flex-col justify-between gap-3 lg:flex-row lg:items-end">
         <div>
           <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-slate-400">
-            Vận hành ca / SCRUM-68
+            {t("checkIn.eyebrow")}
           </p>
           <h1 className="text-2xl font-bold tracking-tight text-slate-900">
-            Chấm công
+            {t("nav.checkIn")}
           </h1>
           <p className="mt-1 text-xs text-slate-500">
-            {isManager
-              ? "Ghi nhận giờ vào ca / ra ca kèm vị trí GPS cho chi nhánh bạn phụ trách."
-              : "Ghi nhận giờ vào ca / ra ca kèm vị trí GPS theo ca làm việc hôm nay của bạn."}
+            {isManager ? t("checkIn.subtitleManager") : t("checkIn.subtitleEmployee")}
           </p>
         </div>
         <button
@@ -526,7 +485,7 @@ export default function CheckInPage() {
           className={`${secondaryButtonClassName} self-start`}
         >
           <RefreshCw size={14} className={loading ? "animate-spin" : undefined} />
-          Làm mới
+          {t("common.reload")}
         </button>
       </div>
 
@@ -553,11 +512,10 @@ export default function CheckInPage() {
           <AlertTriangle size={16} className="mt-0.5 shrink-0 text-amber-600" />
           <div>
             <p className="text-[10px] font-semibold uppercase text-slate-400">
-              Chưa gán chi nhánh
+              {t("checkIn.noBranchTitle")}
             </p>
             <p className="mt-1 text-xs text-amber-800">
-              Tài khoản của bạn chưa thuộc chi nhánh nào nên chưa thể chấm công. Hãy đề nghị
-              chủ sở hữu gán chi nhánh cho bạn ở màn hình Quản lý nhân sự.
+              {t("checkIn.noBranchHint")}
             </p>
           </div>
         </div>
@@ -567,7 +525,7 @@ export default function CheckInPage() {
         <article className="rounded-xl border border-slate-200/80 border-b-2 border-b-blue-200 bg-surface p-4 shadow-sm">
           <div className="flex items-start justify-between gap-3">
             <p className="max-w-44 text-[10px] font-semibold uppercase leading-relaxed tracking-wide text-slate-500">
-              {isManager ? "Chi nhánh phụ trách" : "Ca hôm nay"}
+              {isManager ? t("checkIn.tileBranches") : t("checkIn.tileShifts")}
             </p>
             <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-blue-50 text-primary">
               {isManager ? <Building2 size={16} /> : <CalendarRange size={16} />}
@@ -577,16 +535,14 @@ export default function CheckInPage() {
             {isManager ? scopedBranches.length : todayAssignments.length}
           </p>
           <p className="mt-1 text-[10px] text-slate-400">
-            {isManager
-              ? "Chi nhánh bạn được phân phụ trách"
-              : "Ca làm việc đã xếp trong ngày"}
+            {isManager ? t("checkIn.tileBranchesNote") : t("checkIn.tileShiftsNote")}
           </p>
         </article>
 
         <article className="rounded-xl border border-slate-200/80 border-b-2 border-b-emerald-200 bg-surface p-4 shadow-sm">
           <div className="flex items-start justify-between gap-3">
             <p className="max-w-44 text-[10px] font-semibold uppercase leading-relaxed tracking-wide text-slate-500">
-              Đã vào ca
+              {t("checkIn.tileCheckedIn")}
             </p>
             <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-emerald-50 text-emerald-600">
               <LogIn size={16} />
@@ -595,13 +551,15 @@ export default function CheckInPage() {
           <p className="mt-5 text-2xl font-bold tabular-nums tracking-tight text-slate-900">
             {todayRecords.filter((record) => record.check_in_at).length}
           </p>
-          <p className="mt-1 text-[10px] text-slate-400">Bản ghi vào ca hôm nay</p>
+          <p className="mt-1 text-[10px] text-slate-400">
+            {t("checkIn.tileCheckedInNote")}
+          </p>
         </article>
 
         <article className="rounded-xl border border-slate-200/80 border-b-2 border-b-amber-200 bg-surface p-4 shadow-sm">
           <div className="flex items-start justify-between gap-3">
             <p className="max-w-44 text-[10px] font-semibold uppercase leading-relaxed tracking-wide text-slate-500">
-              Đang trong ca
+              {t("checkIn.tileOpen")}
             </p>
             <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-amber-50 text-amber-600">
               <Clock size={16} />
@@ -610,7 +568,7 @@ export default function CheckInPage() {
           <p className="mt-5 text-2xl font-bold tabular-nums tracking-tight text-slate-900">
             {openRecords.length}
           </p>
-          <p className="mt-1 text-[10px] text-slate-400">Bản ghi chưa có giờ ra</p>
+          <p className="mt-1 text-[10px] text-slate-400">{t("checkIn.tileOpenNote")}</p>
         </article>
       </div>
 
@@ -619,14 +577,16 @@ export default function CheckInPage() {
         <div className="border-b border-slate-100 p-4">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div>
-              <p className="text-[10px] font-semibold uppercase text-slate-400">Hôm nay</p>
+              <p className="text-[10px] font-semibold uppercase text-slate-400">
+                {t("common.today")}
+              </p>
               <p className="mt-0.5 text-sm font-semibold text-slate-900">
-                {weekdayShort(today)} {formatDayDate(today)}
+                {weekdayShort(today, locale)} {formatDayMonth(today, locale)}
               </p>
             </div>
             <p className="flex items-center gap-1 text-[10px] text-slate-400">
               <MapPin size={11} />
-              Toạ độ lấy từ thiết bị của bạn, khoảng cách do hệ thống tính.
+              {t("checkIn.locationNote")}
             </p>
           </div>
         </div>
@@ -634,16 +594,16 @@ export default function CheckInPage() {
         {isManager ? (
           <div className="flex flex-col gap-3 p-4 sm:flex-row sm:items-end">
             <label className="text-xs font-semibold text-slate-600 sm:min-w-56">
-              Chi nhánh
+              {t("common.branch")}
               <select
                 className={inputClassName}
                 value={selectedBranchId}
                 onChange={(event) => setBranchChoice(event.target.value)}
                 disabled={scopedBranches.length === 0}
-                aria-label="Chi nhánh chấm công"
+                aria-label={t("checkIn.branchAria")}
               >
                 {scopedBranches.length === 0 ? (
-                  <option value="">Bạn chưa phụ trách chi nhánh nào</option>
+                  <option value="">{t("checkIn.noManagedBranch")}</option>
                 ) : (
                   scopedBranches.map((branch) => (
                     <option key={branch.id} value={branch.id}>
@@ -655,18 +615,18 @@ export default function CheckInPage() {
             </label>
 
             <label className="text-xs font-semibold text-slate-600 sm:min-w-56">
-              Ca làm việc (không bắt buộc)
+              {t("checkIn.shiftOptional")}
               <select
                 className={inputClassName}
                 value={shiftChoice}
                 onChange={(event) => setShiftChoice(event.target.value)}
-                aria-label="Ca làm việc"
+                aria-label={t("common.shift")}
               >
-                <option value="">Không theo ca</option>
+                <option value="">{t("checkIn.noShiftOption")}</option>
                 {shifts.map((shift) => (
                   <option key={shift.id} value={shift.id}>
-                    {shift.name} ({formatShiftTime(shift.start_time)} –{" "}
-                    {formatShiftTime(shift.end_time)})
+                    {shift.name} ({formatClockTime(shift.start_time)} –{" "}
+                    {formatClockTime(shift.end_time)})
                   </option>
                 ))}
               </select>
@@ -688,15 +648,15 @@ export default function CheckInPage() {
                 <LogIn size={14} />
               )}
               {busy === "check-in"
-                ? "Đang chấm công..."
+                ? t("checkIn.checkingIn")
                 : managerCanRejoin
-                  ? "Vào ca lại"
-                  : "Vào ca"}
+                  ? t("checkIn.rejoin")
+                  : t("checkIn.checkIn")}
             </button>
           </div>
         ) : todayAssignments.length === 0 ? (
           <div className="p-6 text-center text-xs text-slate-400">
-            Hôm nay bạn không có ca làm việc. Nếu đã được phân ca, hãy bấm &quot;Làm mới&quot;.
+            {t("checkIn.noShiftToday")}
           </div>
         ) : (
           <ul className="divide-y divide-slate-100">
@@ -713,8 +673,8 @@ export default function CheckInPage() {
               // A template without hours cannot judge punctuality, so the row is only ever `ON_TIME` —
               // say it here instead of letting "Đúng giờ" look like a verdict the ca never supported.
               const shiftHours = assignment.shift?.start_time
-                ? `${formatShiftTime(assignment.shift.start_time)} – ${formatShiftTime(assignment.shift.end_time)}`
-                : "Ca chưa khai giờ nên không đối chiếu được đi muộn";
+                ? `${formatClockTime(assignment.shift.start_time)} – ${formatClockTime(assignment.shift.end_time)}`
+                : t("checkIn.shiftWithoutHours");
 
               return (
                 <li
@@ -723,14 +683,16 @@ export default function CheckInPage() {
                 >
                   <div>
                     <p className="text-sm font-semibold text-slate-900">
-                      {assignment.shift?.name ?? "Ca làm việc"}
+                      {assignment.shift?.name ?? t("common.shift")}
                     </p>
                     <p className="mt-0.5 text-[11px] text-slate-500">{shiftHours}</p>
                   </div>
 
                   {checkInAt !== null && checkOut.at === null ? (
                     <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-emerald-700">
-                      Đã vào ca lúc {formatTime(checkInAt)}
+                      {t("checkIn.checkedInAt", {
+                        time: formatTime(checkInAt, locale, "--:--"),
+                      })}
                     </span>
                   ) : checkOut.at !== null ? (
                     <span className="flex flex-wrap items-center gap-2">
@@ -741,8 +703,10 @@ export default function CheckInPage() {
                             : "bg-slate-100 text-slate-600"
                         }`}
                       >
-                        Đã ra ca lúc {formatTime(checkOut.at)}
-                        {checkOut.automatic ? " (tự động)" : ""}
+                        {t("checkIn.checkedOutAt", {
+                          time: formatTime(checkOut.at, locale, "--:--"),
+                        })}
+                        {checkOut.automatic ? ` ${t("checkIn.automatic")}` : ""}
                       </span>
                       {canRejoin ? (
                         <button
@@ -756,7 +720,7 @@ export default function CheckInPage() {
                           ) : (
                             <RotateCcw size={14} />
                           )}
-                          {busy === "check-in" ? "Đang xử lý..." : "Vào ca lại"}
+                          {busy === "check-in" ? t("checkIn.processing") : t("checkIn.rejoin")}
                         </button>
                       ) : null}
                     </span>
@@ -772,7 +736,7 @@ export default function CheckInPage() {
                       ) : (
                         <LogIn size={14} />
                       )}
-                      {busy === "check-in" ? "Đang chấm công..." : "Vào ca"}
+                      {busy === "check-in" ? t("checkIn.checkingIn") : t("checkIn.checkIn")}
                     </button>
                   )}
                 </li>
@@ -786,16 +750,16 @@ export default function CheckInPage() {
       <section className="overflow-hidden rounded-xl border border-slate-200/80 bg-surface shadow-sm">
         <div className="border-b border-slate-100 p-4">
           <p className="text-[10px] font-semibold uppercase text-slate-400">
-            Đang trong ca
+            {t("checkIn.tileOpen")}
           </p>
           <p className="mt-0.5 text-sm font-semibold text-slate-900">
-            Ca chưa ghi nhận giờ ra
+            {t("checkIn.openSectionTitle")}
           </p>
         </div>
 
         {openRecords.length === 0 ? (
           <div className="p-6 text-center text-xs text-slate-400">
-            Không có ca nào đang mở
+            {t("checkIn.noOpenRecords")}
           </div>
         ) : (
           <ul className="divide-y divide-slate-100">
@@ -813,17 +777,21 @@ export default function CheckInPage() {
                 >
                   <div>
                     <p className="text-xs font-semibold text-slate-900">
-                      {record.shift?.name ?? "Không theo ca"} · vào lúc{" "}
-                      {formatTime(record.check_in_at)}
+                      {t("checkIn.openRowTitle", {
+                        shift: record.shift?.name ?? t("checkIn.noShiftOption"),
+                        time: formatTime(record.check_in_at, locale, "--:--"),
+                      })}
                     </p>
                     <p className="mt-0.5 text-[11px] text-slate-500">
                       {record.branch?.name ?? "—"} ·{" "}
-                      {GEOFENCE_LABELS[geofenceVerdict(record)]}
-                      {worked !== null ? ` · đã làm ${worked} h` : ""}
-                      {record.resumed_at !== null ? " · đã vào ca lại" : ""}
-                      {closed.automatic
-                        ? " · ca đã hết giờ, hệ thống ghi giờ ra bằng giờ kết thúc ca"
+                      {geofenceLabel(geofenceVerdict(record), t)}
+                      {worked !== null
+                        ? ` ${t("checkIn.workedHours", { hours: worked })}`
                         : ""}
+                      {record.resumed_at !== null
+                        ? ` ${t("checkIn.resumedMarker")}`
+                        : ""}
+                      {closed.automatic ? ` ${t("checkIn.autoClosedMarker")}` : ""}
                     </p>
                   </div>
 
@@ -831,7 +799,7 @@ export default function CheckInPage() {
                   <span
                     className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${STATUS_BADGES[record.status]}`}
                   >
-                    {STATUS_LABELS[record.status]}
+                    {attendanceStatusLabel(record.status, t)}
                   </span>
                   <button
                     type="button"
@@ -844,7 +812,7 @@ export default function CheckInPage() {
                     ) : (
                       <LogOut size={14} />
                     )}
-                    {busy === "check-out" ? "Đang xử lý..." : "Ra ca"}
+                    {busy === "check-out" ? t("checkIn.processing") : t("checkIn.checkOut")}
                   </button>
                 </span>
                 </li>
@@ -857,16 +825,16 @@ export default function CheckInPage() {
       <section className="overflow-hidden rounded-xl border border-slate-200/80 bg-surface shadow-sm">
         <div className="border-b border-slate-100 p-4">
           <p className="text-[10px] font-semibold uppercase text-slate-400">
-            Lịch sử {HISTORY_DAYS} ngày
+            {t("checkIn.historyEyebrow", { days: HISTORY_DAYS })}
           </p>
           <p className="mt-0.5 text-sm font-semibold text-slate-900">
-            Chấm công của tôi
+            {t("checkIn.myAttendance")}
           </p>
         </div>
 
         {records.length === 0 ? (
           <div className="p-6 text-center text-xs text-slate-400">
-            Chưa có dữ liệu chấm công
+            {t("checkIn.historyEmpty")}
           </div>
         ) : (
           <ul className="divide-y divide-slate-100">
@@ -884,17 +852,21 @@ export default function CheckInPage() {
                 >
                   <div className="min-w-0">
                     <p className="text-xs font-semibold text-slate-900">
-                      {weekdayShort(record.work_date)}{" "}
-                      {formatDayDate(record.work_date)} ·{" "}
-                      {record.shift?.name ?? "Không theo ca"}
+                      {weekdayShort(record.work_date, locale)}{" "}
+                      {formatDayMonth(record.work_date, locale)} ·{" "}
+                      {record.shift?.name ?? t("checkIn.noShiftOption")}
                     </p>
                     <p className="mt-0.5 text-[11px] text-slate-500">
                       {record.branch?.name ?? "—"} ·{" "}
-                      {formatTime(record.check_in_at)} →{" "}
-                      {formatTime(closed.at)}
-                      {closed.automatic ? " (tự động)" : ""}
-                      {worked !== null ? ` · ${worked} h` : ""}
-                      {record.resumed_at !== null ? " · có vào ca lại" : ""}
+                      {formatTime(record.check_in_at, locale, "--:--")} →{" "}
+                      {formatTime(closed.at, locale, "--:--")}
+                      {closed.automatic ? ` ${t("checkIn.automatic")}` : ""}
+                      {worked !== null
+                        ? ` ${t("checkIn.workedHoursShort", { hours: worked })}`
+                        : ""}
+                      {record.resumed_at !== null
+                        ? ` ${t("checkIn.resumedMarker")}`
+                        : ""}
                     </p>
                   </div>
 
@@ -902,12 +874,12 @@ export default function CheckInPage() {
                     <span
                       className={`rounded-full px-2.5 py-1 text-[10px] font-semibold ${GEOFENCE_BADGES[verdict]}`}
                     >
-                      {GEOFENCE_LABELS[verdict]}
+                      {geofenceLabel(verdict, t)}
                     </span>
                     <span
                       className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${STATUS_BADGES[record.status]}`}
                     >
-                      {STATUS_LABELS[record.status]}
+                      {attendanceStatusLabel(record.status, t)}
                     </span>
                   </span>
                 </li>

@@ -5,7 +5,7 @@
  */
 export class BranchManagerNotFoundError extends Error {
   constructor() {
-    super("manager_id must reference an account of your organization.");
+    super("manager_id phải trỏ tới một tài khoản trong tổ chức của bạn.");
     this.name = "BranchManagerNotFoundError";
   }
 }

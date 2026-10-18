@@ -16,7 +16,7 @@
  *               items:
  *                 $ref: '#/components/schemas/Branch'
  *       401:
- *         description: Authentication is required.
+ *         description: Bạn cần đăng nhập để thực hiện thao tác này.
  *       500:
  *         description: An unexpected server error occurred.
  *   post:
@@ -77,7 +77,7 @@
  *       400:
  *         description: The request body is invalid, including a manager_id that names no account in your organization or names an account that is not a MANAGER (SCRUM-63).
  *       401:
- *         description: Authentication is required.
+ *         description: Bạn cần đăng nhập để thực hiện thao tác này.
  *       403:
  *         description: The caller's role may not manage branches (SCRUM-59, owner only).
  *       409:
@@ -112,7 +112,7 @@ export async function GET() {
 
     if (authError || !user) {
       return NextResponse.json(
-        { error: "Authentication is required." },
+        { error: "Bạn cần đăng nhập để thực hiện thao tác này." },
         { status: 401 },
       );
     }
@@ -124,7 +124,7 @@ export async function GET() {
   } catch (error) {
     console.error("Failed to list branches", error);
     return NextResponse.json(
-      { error: "Unable to retrieve branches." },
+      { error: "Không thể tải danh sách chi nhánh." },
       { status: 500 },
     );
   }
@@ -136,7 +136,7 @@ export async function POST(request: Request) {
   try {
     body = await request.json();
   } catch {
-    return NextResponse.json({ error: "Invalid JSON body." }, { status: 400 });
+    return NextResponse.json({ error: "Nội dung yêu cầu phải là JSON hợp lệ." }, { status: 400 });
   }
 
   const parsed = parseBranchRequest(body);
@@ -178,7 +178,7 @@ export async function POST(request: Request) {
 
     console.error("Failed to create branch", error);
     return NextResponse.json(
-      { error: "Unable to create branch." },
+      { error: "Không thể tạo chi nhánh." },
       { status: 500 },
     );
   }

@@ -44,7 +44,7 @@
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  *       401:
- *         description: Authentication is required.
+ *         description: Bạn cần đăng nhập để thực hiện thao tác này.
  *         content:
  *           application/json:
  *             schema:
@@ -85,7 +85,7 @@ export async function GET(request: NextRequest) {
     rawLongitude.trim() === ""
   ) {
     return NextResponse.json(
-      { error: "latitude and longitude are required." },
+      { error: "Cần có latitude và longitude." },
       { status: 400 },
     );
   }
@@ -130,7 +130,7 @@ export async function GET(request: NextRequest) {
 
     if (authError || !user) {
       return NextResponse.json(
-        { error: "Authentication is required." },
+        { error: "Bạn cần đăng nhập để thực hiện thao tác này." },
         { status: 401 },
       );
     }
@@ -154,7 +154,7 @@ export async function GET(request: NextRequest) {
 
     console.error("Failed to look up the address", error);
     return NextResponse.json(
-      { error: "Unable to look up the address." },
+      { error: "Không thể tra cứu địa chỉ." },
       { status: 500 },
     );
   }

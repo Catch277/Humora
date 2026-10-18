@@ -165,6 +165,7 @@ class _HomeEmployeeScreenState extends State<HomeEmployeeScreen> {
     _showSnack(text, color: Colors.redAccent, icon: Icons.error_outline);
   }
 
+  // Đếm ngược từ thời gian hiện tại về giờ vào ca
   String _getCountdownToShiftStart() {
     if (_shiftId == null && !_isCheckedIn) return 'Không còn ca hôm nay';
 
@@ -266,42 +267,62 @@ class _HomeEmployeeScreenState extends State<HomeEmployeeScreen> {
     final period = DateFormat('a').format(_currentTime) == 'AM' ? 'SA' : 'CH';
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF4F6FC),
-      body: SingleChildScrollView(
-        child: Column(
-          children: [
-            HomeHeader(
-              formattedDate: _getFormattedDate(),
-              greeting: _getGreeting(),
+      body: Container(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [
+              Color(0xFF8BB5EA), // Xanh lam sáng phía trên
+              Color(0xFF6B9BD2), // Xanh mờ ở giữa
+              Color(0xFF90BBEA), // Xanh ánh nhạt phía dưới
+            ],
+          ),
+        ),
+        child: SafeArea(
+          bottom: false,
+          child: SingleChildScrollView(
+            child: Column(
+              children: [
+                HomeHeader(
+                  formattedDate: _getFormattedDate(),
+                  greeting: _getGreeting(),
+                ),
+                const SizedBox(height: 16),
+                CheckInCard(
+                  timeFormat: timeFormat,
+                  period: period,
+                  countdownText: _getCountdownToShiftStart(),
+                  onCheckIn: _handleCheckIn,
+                  isCheckedIn: _isCheckedIn,
+                  checkInTime: _checkInTime,
+                ),
+                const SizedBox(height: 20),
+                PerformanceCard(
+                  isSalaryVisible: _isSalaryVisible,
+                  onToggleSalary: () {
+                    setState(() {
+                      _isSalaryVisible = !_isSalaryVisible;
+                    });
+                  },
+                ),
+                const SizedBox(height: 20),
+                const HrServicesGrid(),
+                const SizedBox(height: 20),
+                const InternalNewsCard(),
+                const SizedBox(height: 30),
+              ],
             ),
-            const SizedBox(height: 16),
-            CheckInCard(
-              timeFormat: timeFormat,
-              period: period,
-              countdownText: _getCountdownToShiftStart(),
-              onCheckIn: _handleCheckIn,
-              isCheckedIn: _isCheckedIn,
-              checkInTime: _checkInTime,
-            ),
-            const SizedBox(height: 20),
-            PerformanceCard(
-              isSalaryVisible: _isSalaryVisible,
-              onToggleSalary: () {
-                setState(() {
-                  _isSalaryVisible = !_isSalaryVisible;
-                });
-              },
-            ),
-            const SizedBox(height: 20),
-            const HrServicesGrid(),
-            const SizedBox(height: 20),
-            const InternalNewsCard(),
-            const SizedBox(height: 30),
-          ],
+          ),
         ),
       ),
       bottomNavigationBar: BottomNavBar(
-        currentIndex: 0,
+        currentIndex: _selectedIndex,
+        onTap: (index) {
+          setState(() {
+            _selectedIndex = index;
+          });
+        },
       ),
     );
   }

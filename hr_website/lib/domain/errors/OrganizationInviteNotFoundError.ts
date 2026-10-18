@@ -1,6 +1,6 @@
 export class OrganizationInviteNotFoundError extends Error {
   constructor() {
-    super("The invite was not found.");
+    super("Không tìm thấy lời mời.");
     this.name = "OrganizationInviteNotFoundError";
   }
 }

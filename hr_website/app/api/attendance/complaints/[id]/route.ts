@@ -44,7 +44,7 @@
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  *       401:
- *         description: Authentication is required.
+ *         description: Bạn cần đăng nhập để thực hiện thao tác này.
  *         content:
  *           application/json:
  *             schema:
@@ -90,7 +90,7 @@ export async function PATCH(
 
   if (!UUID_PATTERN.test(id)) {
     return NextResponse.json(
-      { error: "The attendance id must be a UUID." },
+      { error: "ID bảng công phải là UUID." },
       { status: 400 },
     );
   }
@@ -100,12 +100,12 @@ export async function PATCH(
   try {
     body = await request.json();
   } catch {
-    return NextResponse.json({ error: "Invalid JSON body." }, { status: 400 });
+    return NextResponse.json({ error: "Nội dung yêu cầu phải là JSON hợp lệ." }, { status: 400 });
   }
 
   if (body.status !== "RESOLVED") {
     return NextResponse.json(
-      { error: "status must be RESOLVED." },
+      { error: "status phải là RESOLVED." },
       { status: 400 },
     );
   }
@@ -149,14 +149,14 @@ export async function PATCH(
 
     if (
       error instanceof Error &&
-      error.message.startsWith("This attendance record has no complaint")
+      error.message.startsWith("Bản ghi chấm công này không có khiếu nại")
     ) {
       return NextResponse.json({ error: error.message }, { status: 400 });
     }
 
     console.error("Failed to resolve attendance complaint", error);
     return NextResponse.json(
-      { error: "Unable to resolve the complaint." },
+      { error: "Không thể xử lý khiếu nại." },
       { status: 500 },
     );
   }

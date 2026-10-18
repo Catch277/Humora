@@ -67,12 +67,12 @@ export async function POST(request: Request) {
   try {
     body = await request.json();
   } catch {
-    return NextResponse.json({ error: "Invalid JSON body." }, { status: 400 });
+    return NextResponse.json({ error: "Nội dung yêu cầu phải là JSON hợp lệ." }, { status: 400 });
   }
 
   if (typeof body.email !== "string" || typeof body.password !== "string") {
     return NextResponse.json(
-      { error: "email and password must be strings." },
+      { error: "email và password phải là chuỗi." },
       { status: 400 },
     );
   }
@@ -90,17 +90,17 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: error.message }, { status: 401 });
     }
 
-    if (error instanceof Error && error.message.startsWith("email must")) {
+    if (error instanceof Error && error.message.startsWith("email")) {
       return NextResponse.json({ error: error.message }, { status: 400 });
     }
 
-    if (error instanceof Error && error.message.startsWith("password is")) {
+    if (error instanceof Error && error.message.startsWith("password")) {
       return NextResponse.json({ error: error.message }, { status: 400 });
     }
 
     console.error("Failed to sign in", error);
     return NextResponse.json(
-      { error: "Unable to sign in." },
+      { error: "Không thể đăng nhập." },
       { status: 500 },
     );
   }

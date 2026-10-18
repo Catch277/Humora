@@ -183,6 +183,29 @@ export function getApiDocs() {
               },
             },
           },
+          PasswordResetRequest: {
+            type: "object",
+            required: ["email"],
+            properties: {
+              email: {
+                type: "string",
+                format: "email",
+                example: "hr.lead@humora.vn",
+              },
+            },
+          },
+          PasswordResetResult: {
+            type: "object",
+            required: ["success", "email"],
+            properties: {
+              success: {
+                type: "boolean",
+                description:
+                  "Luôn true khi yêu cầu đã được chuyển cho Supabase Auth — câu trả lời không thay đổi dù email có tồn tại hay không, để không ai dò được danh sách nhân sự.",
+              },
+              email: { type: "string", format: "email" },
+            },
+          },
           Branch: {
             type: "object",
             required: [

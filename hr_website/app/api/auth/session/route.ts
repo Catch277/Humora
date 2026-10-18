@@ -14,7 +14,7 @@
  *             schema:
  *               $ref: '#/components/schemas/User'
  *       401:
- *         description: Authentication is required.
+ *         description: Bạn cần đăng nhập để thực hiện thao tác này.
  *         content:
  *           application/json:
  *             schema:
@@ -48,7 +48,7 @@ export async function GET() {
 
     if (authError || !user) {
       return NextResponse.json(
-        { error: "Authentication is required." },
+        { error: "Bạn cần đăng nhập để thực hiện thao tác này." },
         { status: 401 },
       );
     }
@@ -58,7 +58,7 @@ export async function GET() {
 
     if (!profile) {
       return NextResponse.json(
-        { error: "The account has no user profile." },
+        { error: "Tài khoản chưa có hồ sơ người dùng." },
         { status: 404 },
       );
     }
@@ -67,7 +67,7 @@ export async function GET() {
   } catch (error) {
     console.error("Failed to get the current session profile", error);
     return NextResponse.json(
-      { error: "Unable to retrieve the session profile." },
+      { error: "Không thể tải hồ sơ phiên đăng nhập." },
       { status: 500 },
     );
   }

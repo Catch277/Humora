@@ -55,7 +55,7 @@
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  *       401:
- *         description: Authentication is required.
+ *         description: Bạn cần đăng nhập để thực hiện thao tác này.
  *         content:
  *           application/json:
  *             schema:
@@ -108,14 +108,14 @@ export async function GET(request: NextRequest) {
 
   if (branchId && !UUID_PATTERN.test(branchId)) {
     return NextResponse.json(
-      { error: "branch_id must be a UUID." },
+      { error: "branch_id phải là UUID." },
       { status: 400 },
     );
   }
 
   if (workDate && !isCalendarDate(workDate)) {
     return NextResponse.json(
-      { error: "work_date must be a calendar date (YYYY-MM-DD)." },
+      { error: "work_date phải là ngày dạng YYYY-MM-DD." },
       { status: 400 },
     );
   }
@@ -147,7 +147,7 @@ export async function GET(request: NextRequest) {
   } catch (error) {
     console.error("Failed to load employee status", error);
     return NextResponse.json(
-      { error: "Unable to retrieve employee status." },
+      { error: "Không thể tải trạng thái nhân viên." },
       { status: 500 },
     );
   }

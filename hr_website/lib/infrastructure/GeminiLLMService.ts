@@ -66,7 +66,7 @@ export class GeminiLLMService implements ILLMService {
     const apiKey = process.env.GEMINI_API_KEY;
 
     if (!apiKey) {
-      throw new Error("Missing GEMINI_API_KEY environment variable.");
+      throw new Error("Thiếu biến môi trường GEMINI_API_KEY.");
     }
 
     this.client = new GoogleGenerativeAI(apiKey);

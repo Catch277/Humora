@@ -1,4 +1,5 @@
 import type { Notification } from "@/lib/domain/entities/Notification";
+import { translateVi, type MessageKey, type Translate } from "@/lib/i18n/translate";
 
 /**
  * The notification vocabulary (SCRUM-70/71/72).
@@ -28,81 +29,108 @@ export const NOTIFICATION_CATEGORIES = [
 
 export type NotificationCategory = (typeof NOTIFICATION_CATEGORIES)[number];
 
+export const CATEGORY_KEYS: Readonly<Record<NotificationCategory, MessageKey>> = {
+  revenue: "notificationCategory.revenue",
+  requests: "notificationCategory.requests",
+  schedule: "notificationCategory.schedule",
+  attendance: "notificationCategory.attendance",
+  staff: "notificationCategory.staff",
+  branch: "notificationCategory.branch",
+  facility: "notificationCategory.facility",
+  organization: "notificationCategory.organization",
+};
+
+/**
+ * The Vietnamese label of each group, read from the dictionary's source locale.
+ *
+ * It stays a value because `/notifications` renders it directly and that screen has its own migration
+ * pass; nothing is duplicated by keeping it, since the copy *is* the `vi` entry of the key — the two can
+ * no longer drift the way a second hand-written table would.
+ */
 export const CATEGORY_LABELS: Readonly<Record<NotificationCategory, string>> = {
-  revenue: "Doanh thu",
-  requests: "Đơn từ",
-  schedule: "Lịch làm việc",
-  attendance: "Chấm công",
-  staff: "Nhân sự",
-  branch: "Chi nhánh",
-  facility: "Thiết bị",
-  organization: "Tổ chức",
+  revenue: translateVi(CATEGORY_KEYS.revenue),
+  requests: translateVi(CATEGORY_KEYS.requests),
+  schedule: translateVi(CATEGORY_KEYS.schedule),
+  attendance: translateVi(CATEGORY_KEYS.attendance),
+  staff: translateVi(CATEGORY_KEYS.staff),
+  branch: translateVi(CATEGORY_KEYS.branch),
+  facility: translateVi(CATEGORY_KEYS.facility),
+  organization: translateVi(CATEGORY_KEYS.organization),
 };
 
 export interface NotificationTypeMeta {
-  /** The Vietnamese headline, matching the `title` the trigger stores. */
-  label: string;
+  /**
+   * The dictionary key of the label. The Vietnamese headline the trigger stores as `title` is the `vi`
+   * entry of that key (see `lib/i18n/labels.ts` for why the vocabulary holds keys and not strings).
+   */
+  key: MessageKey;
   category: NotificationCategory;
 }
 
 export const NOTIFICATION_TYPES: Readonly<Record<string, NotificationTypeMeta>> = {
   // ── Doanh thu (SCRUM-71) ─────────────────────────────────────────────────────────────────
-  REVENUE_OPENED: { label: "Khai báo doanh thu đầu ca", category: "revenue" },
-  REVENUE_CLOSED: { label: "Chốt doanh thu cuối ca", category: "revenue" },
-  REVENUE_DIFF: { label: "Doanh thu cuối ca bị lệch", category: "revenue" },
+  REVENUE_OPENED: { key: "notificationType.revenueOpened", category: "revenue" },
+  REVENUE_CLOSED: { key: "notificationType.revenueClosed", category: "revenue" },
+  REVENUE_DIFF: { key: "notificationType.revenueDiff", category: "revenue" },
 
   // ── Đơn từ ───────────────────────────────────────────────────────────────────────────────
-  REQUEST_CREATED: { label: "Đơn từ mới cần duyệt", category: "requests" },
-  REQUEST_APPROVED: { label: "Đơn của bạn đã được duyệt", category: "requests" },
-  REQUEST_REJECTED: { label: "Đơn của bạn bị từ chối", category: "requests" },
-  REQUEST_REVIEWED: { label: "Quản lý đã xử lý đơn từ", category: "requests" },
+  REQUEST_CREATED: { key: "notificationType.requestCreated", category: "requests" },
+  REQUEST_APPROVED: { key: "notificationType.requestApproved", category: "requests" },
+  REQUEST_REJECTED: { key: "notificationType.requestRejected", category: "requests" },
+  REQUEST_REVIEWED: { key: "notificationType.requestReviewed", category: "requests" },
 
   // ── Lịch làm việc ────────────────────────────────────────────────────────────────────────
-  SHIFT_ASSIGNED: { label: "Bạn được xếp ca làm việc", category: "schedule" },
-  SHIFT_CHANGED: { label: "Ca làm việc của bạn đã thay đổi", category: "schedule" },
-  SHIFT_REMOVED: { label: "Ca làm việc đã bị huỷ", category: "schedule" },
-  SHIFT_LEAVE: { label: "Ngày nghỉ", category: "schedule" },
+  SHIFT_ASSIGNED: { key: "notificationType.shiftAssigned", category: "schedule" },
+  SHIFT_CHANGED: { key: "notificationType.shiftChanged", category: "schedule" },
+  SHIFT_REMOVED: { key: "notificationType.shiftRemoved", category: "schedule" },
+  SHIFT_LEAVE: { key: "notificationType.shiftLeave", category: "schedule" },
 
   // ── Chấm công ────────────────────────────────────────────────────────────────────────────
-  ATTENDANCE_LATE: { label: "Nhân viên đi muộn", category: "attendance" },
-  ATTENDANCE_OUTSIDE: { label: "Chấm công ngoài vùng cho phép", category: "attendance" },
-  ATTENDANCE_EARLY_LEAVE: { label: "Nhân viên về sớm", category: "attendance" },
-  ATTENDANCE_RESUMED: { label: "Nhân viên vào ca lại", category: "attendance" },
-  ATTENDANCE_CORRECTED: { label: "Giờ công của bạn đã được sửa", category: "attendance" },
-  ATTENDANCE_VERIFIED: { label: "Bảng công đã được xác nhận", category: "attendance" },
-  ATTENDANCE_COMPLAINT: { label: "Khiếu nại bảng công", category: "attendance" },
-  COMPLAINT_RESOLVED: { label: "Khiếu nại đã được xử lý", category: "attendance" },
+  ATTENDANCE_LATE: { key: "notificationType.attendanceLate", category: "attendance" },
+  ATTENDANCE_OUTSIDE: { key: "notificationType.attendanceOutside", category: "attendance" },
+  ATTENDANCE_EARLY_LEAVE: { key: "notificationType.attendanceEarlyLeave", category: "attendance" },
+  ATTENDANCE_RESUMED: { key: "notificationType.attendanceResumed", category: "attendance" },
+  ATTENDANCE_CORRECTED: { key: "notificationType.attendanceCorrected", category: "attendance" },
+  ATTENDANCE_VERIFIED: { key: "notificationType.attendanceVerified", category: "attendance" },
+  ATTENDANCE_COMPLAINT: { key: "notificationType.attendanceComplaint", category: "attendance" },
+  COMPLAINT_RESOLVED: { key: "notificationType.complaintResolved", category: "attendance" },
 
   // ── Nhân sự ──────────────────────────────────────────────────────────────────────────────
-  ACCOUNT_CREATED: { label: "Tài khoản của bạn đã được tạo", category: "staff" },
-  ACCOUNT_PASSWORD_RESET: { label: "Mật khẩu của bạn đã được đặt lại", category: "staff" },
-  STAFF_ROLE_CHANGED: { label: "Vai trò của bạn đã thay đổi", category: "staff" },
-  STAFF_OFFBOARDED: { label: "Nhân sự đã nghỉ", category: "staff" },
-  STAFF_BRANCH_CHANGED: { label: "Chi nhánh làm việc đã thay đổi", category: "staff" },
+  ACCOUNT_CREATED: { key: "notificationType.accountCreated", category: "staff" },
+  ACCOUNT_PASSWORD_RESET: { key: "notificationType.accountPasswordReset", category: "staff" },
+  STAFF_ROLE_CHANGED: { key: "notificationType.staffRoleChanged", category: "staff" },
+  STAFF_OFFBOARDED: { key: "notificationType.staffOffboarded", category: "staff" },
+  STAFF_BRANCH_CHANGED: { key: "notificationType.staffBranchChanged", category: "staff" },
 
   // ── Chi nhánh ────────────────────────────────────────────────────────────────────────────
-  BRANCH_CREATED: { label: "Chi nhánh mới", category: "branch" },
-  BRANCH_UPDATED: { label: "Chi nhánh đã được cập nhật", category: "branch" },
-  BRANCH_DELETED: { label: "Chi nhánh đã được xoá", category: "branch" },
-  BRANCH_MANAGER_ASSIGNED: { label: "Bạn được giao phụ trách chi nhánh", category: "branch" },
+  BRANCH_CREATED: { key: "notificationType.branchCreated", category: "branch" },
+  BRANCH_UPDATED: { key: "notificationType.branchUpdated", category: "branch" },
+  BRANCH_DELETED: { key: "notificationType.branchDeleted", category: "branch" },
+  BRANCH_MANAGER_ASSIGNED: {
+    key: "notificationType.branchManagerAssigned",
+    category: "branch",
+  },
 
   // ── Thiết bị ─────────────────────────────────────────────────────────────────────────────
-  FACILITY_CREATED: { label: "Thiết bị mới", category: "facility" },
-  FACILITY_UPDATED: { label: "Thiết bị đã được cập nhật", category: "facility" },
-  FACILITY_DELETED: { label: "Thiết bị đã được xoá", category: "facility" },
-  FACILITY_MOVED: { label: "Thiết bị được chuyển chi nhánh", category: "facility" },
-  FACILITY_CATEGORY_CREATED: { label: "Nhóm thiết bị mới", category: "facility" },
+  FACILITY_CREATED: { key: "notificationType.facilityCreated", category: "facility" },
+  FACILITY_UPDATED: { key: "notificationType.facilityUpdated", category: "facility" },
+  FACILITY_DELETED: { key: "notificationType.facilityDeleted", category: "facility" },
+  FACILITY_MOVED: { key: "notificationType.facilityMoved", category: "facility" },
+  FACILITY_CATEGORY_CREATED: { key: "notificationType.facilityCategoryCreated", category: "facility" },
 
   // ── Tổ chức ──────────────────────────────────────────────────────────────────────────────
-  ORGANIZATION_MEMBER_JOINED: { label: "Thành viên mới gia nhập", category: "organization" },
-  ORGANIZATION_INVITED: { label: "Bạn được mời vào tổ chức", category: "organization" },
-  ORGANIZATION_UPDATED: { label: "Tổ chức đã được cập nhật", category: "organization" },
+  ORGANIZATION_MEMBER_JOINED: {
+    key: "notificationType.organizationMemberJoined",
+    category: "organization",
+  },
+  ORGANIZATION_INVITED: { key: "notificationType.organizationInvited", category: "organization" },
+  ORGANIZATION_UPDATED: { key: "notificationType.organizationUpdated", category: "organization" },
 
   // Rows written before SCRUM-70 (the three codes the old screen knew). Kept so an inbox that
   // already carries one still renders a label instead of the raw code.
-  REQUEST: { label: "Đơn từ", category: "requests" },
-  REVENUE: { label: "Doanh thu", category: "revenue" },
-  ATTENDANCE: { label: "Chấm công", category: "attendance" },
+  REQUEST: { key: "notificationType.legacyRequest", category: "requests" },
+  REVENUE: { key: "notificationType.legacyRevenue", category: "revenue" },
+  ATTENDANCE: { key: "notificationType.legacyAttendance", category: "attendance" },
 };
 
 /** Every code this app knows — the list `GET /api/notifications?type=…` is validated against. */
@@ -114,9 +142,24 @@ export function isNotificationType(code: string): boolean {
   return Object.prototype.hasOwnProperty.call(NOTIFICATION_TYPES, code);
 }
 
-/** The label of a code; an unknown one falls back to the code itself (never to a blank cell). */
-export function notificationTypeLabel(type: string): string {
-  return NOTIFICATION_TYPES[type]?.label ?? type;
+/**
+ * The label of a code; an unknown one falls back to the code itself (never to a blank cell).
+ *
+ * `t` is optional and last, like every shared label helper: a screen passes `useLocale().t`, a caller
+ * outside the provider — or a screen not yet migrated — keeps the Vietnamese wording.
+ */
+export function notificationTypeLabel(type: string, t: Translate = translateVi): string {
+  const entry = NOTIFICATION_TYPES[type];
+
+  return entry ? t(entry.key) : type;
+}
+
+/** The label of a group, for the filter chips and the "mark this group as read" button. */
+export function notificationCategoryLabel(
+  category: NotificationCategory,
+  t: Translate = translateVi,
+): string {
+  return t(CATEGORY_KEYS[category]);
 }
 
 export function notificationCategory(type: string): NotificationCategory | null {

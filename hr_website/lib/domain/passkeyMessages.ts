@@ -1,51 +1,49 @@
+import type { MessageKey, Translate } from "@/lib/i18n/translate";
+import { translateVi } from "@/lib/i18n/translate";
+
 /**
- * Vietnamese copy for the failures a passkey call can produce (SCRUM-79).
+ * The dictionary keys of every failure a passkey call can produce (SCRUM-79).
  *
- * It sits in `lib/domain` next to `notificationCatalog.ts` for the same reason: one copy of the wording,
- * shared by `/login` (sign in) and `/security` (register, rename, delete). The argument is `unknown` and
- * its fields are read structurally, so this file imports neither Supabase nor Next.js — `lib/domain`
- * stays framework-free — while both vocabularies are still matched by value:
+ * It sits in `lib/domain` next to `notificationCatalog.ts` for the same reason: one copy of the mapping,
+ * shared by `/login` (sign in) and `/security` (register, rename, delete). The wording itself lives in
+ * `lib/i18n/messages/*` — a screen that passes `useLocale().t` gets the reader's language, one that does
+ * not keeps the Vietnamese sentence. The argument is `unknown` and its fields are read structurally, so
+ * this file imports neither Supabase nor Next.js — `lib/domain` stays framework-free — while both
+ * vocabularies are still matched by value:
  *
  * - the `passkey_*` / `webauthn_*` codes Supabase Auth answers with (listed in the passkey guide but not
  *   part of the installed `ErrorCode` union, hence a plain string comparison), and
  * - the `ERROR_*` codes of the WebAuthn spec that `@supabase/auth-js` wraps a browser error in
  *   (`WebAuthnError.code`) — where "the user cancelled" and "not a secure context" come from.
  */
-const PASSKEY_MESSAGES: Readonly<Record<string, string>> = {
-  passkey_disabled:
-    "Dự án Supabase chưa bật Passkey. Hãy bật ở Authentication → Passkeys trong Dashboard rồi thử lại.",
-  too_many_passkeys: "Tài khoản đã đạt giới hạn số Passkey. Hãy xoá bớt một thiết bị.",
-  webauthn_credential_exists: "Thiết bị này đã đăng ký Passkey cho tài khoản của bạn.",
-  webauthn_credential_not_found: "Thiết bị này chưa đăng ký Passkey cho tài khoản nào.",
-  webauthn_challenge_not_found: "Yêu cầu xác thực đã hết hiệu lực. Vui lòng thử lại.",
-  webauthn_challenge_expired: "Yêu cầu xác thực đã hết hạn. Vui lòng thử lại.",
-  webauthn_verification_failed: "Không xác minh được Passkey. Vui lòng thử lại.",
-  ERROR_CEREMONY_ABORTED: "Bạn đã huỷ xác thực trên thiết bị.",
-  ERROR_AUTO_REGISTER_USER_VERIFICATION_FAILURE:
-    "Thiết bị chưa xác minh được danh tính. Vui lòng thử lại.",
-  ERROR_AUTHENTICATOR_PREVIOUSLY_REGISTERED:
-    "Thiết bị này đã đăng ký Passkey cho tài khoản của bạn.",
+const PASSKEY_MESSAGE_KEYS: Readonly<Record<string, MessageKey>> = {
+  passkey_disabled: "passkey.disabled",
+  too_many_passkeys: "passkey.tooMany",
+  webauthn_credential_exists: "passkey.credentialExists",
+  webauthn_credential_not_found: "passkey.credentialNotFound",
+  webauthn_challenge_not_found: "passkey.challengeNotFound",
+  webauthn_challenge_expired: "passkey.challengeExpired",
+  webauthn_verification_failed: "passkey.verificationFailed",
+  ERROR_CEREMONY_ABORTED: "passkey.ceremonyAborted",
+  ERROR_AUTO_REGISTER_USER_VERIFICATION_FAILURE: "passkey.userVerificationFailed",
+  ERROR_AUTHENTICATOR_PREVIOUSLY_REGISTERED: "passkey.previouslyRegistered",
   ERROR_AUTHENTICATOR_MISSING_DISCOVERABLE_CREDENTIAL_SUPPORT:
-    "Thiết bị không hỗ trợ Passkey dùng để đăng nhập.",
-  ERROR_AUTHENTICATOR_MISSING_USER_VERIFICATION_SUPPORT:
-    "Thiết bị không hỗ trợ xác thực bằng Face ID / vân tay.",
-  ERROR_INVALID_RP_ID: "Tên miền hiện tại không khớp với Relying Party ID của Supabase Auth.",
-  ERROR_INVALID_DOMAIN:
-    "Trình duyệt không cho phép WebAuthn trên địa chỉ này (cần HTTPS hoặc localhost).",
-  over_request_rate_limit: "Có quá nhiều yêu cầu. Vui lòng chờ một lát rồi thử lại.",
-  session_not_found: "Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.",
+    "passkey.noDiscoverableCredential",
+  ERROR_AUTHENTICATOR_MISSING_USER_VERIFICATION_SUPPORT: "passkey.noUserVerification",
+  ERROR_INVALID_RP_ID: "passkey.invalidRpId",
+  ERROR_INVALID_DOMAIN: "passkey.invalidDomain",
+  over_request_rate_limit: "passkey.rateLimited",
+  session_not_found: "passkey.sessionNotFound",
 };
 
 /** Browser-level names, for the cases the SDK rethrows a DOM exception instead of a coded error. */
-const BROWSER_MESSAGES: Readonly<Record<string, string>> = {
-  NotAllowedError: "Bạn đã huỷ xác thực trên thiết bị.",
-  AbortError: "Bạn đã huỷ xác thực trên thiết bị.",
-  SecurityError: "Trình duyệt chặn WebAuthn: trang phải chạy trên HTTPS (hoặc localhost).",
-  NotSupportedError: "Thiết bị hoặc trình duyệt không hỗ trợ Passkey.",
-  InvalidStateError: "Thiết bị này đã đăng ký Passkey cho tài khoản của bạn.",
+const BROWSER_MESSAGE_KEYS: Readonly<Record<string, MessageKey>> = {
+  NotAllowedError: "passkey.ceremonyAborted",
+  AbortError: "passkey.ceremonyAborted",
+  SecurityError: "passkey.browser.insecure",
+  NotSupportedError: "passkey.browser.unsupported",
+  InvalidStateError: "passkey.previouslyRegistered",
 };
-
-const FALLBACK_MESSAGE = "Không thực hiện được xác thực trên thiết bị. Vui lòng thử lại.";
 
 function readErrorField(error: unknown, field: "code" | "name"): string | null {
   if (typeof error !== "object" || error === null) {
@@ -60,18 +58,25 @@ function readErrorField(error: unknown, field: "code" | "name"): string | null {
   return typeof value === "string" ? value : null;
 }
 
-export function passkeyErrorMessage(error: unknown): string {
+/**
+ * The sentence a failed passkey call should show.
+ *
+ * `t` is optional and last: `/login` and `/security` pass `useLocale().t`, and a caller that does not
+ * keeps the Vietnamese sentence. The fallback is a key too, so an unrecognised error is still translated.
+ */
+export function passkeyErrorMessage(
+  error: unknown,
+  t: Translate = translateVi,
+): string {
   const code = readErrorField(error, "code");
+  const codeKey = code ? PASSKEY_MESSAGE_KEYS[code] : undefined;
 
-  if (code && PASSKEY_MESSAGES[code]) {
-    return PASSKEY_MESSAGES[code];
+  if (codeKey) {
+    return t(codeKey);
   }
 
   const name = readErrorField(error, "name");
+  const nameKey = name ? BROWSER_MESSAGE_KEYS[name] : undefined;
 
-  if (name && BROWSER_MESSAGES[name]) {
-    return BROWSER_MESSAGES[name];
-  }
-
-  return FALLBACK_MESSAGE;
+  return nameKey ? t(nameKey) : t("passkey.fallback");
 }

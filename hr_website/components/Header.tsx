@@ -15,8 +15,10 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 
+import LanguageToggle from "@/components/LanguageToggle";
 import MobileNav from "@/components/MobileNav";
 import ThemeToggle from "@/components/ThemeToggle";
+import { useLocale } from "@/components/LocaleProvider";
 import { useProfile } from "@/components/ProfileProvider";
 import { roleLabel } from "@/lib/accessPolicy";
 import type { QuickSearchResult } from "@/lib/domain/entities/QuickSearch";
@@ -123,6 +125,7 @@ function toHits(results: QuickSearchResult | null): SearchHit[] {
 export default function Header() {
   const pathname = usePathname();
   const router = useRouter();
+  const { t } = useLocale();
   // The profile is read once for the whole shell (SCRUM-59); the header only labels it.
   const { profile } = useProfile();
   const [unreadCount, setUnreadCount] = useState(0);
@@ -425,8 +428,8 @@ export default function Header() {
             onChange={(event) => handleQueryChange(event.target.value)}
             onKeyDown={handleSearchKeyDown}
             onFocus={() => query.trim().length > 0 && setShowDropdown(true)}
-            placeholder="Tìm nhanh nhân viên, đơn từ, mã ca làm..."
-            aria-label="Tìm kiếm nhanh"
+            placeholder={t("header.searchPlaceholder")}
+            aria-label={t("header.searchLabel")}
             aria-expanded={showDropdown}
             aria-controls="quick-search-results"
             role="combobox"
@@ -440,7 +443,7 @@ export default function Header() {
             <button
               type="button"
               onClick={clearSearch}
-              title="Xoá tìm kiếm"
+              title={t("header.clearSearch")}
               className="absolute inset-y-0 right-3 my-auto flex h-5 items-center rounded-md px-1.5 text-slate-400 transition-colors hover:text-slate-700"
             >
               <X size={13} />
@@ -456,19 +459,18 @@ export default function Header() {
           >
             {query.trim().length < MIN_QUERY_LENGTH ? (
               <p className="px-4 py-3 text-xs text-slate-500">
-                Nhập ít nhất {MIN_QUERY_LENGTH} ký tự để tìm nhân viên, đơn từ hoặc ca
-                làm việc.
+                {t("header.searchHint", { count: MIN_QUERY_LENGTH })}
               </p>
             ) : isSearching ? (
               <div className="flex items-center gap-2 px-4 py-3 text-xs text-slate-500">
                 <Loader2 size={14} className="animate-spin text-primary" />
-                Đang tìm kiếm...
+                {t("header.searching")}
               </div>
             ) : searchError ? (
               <p className="px-4 py-3 text-xs text-rose-600">{searchError}</p>
             ) : hits.length === 0 ? (
               <p className="px-4 py-3 text-xs text-slate-500">
-                Không tìm thấy kết quả nào cho “{query.trim()}”.
+                {t("header.searchEmpty", { query: query.trim() })}
               </p>
             ) : (
               <>
@@ -526,7 +528,7 @@ export default function Header() {
                   })}
                 </ul>
                 <p className="border-t border-slate-100 px-4 py-2 text-[10px] text-slate-400">
-                  ↑ ↓ để chọn · Enter để mở · Esc để đóng
+                  {t("header.searchKeyboardHint")}
                 </p>
               </>
             )}
@@ -535,14 +537,16 @@ export default function Header() {
       </div>
 
       <div className="flex shrink-0 items-center gap-2">
+        <LanguageToggle />
+
         <ThemeToggle />
 
         <Link
           href="/notifications"
           title={
             unreadCount > 0
-              ? `${unreadCount} thông báo chưa đọc`
-              : "Thông báo"
+              ? t("header.unreadCount", { count: unreadCount })
+              : t("header.notifications")
           }
           className="relative rounded-lg p-2 text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-800"
         >
@@ -560,7 +564,7 @@ export default function Header() {
           </div>
           <div className="leading-tight">
             <p className="text-xs font-semibold text-slate-800">
-              {profile?.full_name ?? "Đang tải..."}
+              {profile?.full_name ?? t("header.loading")}
             </p>
             {branchLabel && (
               // 13rem keeps a two-branch manager's line inside the header; the full text stays in the title.
@@ -572,7 +576,7 @@ export default function Header() {
               </p>
             )}
             <p className="mt-0.5 text-[10px] text-slate-500">
-              {profile ? roleLabel(profile.role) : "—"}
+              {profile ? roleLabel(profile.role, t) : "—"}
             </p>
           </div>
         </div>
@@ -580,7 +584,7 @@ export default function Header() {
         <button
           type="button"
           onClick={() => void handleSignOut()}
-          title="Đăng xuất"
+          title={t("header.signOut")}
           className="rounded-md p-2 text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-800"
         >
           <LogOut size={15} />

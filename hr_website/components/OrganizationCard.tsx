@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 
+import { useLocale } from "@/components/LocaleProvider";
 import { useProfile } from "@/components/ProfileProvider";
 import { isPublicPath } from "@/lib/publicPaths";
 
@@ -34,6 +35,7 @@ const CARD_CLASS =
 export default function OrganizationCard() {
   const pathname = usePathname();
   const { can } = useProfile();
+  const { t } = useLocale();
   const [summary, setSummary] = useState<OrganizationSummary | null>(null);
 
   useEffect(() => {
@@ -66,7 +68,7 @@ export default function OrganizationCard() {
       <div className="flex items-center gap-2 text-xs font-semibold text-slate-800">
         <Landmark size={14} className="shrink-0 text-primary" />
         <span className="truncate">
-          {summary?.organization?.name ?? "Chưa có tổ chức"}
+          {summary?.organization?.name ?? t("organization.cardTitle")}
         </span>
         <ChevronRight size={14} className="ml-auto shrink-0 text-slate-400" />
       </div>
@@ -74,17 +76,17 @@ export default function OrganizationCard() {
         {summary?.organization ? (
           <>
             <UsersRound size={12} />
-            {summary.member_count} thành viên
+            {t("organization.memberCount", { count: summary.member_count })}
           </>
         ) : (
           <>
             <Landmark size={12} />
-            Nhấn để tạo hoặc tham gia tổ chức
+            {t("organization.joinPrompt")}
           </>
         )}
       </p>
       <p className="mt-1 text-[10px] text-slate-500">
-        Bản phát hành{" "}
+        {t("organization.version")}{" "}
         <span className="float-right font-medium text-slate-700">v2.5</span>
       </p>
     </>

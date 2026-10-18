@@ -55,7 +55,7 @@
  *       400:
  *         description: The request body is invalid.
  *       401:
- *         description: Authentication is required.
+ *         description: Bạn cần đăng nhập để thực hiện thao tác này.
  *       403:
  *         description: The caller has no user profile, their role may not declare revenue (SCRUM-59), or they do not head that branch (SCRUM-61).
  *       404:
@@ -102,7 +102,7 @@ export async function PUT(request: Request) {
   try {
     body = await request.json();
   } catch {
-    return NextResponse.json({ error: "Invalid JSON body." }, { status: 400 });
+    return NextResponse.json({ error: "Nội dung yêu cầu phải là JSON hợp lệ." }, { status: 400 });
   }
 
   if (
@@ -161,7 +161,7 @@ export async function PUT(request: Request) {
 
     console.error("Failed to declare closing revenue", error);
     return NextResponse.json(
-      { error: "Unable to declare closing revenue." },
+      { error: "Không thể khai báo chốt ca." },
       { status: 500 },
     );
   }

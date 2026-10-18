@@ -237,7 +237,7 @@ class _LoginScreenState extends State<LoginScreen>
                     children: [
                       const SizedBox(height: 10),
                       
-                      // Logo Neumorphic với hình ảnh bg.png
+                      // Logo bg.png
 Container(
   width: 130,
   height: 130,

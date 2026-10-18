@@ -1,6 +1,6 @@
 export class OpenRevenueNotFoundError extends Error {
   constructor() {
-    super("No opening revenue declaration exists for this branch today.");
+    super("Hôm nay chi nhánh này chưa khai báo mở ca.");
     this.name = "OpenRevenueNotFoundError";
   }
 }

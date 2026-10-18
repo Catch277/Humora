@@ -22,7 +22,7 @@ export class DeclareOpenRevenueUseCase {
 
   async execute(input: DeclareOpenRevenueInput): Promise<RevenueRecord> {
     if (!Number.isFinite(input.openAmount) || input.openAmount < 0) {
-      throw new Error("open_amount must be a non-negative number.");
+      throw new Error("open_amount phải là số không âm.");
     }
 
     // SCRUM-61: opening a day is a branch action, so a manager may only declare their own branch.

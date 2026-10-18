@@ -67,7 +67,7 @@
  *       400:
  *         description: The route parameter or request body is invalid, including a manager_id that names no account in your organization or names an account that is not an OWNER/MANAGER (SCRUM-61).
  *       401:
- *         description: Authentication is required.
+ *         description: Bạn cần đăng nhập để thực hiện thao tác này.
  *       403:
  *         description: The caller may not update this branch — neither the organization's OWNER nor its chi nhánh trưởng (SCRUM-61) — or tried to change who heads it.
  *       404:
@@ -111,7 +111,7 @@
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  *       401:
- *         description: Authentication is required.
+ *         description: Bạn cần đăng nhập để thực hiện thao tác này.
  *       403:
  *         description: The caller's role may not manage branches (SCRUM-59, owner only).
  *       404:
@@ -166,7 +166,7 @@ export async function PUT(
 
   if (!UUID_PATTERN.test(id)) {
     return NextResponse.json(
-      { error: "The branch id must be a UUID." },
+      { error: "ID chi nhánh phải là UUID." },
       { status: 400 },
     );
   }
@@ -176,7 +176,7 @@ export async function PUT(
   try {
     body = await request.json();
   } catch {
-    return NextResponse.json({ error: "Invalid JSON body." }, { status: 400 });
+    return NextResponse.json({ error: "Nội dung yêu cầu phải là JSON hợp lệ." }, { status: 400 });
   }
 
   const parsed = parseBranchRequest(body);
@@ -225,7 +225,7 @@ export async function PUT(
 
     console.error("Failed to update branch", error);
     return NextResponse.json(
-      { error: "Unable to update branch." },
+      { error: "Không thể cập nhật chi nhánh." },
       { status: 500 },
     );
   }
@@ -239,7 +239,7 @@ export async function DELETE(
 
   if (!UUID_PATTERN.test(id)) {
     return NextResponse.json(
-      { error: "The branch id must be a UUID." },
+      { error: "ID chi nhánh phải là UUID." },
       { status: 400 },
     );
   }
@@ -272,7 +272,7 @@ export async function DELETE(
 
     console.error("Failed to delete branch", error);
     return NextResponse.json(
-      { error: "Unable to delete branch." },
+      { error: "Không thể xóa chi nhánh." },
       { status: 500 },
     );
   }

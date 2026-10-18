@@ -51,7 +51,7 @@ export class CreateShiftRegistrationUseCase {
       !shift ||
       (shift.branch_id !== null && shift.branch_id !== command.callerBranchId)
     ) {
-      throw new ShiftWorkflowInputError("The shift does not exist.");
+      throw new ShiftWorkflowInputError("Ca làm việc không tồn tại.");
     }
 
     if (!getShiftWindow(command.workDate, shift)) {

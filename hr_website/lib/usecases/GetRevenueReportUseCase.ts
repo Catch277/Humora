@@ -51,7 +51,7 @@ function parseReportDate(value: string | undefined, now: Date): DateParts {
 
   const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
   if (!match) {
-    throw new Error("date must use YYYY-MM-DD format.");
+    throw new Error("Ngày phải theo định dạng YYYY-MM-DD.");
   }
 
   const parts = {
@@ -68,7 +68,7 @@ function parseReportDate(value: string | undefined, now: Date): DateParts {
     calendarDate.getUTCMonth() !== parts.month - 1 ||
     calendarDate.getUTCDate() !== parts.day
   ) {
-    throw new Error("date must be a valid calendar date.");
+    throw new Error("Ngày không hợp lệ.");
   }
 
   return parts;

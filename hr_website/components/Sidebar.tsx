@@ -4,7 +4,9 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 import OrganizationCard from "@/components/OrganizationCard";
+import BrandMark from "@/components/BrandMark";
 import { visibleNavigation } from "@/components/navigation";
+import { useLocale } from "@/components/LocaleProvider";
 import { useProfile } from "@/components/ProfileProvider";
 import { isShellLessPath } from "@/lib/publicPaths";
 
@@ -18,6 +20,7 @@ import { isShellLessPath } from "@/lib/publicPaths";
 export default function Sidebar() {
   const pathname = usePathname();
   const { can } = useProfile();
+  const { t } = useLocale();
 
   // Onboarding screens hide the navigation (every link would bounce back) but keep the header.
   if (isShellLessPath(pathname)) {
@@ -29,9 +32,7 @@ export default function Sidebar() {
   return (
     <aside className="z-20 hidden h-dvh w-56 shrink-0 flex-col border-r border-slate-200/80 bg-surface shadow-sm md:flex">
       <div className="flex h-16 items-center gap-3 border-b border-slate-100 px-5">
-        <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-sm font-bold text-white shadow-sm shadow-blue-200">
-          H
-        </div>
+        <BrandMark />
         <div className="leading-tight">
           <p className="text-sm font-bold text-slate-900">Humora</p>
           <p className="mt-0.5 text-[10px] font-medium text-slate-500">
@@ -42,7 +43,7 @@ export default function Sidebar() {
 
       <div className="flex flex-1 flex-col gap-1 overflow-y-auto px-3 py-6">
         <p className="mb-2 px-2 text-[10px] font-semibold uppercase tracking-wider text-slate-400">
-          Hệ thống quản lý
+          {t("nav.sectionLabel")}
         </p>
         {navItems.map((item) => {
           const isActive = pathname === item.href;
@@ -66,7 +67,7 @@ export default function Sidebar() {
                     : "text-slate-400 transition-colors group-hover:text-slate-600"
                 }
               />
-              {item.name}
+              {t(item.labelKey)}
             </Link>
           );
         })}

@@ -25,7 +25,7 @@ export function getBrowserSupabaseClient(): BrowserSupabaseClient {
   }
 
   if (typeof window === "undefined") {
-    throw new Error("The browser Supabase client can only be used in the browser.");
+    throw new Error("Client Supabase chỉ dùng được trong trình duyệt.");
   }
 
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;

@@ -12,7 +12,7 @@ export class QuickSearchUseCase {
     const query = input.query.trim();
 
     if (query.length < 2) {
-      throw new Error("q must contain at least 2 characters.");
+      throw new Error("Từ khóa phải có ít nhất 2 ký tự.");
     }
 
     if (!input.currentUser.role.trim()) {

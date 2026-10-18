@@ -1,6 +1,6 @@
 export class AttendanceNotFoundError extends Error {
   constructor() {
-    super("Attendance record not found.");
+    super("Không tìm thấy bản ghi chấm công.");
     this.name = "AttendanceNotFoundError";
   }
 }

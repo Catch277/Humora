@@ -6,7 +6,9 @@ import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 
 import OrganizationCard from "@/components/OrganizationCard";
+import BrandMark from "@/components/BrandMark";
 import { visibleNavigation } from "@/components/navigation";
+import { useLocale } from "@/components/LocaleProvider";
 import { useProfile } from "@/components/ProfileProvider";
 import { isShellLessPath } from "@/lib/publicPaths";
 
@@ -25,6 +27,7 @@ import { isShellLessPath } from "@/lib/publicPaths";
 export default function MobileNav() {
   const pathname = usePathname();
   const { can } = useProfile();
+  const { t } = useLocale();
   /**
    * The pathname the drawer was opened at, rather than a boolean: navigating makes `isOpen` false by
    * itself, so every way of leaving the screen (a link here, the header search, a notification) closes it
@@ -102,7 +105,7 @@ export default function MobileNav() {
         ref={triggerRef}
         type="button"
         onClick={() => setOpenedAt(pathname)}
-        aria-label="Mở điều hướng"
+        aria-label={t("header.openNavigation")}
         aria-expanded={isOpen}
         aria-controls="mobile-navigation"
         className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-slate-200 bg-surface text-slate-600 transition-colors hover:bg-slate-50 md:hidden"
@@ -114,7 +117,7 @@ export default function MobileNav() {
         <div className="fixed inset-0 z-50 md:hidden">
           <button
             type="button"
-            aria-label="Đóng điều hướng"
+            aria-label={t("header.closeNavigation")}
             onClick={() => setOpenedAt(null)}
             className="absolute inset-0 h-full w-full cursor-default bg-slate-900/40"
           />
@@ -123,13 +126,11 @@ export default function MobileNav() {
             id="mobile-navigation"
             role="dialog"
             aria-modal="true"
-            aria-label="Điều hướng"
+            aria-label={t("header.navigation")}
             className="absolute inset-y-0 left-0 flex h-dvh w-72 max-w-[85%] flex-col border-r border-slate-200/80 bg-surface shadow-xl"
           >
             <div className="flex h-16 shrink-0 items-center gap-3 border-b border-slate-100 px-4">
-              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-sm font-bold text-white shadow-sm shadow-blue-200">
-                H
-              </div>
+              <BrandMark />
               <div className="leading-tight">
                 <p className="text-sm font-bold text-slate-900">Humora</p>
                 <p className="mt-0.5 text-[10px] font-medium text-slate-500">
@@ -140,7 +141,7 @@ export default function MobileNav() {
                 ref={closeRef}
                 type="button"
                 onClick={() => setOpenedAt(null)}
-                aria-label="Đóng điều hướng"
+                aria-label={t("header.closeNavigation")}
                 className="ml-auto inline-flex h-9 w-9 items-center justify-center rounded-lg text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-800"
               >
                 <X size={17} />
@@ -149,7 +150,7 @@ export default function MobileNav() {
 
             <nav className="flex flex-1 flex-col gap-1 overflow-y-auto overscroll-contain px-3 py-4">
               <p className="mb-2 px-2 text-[10px] font-semibold uppercase tracking-wider text-slate-400">
-                Hệ thống quản lý
+                {t("nav.sectionLabel")}
               </p>
               {navItems.map((item) => {
                 const isActive = pathname === item.href;
@@ -171,7 +172,7 @@ export default function MobileNav() {
                       size={18}
                       className={isActive ? "text-primary" : "text-slate-400"}
                     />
-                    {item.name}
+                    {t(item.labelKey)}
                   </Link>
                 );
               })}

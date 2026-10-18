@@ -30,7 +30,7 @@ export class DeclareCloseRevenueUseCase {
     input: DeclareCloseRevenueInput,
   ): Promise<DeclareCloseRevenueResult> {
     if (!Number.isFinite(input.closeAmount) || input.closeAmount < 0) {
-      throw new Error("close_amount must be a non-negative number.");
+      throw new Error("close_amount phải là số không âm.");
     }
 
     // SCRUM-61: closing a day is a branch action, so a manager may only close their own branch.

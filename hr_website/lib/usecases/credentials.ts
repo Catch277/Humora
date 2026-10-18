@@ -23,7 +23,7 @@ export function passwordValidationError(password: string): string | null {
 export function newPasswordValidationError(password: string): string | null {
   return password.length >= MIN_PASSWORD_LENGTH
     ? null
-    : `password must be at least ${MIN_PASSWORD_LENGTH} characters.`;
+    : `Mật khẩu phải có ít nhất ${MIN_PASSWORD_LENGTH} ký tự.`;
 }
 
 export function fullNameValidationError(fullName: string): string | null {
