@@ -576,8 +576,8 @@ screen that talks to Supabase Auth directly instead of through `app/api/**`.
   `42703 column ... does not exist` for a missing column and `PGRST200 Could not find a relationship ...` for
   a missing foreign key (RLS hides rows, not the error). That is how the SCRUM-55 gaps were found — the
   `latest` browser session is not needed, and nothing sensitive is returned.
-- `public.shifts` is a shift **template** ("Ca sáng", 08:00–17:00) and `public.shift_assignments` is the
-  schedule — do not merge them. Overlap detection lives in the use case
+- `public.shifts` is a shift **template** ("Ca sáng", 08:30–12:30 since SCRUM-84) and
+  `public.shift_assignments` is the schedule — do not merge them. Overlap detection lives in the use case
   (`lib/usecases/shiftOverlap.ts`) because only it can compare the hours of two templates; the database only
   guards the exact duplicate with a unique index on `(employee_id, work_date, shift_id)`.
 - The shift catalogue is **per organization** (SCRUM-53 put `organization_id = current_organization_id()`
@@ -620,14 +620,45 @@ screen that talks to Supabase Auth directly instead of through `app/api/**`.
     gets an inline "Gán chi nhánh" (a `PATCH /api/users/{id}` carrying the account's current
     `role`/`is_active`, because that endpoint replaces the record) beside the message instead of being
     sent to `/staff` and back. A manager sees the sentence alone, as before.
-- `/schedules` renders the week as a **table** — one row per ca of the catalogue (earliest first, the
-  zero-length `Nghỉ` template last), seven day columns, and one block per assignment inside a cell — not as
-  the stacked day sections SCRUM-30 shipped. `compareShiftsByStartTime` in the page is the single copy of
-  the ordering rule and the modal's "Ca làm việc" picker reads it too; `GET /api/shifts` keeps `name asc`
-  for its other consumers, because PostgREST cannot express "zero-length last". The rows are the catalogue
-  *plus* the templates embedded in the visible assignments, so a template deleted since a ca was written —
+- `/schedules` renders the week as a **table** — one row per *working* ca (earliest first), seven day
+  columns, and one block per assignment inside a cell — not as the stacked day sections SCRUM-30 shipped. A
+  zero-length template (`Nghỉ`) is not a row any more (SCRUM-86): a day off is the `LEAVE` marker inside the
+  block of the ca it replaces, and `ListShiftsUseCase` leaves zero-length templates out of the catalogue for
+  the same reason. `compareShiftsByStartTime` in the page is the single copy of the ordering rule and the
+  modal's "Ca làm việc" picker reads it too; `GET /api/shifts` keeps `name asc` for its other consumers,
+  because PostgREST cannot express an ordering rule. The rows are the catalogue *plus* the templates
+  embedded in the visible assignments, so a template deleted or retired (SCRUM-85) since a ca was written —
   or a failed `/api/shifts` — cannot make work disappear, and a week with no rows at all says the catalogue
   is missing (`SCRUM-58_shift_catalogue.sql`) instead of showing an empty frame.
+- The timetable is fixed since SCRUM-84 (`supabase/sql/SCRUM-84_shift_catalogue_hours.sql`): **Ca sáng
+  08:30–12:30, Ca chiều 13:30–17:30, Tăng ca 18:00–22:00**, with the pauses 12:30–13:30 and 17:30–18:00.
+  The two "nghỉ giữa ca" rows are **drawn, not stored** (`withRestRows` + `shiftMinutes` in the page): a
+  `shifts` row would appear in the "Ca làm việc" picker and could be assigned like work, and
+  `shiftsOverlap` would have to learn about it. A row's hours are the previous ca's `end_time` and the
+  next ca's `start_time`, so it cannot disagree with the catalogue; nothing is drawn for a template without
+  hours, an overlap, or two ca that touch (back-to-back work). `Nghỉ` (00:00–00:00) therefore stays the
+  **day off** template of SCRUM-83 — never rename it into a break.
+- `Ca tối` (14:00–23:00) is **retired, not deleted** since SCRUM-85
+  (`supabase/sql/SCRUM-85_retire_ca_toi.sql`): `shifts.is_active = false` keeps it out of
+  `GET /api/shifts` and every picker, while the `shift_assignments` / `shift_registrations` rows that
+  already point at it keep their link, so a past week still renders the ca that was worked. Deleting the
+  row is the file's commented, opt-in §5 and only for a project that accepts losing that history — two of
+  those foreign keys are `not null` and the delete is refused until they are cleared. The column arrives
+  with `default true`, and `SupabaseShiftRepository` retries without it on PostgREST `42703`; that retry
+  also marks the legacy `Ca tối` inactive by name (`PRE_MIGRATION_RETIRED_SHIFT_NAME`), so a database that
+  has not run the script still hides the row and draws the 17:30–18:00 pause instead of failing. Apply it
+  after `SCRUM-84`, and again after any re-run of `SCRUM-58` — that script restates the old seeding
+  function and would give a new organization a `Ca tối` row.
+- A "Nghỉ phép" đơn must name a day the employee actually works (SCRUM-86,
+  `supabase/sql/SCRUM-86_leave_requires_shift.sql`): `requireOwnShiftOnDay()`
+  (`lib/usecases/requestDetails.ts` → `CreateRequestUseCase` → `400`), the `/requests` dialog (which reads
+  the caller's own ca of the day — the same list "Đổi ca" needs) and `requests_guard_shift_details()`
+  (INSERT-only, so existing đơn are never re-judged) all state it. Approval still marks **every** ca of
+  that day `LEAVE` (SCRUM-83), so `/schedules` draws the block with `schedules.leaveBlock` ("Nghỉ") where
+  the branch name otherwise sits — an empty cell in the same row is an employee who has no ca that day.
+  SCRUM-83's "write a row on the zero-length `Nghỉ` template when the employee holds none" branch is
+  therefore unreachable for new rows; legacy rows of that shape are reported by SCRUM-86 §2, counted
+  nowhere on `/schedules` (`tableAssignments`), and still read as `ON_LEAVE` on `/employee-status`.
 - Embedded PostgREST selects (`employee:users (id, full_name)`) defeat the client's type inference: `data`
   comes back as `GenericStringError`, so those casts go through `unknown` and the row type is normalised in
   the repository. A to-one embedding can also arrive as an array, so normalise with a `firstOf` helper.
@@ -1088,3 +1119,11 @@ screen that talks to Supabase Auth directly instead of through `app/api/**`.
   `components/LanguageToggle.tsx` là nút chuyển. Màn hình nào chưa chuyển vẫn giữ tiếng Việt — chuyển từng
   màn, không làm ồ ạt.
 - Thời gian nghiệp vụ theo `Asia/Bangkok` (UTC+7), dữ liệu lưu ở UTC; không tự ý đổi múi giờ.
+- `/schedules` là thời khóa biểu cố định (SCRUM-84/85/86): Ca sáng 08:30–12:30, Ca chiều 13:30–17:30,
+  Tăng ca 18:00–22:00; hai dòng "Nghỉ giữa ca" (12:30–13:30, 17:30–18:00) do trang tự vẽ từ khoảng trống giữa
+  hai ca, không phải mẫu ca. `Ca tối` đã **ngừng dùng** (`shifts.is_active = false`, script
+  `SCRUM-85_retire_ca_toi.sql`) nên không còn là dòng của bảng tuần hay lựa chọn khi xếp ca, nhưng dữ liệu cũ
+  trỏ tới nó vẫn hiển thị. Mẫu `Nghỉ` 00:00–00:00 **không còn là một dòng**: đơn "Nghỉ phép" chỉ gửi được cho
+  ngày nhân viên có ca (SCRUM-86 — kiểm ở màn hình, use case và trigger), khi duyệt thì chính ca đó chuyển
+  `LEAVE` và ô trên lịch hiện chữ "Nghỉ"; ô trống nghĩa là nhân viên không có ca ngày đó.
+

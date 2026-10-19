@@ -770,8 +770,14 @@ Known inconsistencies to fix when the relevant screen is next touched (do not ma
    characters and a click on "Tìm", and could not tell an employee who had quit from one who still works. Its
    "Ca làm việc" `<select>` reads the per-organization catalogue, so an unseeded organization gets a hint
    naming `supabase/sql/SCRUM-58_shift_catalogue.sql` instead of an unexplained empty list. The week is a
-   table now (§7.7): one row per ca with `Nghỉ` last, seven day columns, one block per assignment, and the
-   picker ordered by the same `compareShiftsByStartTime`. The `MockShift`
+   table now (§7.7): one row per *working* ca, seven day columns, one block per assignment, and the picker
+   ordered by the same `compareShiftsByStartTime`. Since SCRUM-84 the timetable is fixed — Ca sáng
+   08:30–12:30, Ca chiều 13:30–17:30, Tăng ca 18:00–22:00 — and each gap between two ca is a blank "Nghỉ
+   giữa ca" row the screen derives from the hours (`withRestRows`); it has no cells to click, because a
+   break is not a template and nothing can be scheduled onto it. `Ca tối` is retired (SCRUM-85,
+   `shifts.is_active`), and the zero-length `Nghỉ` template is not a row either: a "Nghỉ phép" đơn covers a
+   ca the employee holds (SCRUM-86), so the day off is drawn as "Nghỉ" inside that ca's block, and a cell
+   with nothing in it means the person has no ca that day. The `MockShift`
    helpers mentioned here are gone: SCRUM-22 deleted `lib/mock/adminStore.ts`.
 8. `/facilities` and `/schedules` are the first screens with **pills for one dimension + `<select>`s for
    another** (facilities: condition pills + branch/category selects; schedules: status pills + branch

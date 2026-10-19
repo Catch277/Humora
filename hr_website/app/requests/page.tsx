@@ -236,6 +236,10 @@ export default function RequestsPage() {
   // `GET /api/requests/swap-candidates` for the colleagues the database itself would accept.
   const needsWorkDate = requestNeedsWorkDate(form.requestType);
   const needsSwap = requestNeedsSwapDetails(form.requestType);
+  // SCRUM-86: a "Nghỉ phép" đơn covers the ca the employee actually holds that day (that is what approval
+  // turns into `LEAVE`), so it reads the same own-ca list "Đổi ca" needs — the day is no longer free-form.
+  const needsLeave = form.requestType === "Nghỉ phép";
+  const needsOwnShift = needsSwap || needsLeave;
   // The two values the fetching effects below depend on, hoisted out of `form` so their dependency
   // entries are the values themselves and not the object that holds them.
   const formWorkDate = form.workDate;
@@ -312,11 +316,12 @@ export default function RequestsPage() {
     };
   }, [reloadToken, t]);
 
-  // The caller's own ca of the chosen day, for the "Ca cần đổi" picker: `employee_id` is the viewer, so
-  // this reads their own roster and never a colleague's. `CreateRequestUseCase` asks the same question
-  // again server-side and refuses a ca that is not theirs, so the picker is a convenience, not the check.
+  // The caller's own ca of the chosen day, for the "Ca cần đổi" picker and — since SCRUM-86 — for a
+  // "Nghỉ phép" đơn, which may only name a day the employee is scheduled on: `employee_id` is the viewer,
+  // so this reads their own roster and never a colleague's. `CreateRequestUseCase` asks the same question
+  // again server-side and refuses a day without a ca, so this is a convenience, not the check.
   useEffect(() => {
-    if (!submitOpen || !needsSwap || !formWorkDate || !viewerId) {
+    if (!submitOpen || !needsOwnShift || !formWorkDate || !viewerId) {
       return;
     }
 
@@ -353,7 +358,7 @@ export default function RequestsPage() {
     return () => {
       cancelled = true;
     };
-  }, [submitOpen, needsSwap, formWorkDate, viewerId, t]);
+  }, [submitOpen, needsOwnShift, formWorkDate, viewerId, t]);
 
   // The colleagues who may take that ca, straight from `eligible_swap_targets()` — the same function the
   // approval re-asks before it moves anything, so the picker can never offer a swap that would fail.
@@ -397,11 +402,18 @@ export default function RequestsPage() {
   // has to be cleared inside an effect (React 19's `react-hooks/set-state-in-effect`).
   const ownShiftsForDay =
     ownShifts && ownShifts.workDate === form.workDate ? ownShifts : null;
-  // Only a `SCHEDULED` ca can be handed over: `requireOwnShiftAssignment` accepts nothing else.
+  // Only a `SCHEDULED` ca can be handed over or given up: `requireOwnShiftAssignment` accepts nothing
+  // else, and a zero-length "Nghỉ" template is a day off, not work (SCRUM-86) — it can be neither handed
+  // over nor be the ca a leave request covers.
   const myShifts = (ownShiftsForDay?.rows ?? []).filter(
-    (row) => row.status === "SCHEDULED" && row.shift !== null,
+    (row) =>
+      row.status === "SCHEDULED" &&
+      row.shift !== null &&
+      row.shift.start_time !== null &&
+      row.shift.end_time !== null &&
+      row.shift.start_time !== row.shift.end_time,
   );
-  const loadingShifts = needsSwap && !!form.workDate && !ownShiftsForDay;
+  const loadingShifts = needsOwnShift && !!form.workDate && !ownShiftsForDay;
   const shiftsError = ownShiftsForDay?.error ?? "";
 
   const swapCandidatesForShift =
@@ -601,6 +613,30 @@ export default function RequestsPage() {
     if (needsWorkDate && form.workDate < today) {
       setFormError(t("requests.error.workDatePast"));
       return;
+    }
+
+    // SCRUM-86: a "Nghỉ phép" đơn is filed against ca the employee holds that day — that is what the
+    // approval turns into a day off. The list is the same own-roster read the dialog already loaded (RLS
+    // narrows it to their rows); the API repeats the rule, so this is the sentence that saves a round trip.
+    if (needsLeave) {
+      if (loadingShifts) {
+        setFormError(t("requests.swapShiftLoading"));
+        return;
+      }
+
+      if (shiftsError) {
+        setFormError(shiftsError);
+        return;
+      }
+
+      if (myShifts.length === 0) {
+        setFormError(
+          t("requests.error.leaveWithoutShift", {
+            day: formatDate(form.workDate, locale),
+          }),
+        );
+        return;
+      }
     }
 
     if (needsSwap && (!form.shiftId || !form.targetEmployeeId)) {
@@ -1093,6 +1129,55 @@ export default function RequestsPage() {
                 </label>
               )}
 
+              {/*
+                SCRUM-86: an approved “Nghỉ phép” turns that day's ca into a day off, so the day has to be one
+                the employee actually works. The list is read-only here — the ca is not chosen, the whole day
+                is — and the amber line is the same sentence the API answers.
+              */}
+              {needsLeave && form.workDate && (
+                <div className="block text-xs font-semibold text-slate-600">
+                  {t("requests.leaveShiftLabel")}
+                  {loadingShifts ? (
+                    <span className="mt-1 flex items-center gap-2 rounded-lg border border-slate-200 bg-app px-3 py-2 text-xs font-normal text-slate-500">
+                      <Loader2 size={13} className="animate-spin text-primary" />
+                      {t("requests.swapShiftLoading")}
+                    </span>
+                  ) : shiftsError ? (
+                    <span className="mt-1 block text-[10px] font-normal text-rose-600">
+                      {shiftsError}
+                    </span>
+                  ) : myShifts.length === 0 ? (
+                    <span className="mt-1 block text-[10px] font-normal text-amber-600">
+                      {t("requests.error.leaveWithoutShift", {
+                        day: formatDate(form.workDate, locale),
+                      })}
+                    </span>
+                  ) : (
+                    <>
+                      <ul className="mt-1 space-y-1 rounded-lg border border-slate-200 bg-app px-3 py-2 text-[11px] font-normal text-slate-700">
+                        {myShifts.map((row) => (
+                          <li
+                            key={row.id}
+                            className="flex items-center justify-between gap-2"
+                          >
+                            <span className="truncate">
+                              {row.shift?.name ?? t("common.shift")}
+                            </span>
+                            <span className="shrink-0 tabular-nums text-slate-500">
+                              {formatClockTime(row.shift?.start_time ?? null)}–
+                              {formatClockTime(row.shift?.end_time ?? null)}
+                            </span>
+                          </li>
+                        ))}
+                      </ul>
+                      <span className="mt-1 block text-[10px] font-normal text-slate-400">
+                        {t("requests.leaveShiftNote")}
+                      </span>
+                    </>
+                  )}
+                </div>
+              )}
+
               {/* "Đổi ca" hands one of the caller's own ca to a colleague, so the two picks are the ca
                   (from their own roster — RLS narrows that read to their rows) and the colleague (from
                   the RPC the approval re-asks). Both only make sense once a day is named. */}
@@ -1264,7 +1349,13 @@ export default function RequestsPage() {
               <button
                 type="button"
                 onClick={() => void submitRequest()}
-                disabled={saving || !form.branchId || !form.title.trim()}
+                disabled={
+                  saving ||
+                  !form.branchId ||
+                  !form.title.trim() ||
+                  // The own-ca read decides whether a leave may be filed at all, so it cannot be half-loaded.
+                  (needsOwnShift && loadingShifts)
+                }
                 className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-xs font-semibold text-white shadow-sm transition-colors hover:bg-primary-strong disabled:opacity-50"
               >
                 {saving && <Loader2 size={13} className="animate-spin" />}

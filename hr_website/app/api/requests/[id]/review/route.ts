@@ -10,7 +10,8 @@
  *       in the database.
  *
  *       SCRUM-83: approving a đơn also *applies* it, in the same statement, through
- *       `requests_apply_approved_effects` — a "Nghỉ phép" đơn writes the `Nghỉ` ca on that day, a
+ *       `requests_apply_approved_effects` — a "Nghỉ phép" đơn marks every ca of that day `LEAVE` (the
+ *       block then reads "Nghỉ" on `/schedules`; the employee must hold a ca that day since SCRUM-86), a
  *       "Đổi ca" đơn moves the assignment to the colleague who takes it. Rejecting applies nothing.
  *       The trigger re-checks the schedule before it moves anything, which is why the caller can read
  *       `409` here: the manager's own approval is the confirmation, so the swap has to be applied or

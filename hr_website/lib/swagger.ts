@@ -403,7 +403,7 @@ export function getApiDocs() {
           },
           Shift: {
             type: "object",
-            required: ["id", "name", "branch_id", "start_time", "end_time"],
+            required: ["id", "name", "branch_id", "start_time", "end_time", "is_active"],
             properties: {
               id: { type: "string", format: "uuid" },
               name: {
@@ -425,6 +425,13 @@ export function getApiDocs() {
                 type: "string",
                 nullable: true,
                 description: "Giờ kết thúc (HH:MM:SS).",
+              },
+              is_active: {
+                type: "boolean",
+                description:
+                  "SCRUM-85: false = ca đã ngừng dùng (`Ca tối` 14:00–23:00). `GET /api/shifts` bỏ hẳn " +
+                  "những ca đó; một dòng lịch cũ còn trỏ tới ca ấy vẫn hiển thị được vì mỗi assignment " +
+                  "nhúng bản sao của mẫu ca.",
               },
             },
           },

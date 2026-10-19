@@ -4,12 +4,22 @@
  *   get:
  *     summary: List shift templates
  *     description: |
- *       Returns the shift catalogue ("Ca sáng" 08:00–17:00, "Ca chiều", ...) that
- *       `/api/schedules` assigns to employees. `branch_id = null` means the template applies to
- *       every branch. SCRUM-30.
+ *       Returns the **schedulable** shift catalogue — since SCRUM-84/85 that is "Ca sáng" 08:30–12:30,
+ *       "Ca chiều" 13:30–17:30 and "Tăng ca" 18:00–22:00 — which `/api/schedules` assigns to employees and
+ *       every "Ca làm việc" picker (including the manager's picker on `/check-in`) reads. `branch_id = null`
+ *       means the template applies to every branch. SCRUM-30 / SCRUM-84.
  *
- *       This endpoint used to serve the in-memory mock shift list; the schedule itself now lives
- *       in `public.shift_assignments` behind `/api/schedules`.
+ *       Two templates are deliberately absent:
+ *       * a retired one (SCRUM-85). The legacy "Ca tối" 14:00–23:00 row is kept — a past assignment or
+ *         registration still points at it — but it is no longer offered; a week that already holds one
+ *         renders it through the template embedded in that assignment.
+ *       * a zero-length one (SCRUM-86). "Nghỉ" 00:00–00:00 is a day off, not a time of day: it can be
+ *         neither scheduled nor handed over, and an approved "Nghỉ phép" marks the ca the employee holds
+ *         instead of writing a row on it.
+ *
+ *       The pauses between two working ca ("nghỉ giữa ca") are deliberately not templates: `/schedules`
+ *       draws them from the gap between one ca's end and the next ca's start, so no row here can ever
+ *       be assigned to an employee.
  *     tags:
  *       - Shifts
  *     responses:

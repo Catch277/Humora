@@ -20,6 +20,7 @@ import {
   normalizeRequestDetails,
   requireEligibleSwapTarget,
   requireOwnShiftAssignment,
+  requireOwnShiftOnDay,
   requireRequestWorkDate,
   requireSwapIds,
 } from "@/lib/usecases/requestDetails";
@@ -102,6 +103,17 @@ export class CreateRequestUseCase {
 
     if (requestNeedsWorkDate(input.requestType)) {
       workDate = requireRequestWorkDate(details.workDate, input.requestType, this.now());
+    }
+
+    // SCRUM-86: a "Nghỉ phép" đơn covers the ca the employee actually holds that day, because that is
+    // what the approval turns into `LEAVE`. A leave for a day nobody scheduled used to be accepted and the
+    // approval had to write a row on the zero-length "Nghỉ" template, which `/schedules` no longer draws;
+    // the caller now reads a sentence instead of a schedule entry nobody can act on.
+    if (input.requestType === "Nghỉ phép" && workDate !== null) {
+      await requireOwnShiftOnDay(this.assignmentRepository, {
+        employeeId: input.requesterId,
+        workDate,
+      });
     }
 
     if (requestNeedsSwapDetails(input.requestType) && workDate !== null) {

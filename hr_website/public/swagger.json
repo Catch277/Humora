@@ -621,7 +621,8 @@
           "name",
           "branch_id",
           "start_time",
-          "end_time"
+          "end_time",
+          "is_active"
         ],
         "properties": {
           "id": {
@@ -647,6 +648,10 @@
             "type": "string",
             "nullable": true,
             "description": "Giờ kết thúc (HH:MM:SS)."
+          },
+          "is_active": {
+            "type": "boolean",
+            "description": "SCRUM-85: false = ca đã ngừng dùng (`Ca tối` 14:00–23:00). `GET /api/shifts` bỏ hẳn những ca đó; một dòng lịch cũ còn trỏ tới ca ấy vẫn hiển thị được vì mỗi assignment nhúng bản sao của mẫu ca."
           }
         }
       },
@@ -2207,7 +2212,7 @@
     "/api/shifts": {
       "get": {
         "summary": "List shift templates",
-        "description": "Returns the shift catalogue (\"Ca sáng\" 08:00–17:00, \"Ca chiều\", ...) that\n`/api/schedules` assigns to employees. `branch_id = null` means the template applies to\nevery branch. SCRUM-30.\n\nThis endpoint used to serve the in-memory mock shift list; the schedule itself now lives\nin `public.shift_assignments` behind `/api/schedules`.\n",
+        "description": "Returns the **schedulable** shift catalogue — since SCRUM-84/85 that is \"Ca sáng\" 08:30–12:30,\n\"Ca chiều\" 13:30–17:30 and \"Tăng ca\" 18:00–22:00 — which `/api/schedules` assigns to employees and\nevery \"Ca làm việc\" picker (including the manager's picker on `/check-in`) reads. `branch_id = null`\nmeans the template applies to every branch. SCRUM-30 / SCRUM-84.\n\nTwo templates are deliberately absent:\n* a retired one (SCRUM-85). The legacy \"Ca tối\" 14:00–23:00 row is kept — a past assignment or\n  registration still points at it — but it is no longer offered; a week that already holds one\n  renders it through the template embedded in that assignment.\n* a zero-length one (SCRUM-86). \"Nghỉ\" 00:00–00:00 is a day off, not a time of day: it can be\n  neither scheduled nor handed over, and an approved \"Nghỉ phép\" marks the ca the employee holds\n  instead of writing a row on it.\n\nThe pauses between two working ca (\"nghỉ giữa ca\") are deliberately not templates: `/schedules`\ndraws them from the gap between one ca's end and the next ca's start, so no row here can ever\nbe assigned to an employee.\n",
         "tags": [
           "Shifts"
         ],
@@ -4002,7 +4007,7 @@
       },
       "post": {
         "summary": "Submit a request",
-        "description": "Files the caller's own đơn (SCRUM-41: nghỉ phép, đổi ca, điều chỉnh công) as `PENDING` for a\nmanager to review. This is the submit half of the ticket — the queue above can only fill if\nsomebody writes a row, and nothing else in this app inserts into `public.requests`.\nThe requester always comes from the session (`requests_insert_own` refuses a row whose\n`user_id` is not the caller), and every role holds `request:create` **except the\norganization's `OWNER`** (SCRUM-63): the owner sits above the approval chain and reviews the\nqueue instead of filing into it.\n\nSCRUM-82: a đơn that acts on a day must name it (`work_date`), and \"Đổi ca\" additionally names the\nca (`shift_id`) and the colleague who takes it (`target_employee_id`). The day may not be in the\npast — a schedule is a statement about work still to come, exactly like `POST /api/schedules`\n(`SCRUM-81`) — and the ca named must be one the caller still holds, on that day, and not already\nover. `GET /api/requests/swap-candidates` is what fills the colleague picker.\n",
+        "description": "Files the caller's own đơn (SCRUM-41: nghỉ phép, đổi ca, điều chỉnh công) as `PENDING` for a\nmanager to review. This is the submit half of the ticket — the queue above can only fill if\nsomebody writes a row, and nothing else in this app inserts into `public.requests`.\nThe requester always comes from the session (`requests_insert_own` refuses a row whose\n`user_id` is not the caller), and every role holds `request:create` **except the\norganization's `OWNER`** (SCRUM-63): the owner sits above the approval chain and reviews the\nqueue instead of filing into it.\n\nSCRUM-82: a đơn that acts on a day must name it (`work_date`), and \"Đổi ca\" additionally names the\nca (`shift_id`) and the colleague who takes it (`target_employee_id`). The day may not be in the\npast — a schedule is a statement about work still to come, exactly like `POST /api/schedules`\n(`SCRUM-81`) — and the ca named must be one the caller still holds, on that day, and not already\nover. `GET /api/requests/swap-candidates` is what fills the colleague picker.\n\nSCRUM-86: a \"Nghỉ phép\" đơn must name a day on which the caller holds a `SCHEDULED` ca. Approval\nmarks those ca `LEAVE` (that is what `/schedules` draws as \"Nghỉ\"), so a day nobody scheduled is\nanswered with `400` instead of being stored and then written as a row on the zero-length \"Nghỉ\"\ntemplate.\n",
         "tags": [
           "Requests"
         ],
@@ -4049,7 +4054,7 @@
                     "format": "date",
                     "nullable": true,
                     "example": "2026-10-20",
-                    "description": "Ngày đơn hướng tới (SCRUM-82). Bắt buộc với nghỉ phép / đổi ca / điều chỉnh công, phải từ hôm nay trở đi (giờ Asia/Bangkok); bỏ trống với đơn “Khác”."
+                    "description": "Ngày đơn hướng tới (SCRUM-82). Bắt buộc với nghỉ phép / đổi ca / điều chỉnh công, phải từ hôm nay trở đi (giờ Asia/Bangkok); bỏ trống với đơn “Khác”. Với đơn nghỉ phép, ngày đó phải có ca bạn đang được xếp (SCRUM-86)."
                   },
                   "shift_id": {
                     "type": "string",
@@ -4080,7 +4085,7 @@
             }
           },
           "400": {
-            "description": "The JSON body is invalid, request_type is unknown, title/content is blank or too long, work_date is missing or malformed for the type, shift_id/target_employee_id is missing or malformed for a \"Đổi ca\" request, the day is in the past, or the ca is no longer the caller's own or has already ended.",
+            "description": "The JSON body is invalid, request_type is unknown, title/content is blank or too long, work_date is missing or malformed for the type, shift_id/target_employee_id is missing or malformed for a \"Đổi ca\" request, the day is in the past, the ca is no longer the caller's own or has already ended, or a \"Nghỉ phép\" names a day on which the caller has no scheduled ca (SCRUM-86).",
             "content": {
               "application/json": {
                 "schema": {
@@ -4145,7 +4150,7 @@
     "/api/requests/{id}/review": {
       "patch": {
         "summary": "Approve or reject a request",
-        "description": "Sets `requests.status` together with `reject_reason` and `approver_id`. Restricted to\nmanagers (SCRUM-59 `request:review`): the route answers `403` for another role, the use\ncase repeats the check and the `requests_update_managers` RLS policy (SCRUM-41) repeats it\nin the database.\n\nSCRUM-83: approving a đơn also *applies* it, in the same statement, through\n`requests_apply_approved_effects` — a \"Nghỉ phép\" đơn writes the `Nghỉ` ca on that day, a\n\"Đổi ca\" đơn moves the assignment to the colleague who takes it. Rejecting applies nothing.\nThe trigger re-checks the schedule before it moves anything, which is why the caller can read\n`409` here: the manager's own approval is the confirmation, so the swap has to be applied or\nrefused at this instant, and a refusal leaves the đơn `PENDING` for them to reject.\n",
+        "description": "Sets `requests.status` together with `reject_reason` and `approver_id`. Restricted to\nmanagers (SCRUM-59 `request:review`): the route answers `403` for another role, the use\ncase repeats the check and the `requests_update_managers` RLS policy (SCRUM-41) repeats it\nin the database.\n\nSCRUM-83: approving a đơn also *applies* it, in the same statement, through\n`requests_apply_approved_effects` — a \"Nghỉ phép\" đơn marks every ca of that day `LEAVE` (the\nblock then reads \"Nghỉ\" on `/schedules`; the employee must hold a ca that day since SCRUM-86), a\n\"Đổi ca\" đơn moves the assignment to the colleague who takes it. Rejecting applies nothing.\nThe trigger re-checks the schedule before it moves anything, which is why the caller can read\n`409` here: the manager's own approval is the confirmation, so the swap has to be applied or\nrefused at this instant, and a refusal leaves the đơn `PENDING` for them to reject.\n",
         "tags": [
           "Requests"
         ],

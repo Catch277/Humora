@@ -18,8 +18,14 @@ export function normalizeShiftAssignmentWriteInput<
   };
 }
 
-/** `HH:MM:SS` (Postgres `time`) or `HH:MM` → minutes since midnight; null when unusable. */
-function toMinutes(time: string | null): number | null {
+/**
+ * `HH:MM:SS` (Postgres `time`) or `HH:MM` → minutes since midnight; null when unusable.
+ *
+ * Exported because the schedule table draws the pause between two ca from the same numbers
+ * (`withRestRows` in app/schedules/page.tsx); a second parser would let the overlap rule and the drawn
+ * "nghỉ" row disagree about one and the same pair of hours.
+ */
+export function shiftMinutes(time: string | null): number | null {
   if (!time) {
     return null;
   }
@@ -44,10 +50,10 @@ export function shiftsOverlap(
   first: { start_time: string | null; end_time: string | null },
   second: { start_time: string | null; end_time: string | null },
 ): boolean {
-  const firstStart = toMinutes(first.start_time);
-  const firstEnd = toMinutes(first.end_time);
-  const secondStart = toMinutes(second.start_time);
-  const secondEnd = toMinutes(second.end_time);
+  const firstStart = shiftMinutes(first.start_time);
+  const firstEnd = shiftMinutes(first.end_time);
+  const secondStart = shiftMinutes(second.start_time);
+  const secondEnd = shiftMinutes(second.end_time);
 
   if (
     firstStart === null ||

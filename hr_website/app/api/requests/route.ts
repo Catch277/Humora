@@ -64,6 +64,11 @@
  *       past — a schedule is a statement about work still to come, exactly like `POST /api/schedules`
  *       (`SCRUM-81`) — and the ca named must be one the caller still holds, on that day, and not already
  *       over. `GET /api/requests/swap-candidates` is what fills the colleague picker.
+ *
+ *       SCRUM-86: a "Nghỉ phép" đơn must name a day on which the caller holds a `SCHEDULED` ca. Approval
+ *       marks those ca `LEAVE` (that is what `/schedules` draws as "Nghỉ"), so a day nobody scheduled is
+ *       answered with `400` instead of being stored and then written as a row on the zero-length "Nghỉ"
+ *       template.
  *     tags:
  *       - Requests
  *     requestBody:
@@ -99,7 +104,7 @@
  *                 format: date
  *                 nullable: true
  *                 example: "2026-10-20"
- *                 description: "Ngày đơn hướng tới (SCRUM-82). Bắt buộc với nghỉ phép / đổi ca / điều chỉnh công, phải từ hôm nay trở đi (giờ Asia/Bangkok); bỏ trống với đơn “Khác”."
+ *                 description: "Ngày đơn hướng tới (SCRUM-82). Bắt buộc với nghỉ phép / đổi ca / điều chỉnh công, phải từ hôm nay trở đi (giờ Asia/Bangkok); bỏ trống với đơn “Khác”. Với đơn nghỉ phép, ngày đó phải có ca bạn đang được xếp (SCRUM-86)."
  *               shift_id:
  *                 type: string
  *                 format: uuid
@@ -118,7 +123,7 @@
  *             schema:
  *               $ref: '#/components/schemas/RequestEntity'
  *       400:
- *         description: The JSON body is invalid, request_type is unknown, title/content is blank or too long, work_date is missing or malformed for the type, shift_id/target_employee_id is missing or malformed for a "Đổi ca" request, the day is in the past, or the ca is no longer the caller's own or has already ended.
+ *         description: The JSON body is invalid, request_type is unknown, title/content is blank or too long, work_date is missing or malformed for the type, shift_id/target_employee_id is missing or malformed for a "Đổi ca" request, the day is in the past, the ca is no longer the caller's own or has already ended, or a "Nghỉ phép" names a day on which the caller has no scheduled ca (SCRUM-86).
  *         content:
  *           application/json:
  *             schema:

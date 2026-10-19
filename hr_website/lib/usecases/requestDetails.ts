@@ -87,6 +87,45 @@ export function requireRequestWorkDate(
   return workDate;
 }
 
+/**
+ * The ca a "Nghỉ phép" đơn acts on (SCRUM-86): a day off is only meaningful on a day the employee is
+ * actually scheduled.
+ *
+ * SCRUM-83's approval turns the day's ca into `LEAVE`, so without this rule a leave could name a day
+ * nobody planned — and the approval would have to invent a row on the zero-length "Nghỉ" template, which
+ * `/schedules` no longer draws (a day off is the marker inside the block of the ca it replaces).
+ * `status = 'SCHEDULED'` is the same set the approval updates, so a ca that is already a day off or
+ * cancelled cannot be "nghỉ" twice, and a zero-length template is not work — it can never be the ca a
+ * đơn covers.
+ */
+export async function requireOwnShiftOnDay(
+  assignmentRepository: IShiftAssignmentRepository,
+  input: { employeeId: string; workDate: string },
+): Promise<ShiftAssignment[]> {
+  const sameDay = await assignmentRepository.findAll({
+    employeeId: input.employeeId,
+    startDate: input.workDate,
+    endDate: input.workDate,
+  });
+
+  const scheduled = sameDay.filter(
+    (row) =>
+      row.status === "SCHEDULED" &&
+      row.shift !== null &&
+      row.shift.start_time !== null &&
+      row.shift.end_time !== null &&
+      row.shift.start_time !== row.shift.end_time,
+  );
+
+  if (scheduled.length === 0) {
+    throw new RequestShiftDetailsError(
+      `Bạn không có ca nào ngày ${formatRequestDay(input.workDate)} nên không thể gửi đơn nghỉ phép. Chọn ngày bạn có ca làm việc.`,
+    );
+  }
+
+  return scheduled;
+}
+
 /** Both ids of a "Đổi ca" đơn, or a sentence naming what is missing. */
 export function requireSwapIds(
   shiftId: string | null,
