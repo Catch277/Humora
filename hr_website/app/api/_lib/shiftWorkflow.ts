@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 
+import { PastShiftAssignmentError } from "@/lib/domain/errors/PastShiftAssignmentError";
 import { ShiftRegistrationNotFoundError } from "@/lib/domain/errors/ShiftRegistrationNotFoundError";
 import { ShiftSwapNotFoundError } from "@/lib/domain/errors/ShiftSwapNotFoundError";
 import { ShiftWorkflowConflictError } from "@/lib/domain/errors/ShiftWorkflowConflictError";
@@ -59,7 +60,10 @@ export function shiftWorkflowErrorResponse(error: unknown): NextResponse | null 
 
   if (
     error instanceof ShiftWorkflowStateError ||
-    error instanceof ShiftWorkflowConflictError
+    error instanceof ShiftWorkflowConflictError ||
+    // Approving a registration whose ca has already ended (SCRUM-81): the request is fine, the clock says
+    // no — the sentence comes from the database guard that refused the assignment it would have created.
+    error instanceof PastShiftAssignmentError
   ) {
     return NextResponse.json({ error: error.message }, { status: 409 });
   }

@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  CalendarDays,
   Check,
   Clock3,
   Loader2,
@@ -19,12 +20,19 @@ import {
   MAX_REQUEST_CONTENT_LENGTH,
   MAX_REQUEST_TITLE_LENGTH,
   REQUEST_TYPES,
+  requestNeedsSwapDetails,
+  requestNeedsWorkDate,
   type RequestType,
 } from "@/lib/domain/entities/RequestEntity";
 import { isManagerRole } from "@/lib/domain/roles";
-import { formatDateTime } from "@/lib/i18n/format";
+import {
+  formatClockTime,
+  formatDate,
+  formatDateTime,
+} from "@/lib/i18n/format";
 import { requestStatusLabel, requestTypeLabel } from "@/lib/i18n/labels";
 import type { MessageKey, Translate } from "@/lib/i18n/translate";
+import { getBusinessDay } from "@/lib/usecases/businessDay";
 
 type RequestEntity = {
   id: string;
@@ -33,16 +41,49 @@ type RequestEntity = {
   request_type: string;
   title: string | null;
   content: string | null;
+  /** SCRUM-82: the day the đơn is about; null for "Khác" and for rows filed before that script. */
+  work_date: string | null;
+  shift_id: string | null;
+  target_employee_id: string | null;
   status: string;
   reject_reason: string | null;
   approver_id: string | null;
   created_at: string;
   updated_at: string;
   requester: { id: string; full_name: string } | null;
+  /** The ca handed over, embedded from the `shift_id` foreign key (SCRUM-82). */
+  shift: { id: string; name: string; start_time: string | null; end_time: string | null } | null;
+  /** The colleague who takes it, embedded from `target_employee_id`. */
+  target_employee: { id: string; full_name: string } | null;
 };
 
 // SCRUM-61 needs `manager_id`: it is what says whether the caller heads the branch.
 type Branch = { id: string; name: string; manager_id: string | null };
+
+/** The caller's own ca of one day, as `GET /api/schedules` embeds it (SCRUM-82). */
+type OwnShiftAssignment = {
+  id: string;
+  shift_id: string;
+  work_date: string;
+  status: string;
+  shift: {
+    id: string;
+    name: string;
+    start_time: string | null;
+    end_time: string | null;
+  } | null;
+};
+
+/** One colleague `GET /api/requests/swap-candidates` offers. */
+type SwapCandidate = { id: string; full_name: string };
+
+/**
+ * What was loaded *for which question*. Keeping the question next to the answer is what lets the dialog
+ * say "đang tải" for a day/ca the caller has just changed instead of showing the previous answer as if it
+ * were about the new one — and it needs no state reset in an effect, which React 19's lint forbids.
+ */
+type OwnShifts = { workDate: string; rows: OwnShiftAssignment[]; error: string };
+type Candidates = { workDate: string; shiftId: string; rows: SwapCandidate[]; error: string };
 
 type LoadResult = {
   requests: RequestEntity[];
@@ -52,12 +93,20 @@ type LoadResult = {
 
 type RejectTarget = { id: string; label: string };
 
-/** The submit dialog: one đơn for one branch, cleared with `value.trim() || null` on the way out. */
+/**
+ * The submit dialog: one đơn for one branch, cleared with `value.trim() || null` on the way out.
+ *
+ * SCRUM-82 added the three fields a đơn that acts on a day needs: the day itself, and — for "Đổi ca" —
+ * the ca handed over plus the colleague who takes it.
+ */
 type RequestForm = {
   branchId: string;
   requestType: RequestType;
   title: string;
   content: string;
+  workDate: string;
+  shiftId: string;
+  targetEmployeeId: string;
 };
 
 const EMPTY_FORM: RequestForm = {
@@ -65,6 +114,9 @@ const EMPTY_FORM: RequestForm = {
   requestType: REQUEST_TYPES[0],
   title: "",
   content: "",
+  workDate: "",
+  shiftId: "",
+  targetEmployeeId: "",
 };
 
 const inputClassName =
@@ -178,6 +230,24 @@ export default function RequestsPage() {
   const [formError, setFormError] = useState("");
   const [saving, setSaving] = useState(false);
 
+  // SCRUM-82: a đơn that acts on a day asks for it, and "Đổi ca" additionally for the ca handed over and
+  // the colleague who takes it. The two lists come from the endpoint that owns each rule —
+  // `GET /api/schedules` for the caller's own ca (RLS already narrows that read to their rows) and
+  // `GET /api/requests/swap-candidates` for the colleagues the database itself would accept.
+  const needsWorkDate = requestNeedsWorkDate(form.requestType);
+  const needsSwap = requestNeedsSwapDetails(form.requestType);
+  // The two values the fetching effects below depend on, hoisted out of `form` so their dependency
+  // entries are the values themselves and not the object that holds them.
+  const formWorkDate = form.workDate;
+  const formShiftId = form.shiftId;
+  const [ownShifts, setOwnShifts] = useState<OwnShifts | null>(null);
+  const [candidates, setCandidates] = useState<Candidates | null>(null);
+  const [candidateQuery, setCandidateQuery] = useState("");
+
+  // The form's `min` and the use case's "the day is not past" test are the same business day, so the
+  // browser never offers a day the API would refuse (Asia/Bangkok, never the browser's own zone).
+  const today = getBusinessDay(new Date());
+
   // Bumping the token re-runs the effect below; keeping the fetch inside the effect (instead
   // of a callback the effect calls) avoids setting state synchronously during render.
   const [reloadToken, setReloadToken] = useState(0);
@@ -241,6 +311,115 @@ export default function RequestsPage() {
       cancelled = true;
     };
   }, [reloadToken, t]);
+
+  // The caller's own ca of the chosen day, for the "Ca cần đổi" picker: `employee_id` is the viewer, so
+  // this reads their own roster and never a colleague's. `CreateRequestUseCase` asks the same question
+  // again server-side and refuses a ca that is not theirs, so the picker is a convenience, not the check.
+  useEffect(() => {
+    if (!submitOpen || !needsSwap || !formWorkDate || !viewerId) {
+      return;
+    }
+
+    let cancelled = false;
+    const workDate = formWorkDate;
+    const params = new URLSearchParams({
+      employee_id: viewerId,
+      start_date: workDate,
+      end_date: workDate,
+    });
+
+    fetch(`/api/schedules?${params}`, { cache: "no-store" })
+      .then(async (response) => ({
+        rows: response.ok
+          ? ((await response.json()) as OwnShiftAssignment[])
+          : [],
+        error: response.ok ? "" : t("requests.shiftListError"),
+      }))
+      .then((result) => {
+        if (cancelled) {
+          return;
+        }
+
+        setOwnShifts({ workDate, ...result });
+      })
+      .catch(() => {
+        if (cancelled) {
+          return;
+        }
+
+        setOwnShifts({ workDate, rows: [], error: t("error.network") });
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [submitOpen, needsSwap, formWorkDate, viewerId, t]);
+
+  // The colleagues who may take that ca, straight from `eligible_swap_targets()` — the same function the
+  // approval re-asks before it moves anything, so the picker can never offer a swap that would fail.
+  useEffect(() => {
+    if (!submitOpen || !needsSwap || !formWorkDate || !formShiftId) {
+      return;
+    }
+
+    let cancelled = false;
+    const workDate = formWorkDate;
+    const shiftId = formShiftId;
+    const params = new URLSearchParams({ work_date: workDate, shift_id: shiftId });
+
+    fetch(`/api/requests/swap-candidates?${params}`, { cache: "no-store" })
+      .then(async (response) => ({
+        rows: response.ok ? ((await response.json()) as SwapCandidate[]) : [],
+        error: response.ok ? "" : t("requests.swapTargetError"),
+      }))
+      .then((result) => {
+        if (cancelled) {
+          return;
+        }
+
+        setCandidates({ workDate, shiftId, ...result });
+      })
+      .catch(() => {
+        if (cancelled) {
+          return;
+        }
+
+        setCandidates({ workDate, shiftId, rows: [], error: t("error.network") });
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [submitOpen, needsSwap, formWorkDate, formShiftId, t]);
+
+  // Derived, never stored: an answer belongs to the day/ca it was loaded for, so changing the day reads
+  // as "đang tải" instead of showing the previous answer as if it were about the new one — and no state
+  // has to be cleared inside an effect (React 19's `react-hooks/set-state-in-effect`).
+  const ownShiftsForDay =
+    ownShifts && ownShifts.workDate === form.workDate ? ownShifts : null;
+  // Only a `SCHEDULED` ca can be handed over: `requireOwnShiftAssignment` accepts nothing else.
+  const myShifts = (ownShiftsForDay?.rows ?? []).filter(
+    (row) => row.status === "SCHEDULED" && row.shift !== null,
+  );
+  const loadingShifts = needsSwap && !!form.workDate && !ownShiftsForDay;
+  const shiftsError = ownShiftsForDay?.error ?? "";
+
+  const swapCandidatesForShift =
+    candidates &&
+    candidates.workDate === form.workDate &&
+    candidates.shiftId === form.shiftId
+      ? candidates
+      : null;
+  const swapCandidates = swapCandidatesForShift?.rows ?? [];
+  const loadingCandidates = needsSwap && !!form.shiftId && !swapCandidatesForShift;
+  const candidatesError = swapCandidatesForShift?.error ?? "";
+
+  const candidateKeyword = candidateQuery.trim().toLowerCase();
+  const visibleCandidates = swapCandidates.filter(
+    (candidate) =>
+      !candidateKeyword ||
+      candidate.full_name.toLowerCase().includes(candidateKeyword),
+  );
 
   function refresh() {
     setLoading(true);
@@ -358,6 +537,8 @@ export default function RequestsPage() {
           })
         : (ownBranchId ?? ""),
     });
+    // The colleague picker is a search box, so a leftover query would hide the list on the next open.
+    setCandidateQuery("");
     setFormError("");
     setSubmitOpen(true);
   }
@@ -367,7 +548,11 @@ export default function RequestsPage() {
     setFormError("");
   }
 
-  function submitErrorMessage(status: number, t: Translate): string {
+  function submitErrorMessage(
+    status: number,
+    data: { error?: string } | null,
+    t: Translate,
+  ): string {
     if (status === 401) {
       return t("error.sessionExpired");
     }
@@ -380,8 +565,16 @@ export default function RequestsPage() {
       return t("requests.error.branchNotFound");
     }
 
+    // SCRUM-82: the colleague took another ca between the picker being loaded and the đơn being filed, so
+    // the database's own sentence is the useful answer — and the screen reloads the list.
+    if (status === 409) {
+      return data?.error ?? t("requests.error.swapTargetNotFree");
+    }
+
+    // A `400` names the offending field or rule in Vietnamese (a day in the past, a ca that is not the
+    // caller's), which is more useful than a generic sentence — both are Vietnamese and both are shown.
     if (status === 400) {
-      return t("requests.error.invalid");
+      return data?.error ?? t("requests.error.invalid");
     }
 
     return t("requests.error.submitFailed");
@@ -398,6 +591,23 @@ export default function RequestsPage() {
       return;
     }
 
+    // SCRUM-82: the same three rules the API states, so the dialog answers before a round trip — the day
+    // has to exist and not be past, and a "Đổi ca" đơn has to name both the ca and the colleague.
+    if (needsWorkDate && !form.workDate) {
+      setFormError(t("requests.error.workDateRequired"));
+      return;
+    }
+
+    if (needsWorkDate && form.workDate < today) {
+      setFormError(t("requests.error.workDatePast"));
+      return;
+    }
+
+    if (needsSwap && (!form.shiftId || !form.targetEmployeeId)) {
+      setFormError(t("requests.error.swapDetailsRequired"));
+      return;
+    }
+
     setSaving(true);
     setFormError("");
 
@@ -411,11 +621,18 @@ export default function RequestsPage() {
           title: form.title.trim(),
           // A blank note travels as null, never as an empty string.
           content: form.content.trim() || null,
+          // A type that acts on nothing sends nothing (SCRUM-82), which is what the API stores anyway.
+          work_date: needsWorkDate ? form.workDate : null,
+          shift_id: needsSwap ? form.shiftId : null,
+          target_employee_id: needsSwap ? form.targetEmployeeId : null,
         }),
       });
 
       if (!response.ok) {
-        setFormError(submitErrorMessage(response.status, t));
+        const data = (await response.json().catch(() => null)) as {
+          error?: string;
+        } | null;
+        setFormError(submitErrorMessage(response.status, data, t));
         return;
       }
 
@@ -655,6 +872,28 @@ export default function RequestsPage() {
                           {item.content}
                         </p>
                       )}
+                      {/* SCRUM-82: the day the đơn acts on, and — for "Đổi ca" — the ca it hands over and
+                          the colleague who takes it. */}
+                      {item.work_date && (
+                        <p className="mt-1 inline-flex items-center gap-1 whitespace-nowrap text-[11px] text-slate-500">
+                          <CalendarDays size={11} className="text-slate-400" />
+                          {t("requests.workDateCell", {
+                            day: formatDate(item.work_date, locale),
+                          })}
+                        </p>
+                      )}
+                      {item.shift_id && (
+                        <p className="mt-0.5 text-[11px] text-slate-500">
+                          {t("requests.swapCell", {
+                            shift: item.shift
+                              ? `${item.shift.name} ${formatClockTime(
+                                  item.shift.start_time,
+                                )}–${formatClockTime(item.shift.end_time)}`
+                              : "—",
+                            name: item.target_employee?.full_name ?? "—",
+                          })}
+                        </p>
+                      )}
                     </td>
                     <td className="px-4 py-4 text-slate-600">
                       {branchNames.get(item.branch_id) ?? "—"}
@@ -822,6 +1061,161 @@ export default function RequestsPage() {
                 <p className="text-[11px] text-amber-600">
                   {t("requests.noBranches")}
                 </p>
+              )}
+
+              {/* SCRUM-82: a đơn that acts on a day names it, and the API refuses a day that is already
+                  gone — this `min` is the same Asia/Bangkok day the use case compares against, so the
+                  browser never offers one the server would reject. */}
+              {needsWorkDate && (
+                <label className="block text-xs font-semibold text-slate-600">
+                  {t("requests.workDateLabel")}{" "}
+                  <span className="text-rose-500">*</span>
+                  <input
+                    type="date"
+                    value={form.workDate}
+                    min={today}
+                    onChange={(event) => {
+                      // A different day means a different ca and different colleagues: both picks are
+                      // dropped rather than silently kept for a day they do not belong to.
+                      setForm((value) => ({
+                        ...value,
+                        workDate: event.target.value,
+                        shiftId: "",
+                        targetEmployeeId: "",
+                      }));
+                      setCandidateQuery("");
+                    }}
+                    className={inputClassName}
+                  />
+                  <span className="mt-1 block text-[10px] font-normal text-slate-400">
+                    {t("requests.workDateNote")}
+                  </span>
+                </label>
+              )}
+
+              {/* "Đổi ca" hands one of the caller's own ca to a colleague, so the two picks are the ca
+                  (from their own roster — RLS narrows that read to their rows) and the colleague (from
+                  the RPC the approval re-asks). Both only make sense once a day is named. */}
+              {needsSwap && form.workDate && (
+                <>
+                  <div className="block text-xs font-semibold text-slate-600">
+                    {t("requests.swapShiftLabel")}{" "}
+                    <span className="text-rose-500">*</span>
+                    {loadingShifts ? (
+                      <span className="mt-1 flex items-center gap-2 rounded-lg border border-slate-200 bg-app px-3 py-2 text-xs font-normal text-slate-500">
+                        <Loader2 size={13} className="animate-spin text-primary" />
+                        {t("requests.swapShiftLoading")}
+                      </span>
+                    ) : (
+                      <select
+                        aria-label={t("requests.swapShiftLabel")}
+                        value={form.shiftId}
+                        onChange={(event) => {
+                          // The colleague list belongs to one ca, so it is dropped with the ca.
+                          setForm((value) => ({
+                            ...value,
+                            shiftId: event.target.value,
+                            targetEmployeeId: "",
+                          }));
+                          setCandidateQuery("");
+                        }}
+                        className={inputClassName}
+                      >
+                        <option value="">
+                          {t("requests.swapShiftPlaceholder")}
+                        </option>
+                        {myShifts.map((row) => (
+                          <option key={row.id} value={row.shift_id}>
+                            {row.shift
+                              ? `${row.shift.name} ${formatClockTime(
+                                  row.shift.start_time,
+                                )}–${formatClockTime(row.shift.end_time)}`
+                              : "--:--"}
+                          </option>
+                        ))}
+                      </select>
+                    )}
+                    {shiftsError && (
+                      <span className="mt-1 block text-[10px] font-normal text-rose-600">
+                        {shiftsError}
+                      </span>
+                    )}
+                    {!loadingShifts && !shiftsError && myShifts.length === 0 && (
+                      <span className="mt-1 block text-[10px] font-normal text-amber-600">
+                        {t("requests.swapShiftEmpty")}
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="block text-xs font-semibold text-slate-600">
+                    {t("requests.swapTargetLabel")}{" "}
+                    <span className="text-rose-500">*</span>
+                    <input
+                      value={candidateQuery}
+                      onChange={(event) => {
+                        // Typing means "search again", so the chosen colleague is dropped — a name the
+                        // list does not contain can never be submitted.
+                        setCandidateQuery(event.target.value);
+                        setForm((value) => ({ ...value, targetEmployeeId: "" }));
+                      }}
+                      disabled={!form.shiftId}
+                      placeholder={t("requests.swapTargetPlaceholder")}
+                      className={`${inputClassName} disabled:bg-app disabled:text-slate-400`}
+                    />
+                    {loadingCandidates && (
+                      <span className="mt-1 flex items-center gap-2 text-[10px] font-normal text-slate-400">
+                        <Loader2 size={12} className="animate-spin text-primary" />
+                        {t("requests.swapTargetLoading")}
+                      </span>
+                    )}
+                    {!loadingCandidates && candidatesError && (
+                      <span className="mt-1 block text-[10px] font-normal text-rose-600">
+                        {candidatesError}
+                      </span>
+                    )}
+                    {form.shiftId &&
+                      !loadingCandidates &&
+                      !candidatesError &&
+                      swapCandidates.length === 0 && (
+                        <span className="mt-1 block text-[10px] font-normal text-amber-600">
+                          {t("requests.swapTargetEmpty")}
+                        </span>
+                      )}
+                    {form.shiftId &&
+                      !loadingCandidates &&
+                      !candidatesError &&
+                      swapCandidates.length > 0 && (
+                        <div className="mt-1 max-h-40 overflow-y-auto rounded-lg border border-slate-200">
+                          {visibleCandidates.length === 0 ? (
+                            <p className="px-3 py-2 text-[11px] font-normal text-slate-400">
+                              {t("requests.swapTargetNoMatch")}
+                            </p>
+                          ) : (
+                            visibleCandidates.map((candidate) => (
+                              <button
+                                key={candidate.id}
+                                type="button"
+                                onClick={() => {
+                                  setForm((value) => ({
+                                    ...value,
+                                    targetEmployeeId: candidate.id,
+                                  }));
+                                  setCandidateQuery(candidate.full_name);
+                                }}
+                                className={`block w-full px-3 py-2 text-left text-[11px] font-normal transition-colors ${
+                                  form.targetEmployeeId === candidate.id
+                                    ? "bg-blue-50 font-semibold text-primary"
+                                    : "text-slate-600 hover:bg-slate-50"
+                                }`}
+                              >
+                                {candidate.full_name || "—"}
+                              </button>
+                            ))
+                          )}
+                        </div>
+                      )}
+                  </div>
+                </>
               )}
 
               <label className="block text-xs font-semibold text-slate-600">

@@ -3,7 +3,7 @@
  * /api/schedules/{id}:
  *   put:
  *     summary: Update a shift assignment
- *     description: Replaces the employee, branch, template, date, status and note of one assignment. Answers 409 on an overlap and 404 for an unknown or non-updatable row. Restricted to managers (`schedule:manage`, SCRUM-59). SCRUM-30.
+ *     description: Replaces the employee, branch, template, date, status and note of one assignment. Answers 409 on an overlap and 404 for an unknown or non-updatable row; an existing row may still be modified even when the ca has already passed, because that is how a mistake in the past is corrected. Restricted to managers (`schedule:manage`, SCRUM-59). SCRUM-30.
  *     tags:
  *       - Schedules
  *     parameters:

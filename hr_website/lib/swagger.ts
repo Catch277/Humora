@@ -297,12 +297,17 @@ export function getApiDocs() {
               "request_type",
               "title",
               "content",
+              "work_date",
+              "shift_id",
+              "target_employee_id",
               "status",
               "reject_reason",
               "approver_id",
               "created_at",
               "updated_at",
               "requester",
+              "shift",
+              "target_employee",
             ],
             properties: {
               id: { type: "string", format: "uuid" },
@@ -322,6 +327,27 @@ export function getApiDocs() {
               },
               title: { type: "string", nullable: true },
               content: { type: "string", nullable: true },
+              work_date: {
+                type: "string",
+                format: "date",
+                nullable: true,
+                description:
+                  "Ngày đơn hướng tới (SCRUM-82, YYYY-MM-DD); bắt buộc với nghỉ phép / đổi ca / điều chỉnh công và null với đơn “Khác” hoặc với dòng tạo trước SCRUM-82.",
+              },
+              shift_id: {
+                type: "string",
+                format: "uuid",
+                nullable: true,
+                description:
+                  "Ca được nhượng lại, chỉ với đơn “Đổi ca” (SCRUM-82); duyệt đơn này sẽ chuyển ca đó sang `target_employee_id`.",
+              },
+              target_employee_id: {
+                type: "string",
+                format: "uuid",
+                nullable: true,
+                description:
+                  "Đồng nghiệp nhận ca, chỉ với đơn “Đổi ca” (SCRUM-82); đã được kiểm tra rảnh ca bằng `eligible_swap_targets()` lúc gửi đơn và kiểm tra lại lúc duyệt.",
+              },
               status: {
                 type: "string",
                 enum: ["PENDING", "APPROVED", "REJECTED"],
@@ -346,6 +372,33 @@ export function getApiDocs() {
                   full_name: { type: "string" },
                 },
               },
+              shift: {
+                allOf: [{ $ref: "#/components/schemas/Shift" }],
+                nullable: true,
+                description:
+                  "Ca nhúng từ khoá ngoại requests_shift_id_fkey (SCRUM-82); null với mọi loại đơn không nêu ca.",
+              },
+              target_employee: {
+                type: "object",
+                nullable: true,
+                description:
+                  "Đồng nghiệp nhúng từ khoá ngoại requests_target_employee_id_fkey (SCRUM-82); null với mọi loại đơn không nêu người nhận ca.",
+                required: ["id", "full_name"],
+                properties: {
+                  id: { type: "string", format: "uuid" },
+                  full_name: { type: "string" },
+                },
+              },
+            },
+          },
+          SwapCandidate: {
+            type: "object",
+            required: ["id", "full_name"],
+            description:
+              "Một đồng nghiệp có thể nhận ca trong đơn “Đổi ca” (SCRUM-82): nhân viên đang làm việc, cùng chi nhánh, không phải người gửi đơn và rảnh trong ca đó — do `public.eligible_swap_targets()` quyết định.",
+            properties: {
+              id: { type: "string", format: "uuid" },
+              full_name: { type: "string" },
             },
           },
           Shift: {

@@ -8,6 +8,13 @@
  *       managers (SCRUM-59 `request:review`): the route answers `403` for another role, the use
  *       case repeats the check and the `requests_update_managers` RLS policy (SCRUM-41) repeats it
  *       in the database.
+ *
+ *       SCRUM-83: approving a đơn also *applies* it, in the same statement, through
+ *       `requests_apply_approved_effects` — a "Nghỉ phép" đơn writes the `Nghỉ` ca on that day, a
+ *       "Đổi ca" đơn moves the assignment to the colleague who takes it. Rejecting applies nothing.
+ *       The trigger re-checks the schedule before it moves anything, which is why the caller can read
+ *       `409` here: the manager's own approval is the confirmation, so the swap has to be applied or
+ *       refused at this instant, and a refusal leaves the đơn `PENDING` for them to reject.
  *     tags:
  *       - Requests
  *     parameters:
@@ -65,6 +72,12 @@
  *           application/json:
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
+ *       409:
+ *         description: The đơn cannot be applied (SCRUM-83) — the day it names has passed, the ca it hands over is no longer the requester's, that ca has already ended, somebody already checked in for it, or the colleague who takes it is not free. The message names the ca, the day and the colleague; nothing was stored, so the đơn is still PENDING and can be rejected.
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
  *       500:
  *         description: An unexpected server error occurred.
  *         content:
@@ -77,6 +90,7 @@ import { NextResponse } from "next/server";
 import type { ReviewStatus } from "@/lib/domain/entities/RequestEntity";
 import { BranchForbiddenError } from "@/lib/domain/errors/BranchForbiddenError";
 import { BranchNotFoundError } from "@/lib/domain/errors/BranchNotFoundError";
+import { RequestApprovalConflictError } from "@/lib/domain/errors/RequestApprovalConflictError";
 import { RequestNotFoundError } from "@/lib/domain/errors/RequestNotFoundError";
 import { RequestReviewForbiddenError } from "@/lib/domain/errors/RequestReviewForbiddenError";
 import { RequestSelfReviewError } from "@/lib/domain/errors/RequestSelfReviewError";
@@ -179,6 +193,13 @@ export async function PATCH(
 
     if (error instanceof BranchNotFoundError) {
       return NextResponse.json({ error: error.message }, { status: 404 });
+    }
+
+    // SCRUM-83: the schedule moved since the đơn was filed, so approving it would move a ca that is no
+    // longer there. Nothing was stored — the sentence names the ca, the day and the colleague — and the
+    // manager decides next (reject it, or fix the schedule and approve again).
+    if (error instanceof RequestApprovalConflictError) {
+      return NextResponse.json({ error: error.message }, { status: 409 });
     }
 
     if (

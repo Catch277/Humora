@@ -7,7 +7,7 @@
 export class AttendanceCheckOutAmbiguousError extends Error {
   constructor() {
     super(
-      "More than one shift is still open today; send attendance_id to say which one to close.",
+      "Hôm nay bạn còn nhiều hơn một ca chưa ra ca; hãy gửi attendance_id để nói rõ ca cần kết thúc.",
     );
     this.name = "AttendanceCheckOutAmbiguousError";
   }

@@ -64,6 +64,14 @@
  *     description: |
  *       Assigns one employee to one shift template on one business date. Answers `409` when the
  *       same employee already has an overlapping shift that day (or the exact same template).
+ *
+ *       Answers `400` when the ca has already finished — earlier today, or on a day that is already gone:
+ *       a new row on a ca nobody can clock in for is exactly the record the check-in window must refuse.
+ *       The rule is enforced twice on purpose: `CreateShiftAssignmentUseCase` answers the sentence naming
+ *       the ca, and the `shift_assignments_block_past` trigger (SCRUM-81) refuses the row itself, so the
+ *       same guard covers the approval RPCs and anything else that writes the table.
+ *       Modifying or deleting an existing assignment stays possible (`PUT` / `DELETE`), because that is
+ *       how a mistake in the past is corrected; only a **new** assignment is refused.
  *       Restricted to managers (`schedule:manage`, SCRUM-59) and enforced by RLS.
  *     tags:
  *       - Schedules
@@ -81,7 +89,7 @@
  *             schema:
  *               $ref: '#/components/schemas/ShiftAssignment'
  *       400:
- *         description: The request body is invalid.
+ *         description: The request body is invalid, or the shift's working time has already passed on that work date (Asia/Bangkok) — also when the database guard refuses the row.
  *         content:
  *           application/json:
  *             schema:
@@ -121,6 +129,8 @@ import { NextResponse, type NextRequest } from "next/server";
 
 import { BranchForbiddenError } from "@/lib/domain/errors/BranchForbiddenError";
 import { BranchNotFoundError } from "@/lib/domain/errors/BranchNotFoundError";
+import { PastShiftAssignmentError } from "@/lib/domain/errors/PastShiftAssignmentError";
+import { ShiftAlreadyEndedError } from "@/lib/domain/errors/ShiftAlreadyEndedError";
 import { ShiftNotFoundError } from "@/lib/domain/errors/ShiftNotFoundError";
 import { ShiftOverlapError } from "@/lib/domain/errors/ShiftOverlapError";
 import { SupabaseBranchRepository } from "@/lib/infrastructure/repositories/SupabaseBranchRepository";
@@ -243,6 +253,17 @@ export async function POST(request: Request) {
 
     return NextResponse.json(assignment, { status: 201 });
   } catch (error) {
+    // The ca is over, so the new row would be one nobody can clock in for: the payload is fine, the state
+    // it describes is not, which is why the caller reads this sentence (`400`) rather than the overlap one.
+    // `PastShiftAssignmentError` is the same rule answered by the database guard (SCRUM-81) — the row was
+    // refused between the use case's check and the insert, or by a writer this endpoint does not own.
+    if (
+      error instanceof ShiftAlreadyEndedError ||
+      error instanceof PastShiftAssignmentError
+    ) {
+      return NextResponse.json({ error: error.message }, { status: 400 });
+    }
+
     if (error instanceof ShiftNotFoundError) {
       return NextResponse.json({ error: error.message }, { status: 404 });
     }

@@ -31,6 +31,7 @@ import {
 import { formatClockTime, formatDayMonth, weekdayLong } from "@/lib/i18n/format";
 import { shiftAssignmentStatusLabel } from "@/lib/i18n/labels";
 import { normalizeForSearch } from "@/lib/searchText";
+import { isShiftAlreadyOver } from "@/lib/usecases/shiftWindow";
 
 // SCRUM-61 needs `manager_id`: it is what says whether the caller heads the branch.
 type Branch = { id: string; name: string; manager_id: string | null };
@@ -59,8 +60,13 @@ type ScheduleForm = {
   note: string;
 };
 
+/**
+ * `lockedShift` is the ca the dialog was opened *from* — see `openCreate`: clicking "Thêm" inside a ca row
+ * of the week table fixes that ca, because the row already says which ca is being added. The toolbar
+ * button ("Xếp ca") leaves it `null`, which is what keeps the manual picker for an arbitrary assignment.
+ */
 type ModalState =
-  | { mode: "create"; workDate: string }
+  | { mode: "create"; workDate: string; lockedShift: Shift | null }
   | { mode: "edit"; assignment: ShiftAssignment }
   | null;
 
@@ -590,14 +596,20 @@ export default function SchedulesPage() {
   ).size;
   const isCurrentWeek = weekStart === startOfWeek(todayInBangkok());
 
-  function openCreate(workDate: string) {
+  /**
+   * Opens the dialog for a new assignment. `lockedShift` is given when the click came from inside a ca row
+   * of the week table: that row *is* the ca being added, so it arrives already chosen and shown as a
+   * statement instead of making the manager pick the thing they just clicked on. The toolbar button calls
+   * this with no ca, which keeps the picker for an assignment that is not tied to a row.
+   */
+  function openCreate(workDate: string, lockedShift: Shift | null = null) {
     // SCRUM-63: the branch is not picked here any more — it is where the chosen employee works, set by
     // `selectEmployee` below. Picking the branch first would let somebody schedule a person into a
     // branch that is not theirs, which the API (`assertBranchManagedBy`) refuses anyway.
     setForm({
       employeeId: "",
       branchId: "",
-      shiftId: "",
+      shiftId: lockedShift?.id ?? "",
       workDate,
       status: "SCHEDULED",
       note: "",
@@ -608,7 +620,31 @@ export default function SchedulesPage() {
     setFormError("");
     setAssignBranchId("");
     setAssignError("");
-    setModal({ mode: "create", workDate });
+    setModal({ mode: "create", workDate, lockedShift });
+  }
+
+  /**
+   * Lets the manager pick a different ca after all — the same escape hatch the employee field has
+   * ("Đổi nhân viên"), so clicking the wrong row is not a dead end.
+   *
+   * The choice is kept only when the picker can actually show it: the options are the chosen employee's
+   * branch templates plus the branch-agnostic ones (SCRUM-63), and a `select` whose value no option
+   * carries would render as "Chọn ca" while still sending the old id.
+   */
+  function unlockShift() {
+    const locked = modal?.mode === "create" ? modal.lockedShift : null;
+
+    setModal((value) =>
+      value?.mode === "create" ? { ...value, lockedShift: null } : value,
+    );
+    setForm((value) => ({
+      ...value,
+      shiftId:
+        locked && (locked.branch_id === null || locked.branch_id === value.branchId)
+          ? locked.id
+          : "",
+    }));
+    setFormError("");
   }
 
   function openEdit(assignment: ShiftAssignment) {
@@ -723,6 +759,13 @@ export default function SchedulesPage() {
   }
 
   async function submit() {
+    // Opening the dialog from a ca row fixes that ca (see `openCreate`); the toolbar button leaves the
+    // picker free. Both end up here, so the ca is resolved once and everything below — the validation, the
+    // clock rule, the payload — reads the same value.
+    const isEdit = modal?.mode === "edit";
+    const lockedShift = modal?.mode === "create" ? modal.lockedShift : null;
+    const shiftId = lockedShift?.id ?? form.shiftId;
+
     if (!form.employeeId) {
       setFormError(t("schedules.error.employeeRequired"));
       return;
@@ -733,7 +776,7 @@ export default function SchedulesPage() {
       return;
     }
 
-    if (!form.shiftId) {
+    if (!shiftId) {
       setFormError(t("schedules.error.shiftRequired"));
       return;
     }
@@ -743,11 +786,34 @@ export default function SchedulesPage() {
       return;
     }
 
+    // A ca that has already finished cannot be worked, so a *new* row on it is one nobody can clock in for
+    // (the API repeats this in `CreateShiftAssignmentUseCase`; the check here is what turns it into a
+    // message inside the dialog instead of a round trip). Editing an existing row is a modification and
+    // stays possible, which is why this is the create path only — the same reason a day off skips it.
+    // The locked ca is used as it is: a template of a row the catalogue no longer carries (`GET /api/shifts`
+    // failed, or it was deleted since the ca was written) still has hours to judge the rule by.
+    const pickedShift =
+      lockedShift ?? shifts.find((shift) => shift.id === shiftId) ?? null;
+
+    if (
+      !isEdit &&
+      form.status === "SCHEDULED" &&
+      isShiftAlreadyOver(new Date(), form.workDate, pickedShift)
+    ) {
+      setFormError(
+        t("schedules.error.shiftEnded", {
+          shift: pickedShift?.name ?? t("common.shift"),
+          date: formatDayMonth(form.workDate, locale),
+          time: formatClockTime(pickedShift?.end_time ?? null),
+        }),
+      );
+      return;
+    }
+
     setSaving(true);
     setFormError("");
 
     try {
-      const isEdit = modal?.mode === "edit";
       const response = await fetch(
         isEdit ? `/api/schedules/${modal.assignment.id}` : "/api/schedules",
         {
@@ -756,7 +822,7 @@ export default function SchedulesPage() {
           body: JSON.stringify({
             employee_id: form.employeeId,
             branch_id: form.branchId,
-            shift_id: form.shiftId,
+            shift_id: shiftId,
             work_date: form.workDate,
             status: form.status,
             note: form.note.trim() || null,
@@ -830,6 +896,13 @@ export default function SchedulesPage() {
       setDeletingId("");
     }
   }
+
+  /**
+   * The ca the create dialog was opened from — clicking "Thêm" inside a ca row of the week table fixes
+   * that row's ca (see `openCreate`), while the toolbar button ("Xếp ca") leaves it `null` so the picker
+   * stays available. `unlockShift` clears it when the manager wants a different ca after all.
+   */
+  const lockedCreateShift = modal?.mode === "create" ? modal.lockedShift : null;
 
   // SCRUM-63: the branch belongs to the chosen employee, so before one is chosen (`branchId === ""`) there
   // is nothing to match a template against — not even the organization-wide ones with `branch_id = null`.
@@ -1238,7 +1311,7 @@ export default function SchedulesPage() {
                           {can("schedule:manage") && (
                             <button
                               type="button"
-                              onClick={() => openCreate(day)}
+                              onClick={() => openCreate(day, shift)}
                               aria-label={t("schedules.addShiftAria", {
                                 shift: shift.name,
                                 day: formatDayMonth(day),
@@ -1490,42 +1563,72 @@ export default function SchedulesPage() {
                     </div>
                   )}
 
-                <label className="block text-xs font-semibold text-slate-600">
-                  {t("common.shift")} <span className="text-rose-500">*</span>
-                  <select
-                    value={form.shiftId}
-                    onChange={(event) =>
-                      setForm((value) => ({
-                        ...value,
-                        shiftId: event.target.value,
-                      }))
-                    }
-                    disabled={selectableShifts.length === 0}
-                    className={inputClassName}
-                  >
-                    <option value="">{t("schedules.chooseShift")}</option>
-                    {selectableShifts.map((shift) => (
-                      <option key={shift.id} value={shift.id}>
-                        {shift.name} ({formatClockTime(shift.start_time, "--:--")} –{" "}
-                        {formatClockTime(shift.end_time, "--:--")})
-                      </option>
-                    ))}
-                  </select>
+                <div>
+                  <p className="text-xs font-semibold text-slate-600">
+                    {t("common.shift")} <span className="text-rose-500">*</span>
+                  </p>
+
+                  {/*
+                    Opened from a ca row of the week table: that row already answered "which ca", so it is
+                    shown as a statement (with the escape hatch that lets it be changed) instead of asking
+                    the manager to pick again what they just clicked. The toolbar button keeps the picker.
+                  */}
+                  {lockedCreateShift ? (
+                    <div className="mt-1 flex items-center justify-between gap-2 rounded-lg border border-slate-200 bg-app px-3 py-2.5">
+                      <span className="min-w-0 truncate text-sm font-normal text-slate-700">
+                        {lockedCreateShift.name}
+                        <span className="ml-1 text-[11px] tabular-nums text-slate-500">
+                          ({formatClockTime(lockedCreateShift.start_time, "--:--")} –{" "}
+                          {formatClockTime(lockedCreateShift.end_time, "--:--")})
+                        </span>
+                      </span>
+                      <button
+                        type="button"
+                        onClick={unlockShift}
+                        className="shrink-0 text-[11px] font-semibold text-primary hover:underline"
+                      >
+                        {t("schedules.changeShift")}
+                      </button>
+                    </div>
+                  ) : (
+                    <select
+                      value={form.shiftId}
+                      onChange={(event) =>
+                        setForm((value) => ({
+                          ...value,
+                          shiftId: event.target.value,
+                        }))
+                      }
+                      disabled={selectableShifts.length === 0}
+                      className={inputClassName}
+                    >
+                      <option value="">{t("schedules.chooseShift")}</option>
+                      {selectableShifts.map((shift) => (
+                        <option key={shift.id} value={shift.id}>
+                          {shift.name} ({formatClockTime(shift.start_time, "--:--")} –{" "}
+                          {formatClockTime(shift.end_time, "--:--")})
+                        </option>
+                      ))}
+                    </select>
+                  )}
+
                   {/*
                     An empty picker used to be silent. The catalogue is per organization (SCRUM-53),
                     so an organization whose templates were never seeded has nothing to choose from —
                     say so rather than letting the operator guess.
                   */}
-                  {shifts.length === 0 ? (
+                  {shifts.length === 0 && !lockedCreateShift ? (
                     <span className="mt-1 block text-[11px] font-normal text-amber-600">
                       {t("schedules.noCatalogue")}
                     </span>
-                  ) : form.branchId !== "" && selectableShifts.length === 0 ? (
+                  ) : !lockedCreateShift &&
+                    form.branchId !== "" &&
+                    selectableShifts.length === 0 ? (
                     <span className="mt-1 block text-[11px] font-normal text-amber-600">
                       {t("schedules.shiftNoneForBranch")}
                     </span>
                   ) : null}
-                </label>
+                </div>
               </div>
 
               <div className="grid gap-4 sm:grid-cols-2">

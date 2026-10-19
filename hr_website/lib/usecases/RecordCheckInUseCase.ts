@@ -1,9 +1,12 @@
 import type { Attendance } from "@/lib/domain/entities/Attendance";
+import type { Shift } from "@/lib/domain/entities/Shift";
 import { AttendanceAlreadyCheckedInError } from "@/lib/domain/errors/AttendanceAlreadyCheckedInError";
 import { AttendanceBranchNotAssignedError } from "@/lib/domain/errors/AttendanceBranchNotAssignedError";
 import { AttendanceBranchRequiredError } from "@/lib/domain/errors/AttendanceBranchRequiredError";
 import { AttendanceCheckInForbiddenError } from "@/lib/domain/errors/AttendanceCheckInForbiddenError";
 import { AttendanceNoShiftTodayError } from "@/lib/domain/errors/AttendanceNoShiftTodayError";
+import { AttendanceShiftEndedError } from "@/lib/domain/errors/AttendanceShiftEndedError";
+import { AttendanceShiftNotStartedError } from "@/lib/domain/errors/AttendanceShiftNotStartedError";
 import { BranchForbiddenError } from "@/lib/domain/errors/BranchForbiddenError";
 import { ShiftNotFoundError } from "@/lib/domain/errors/ShiftNotFoundError";
 import type { IAttendanceRepository } from "@/lib/domain/repositories/IAttendanceRepository";
@@ -18,6 +21,7 @@ import {
 } from "@/lib/usecases/attendanceStatus";
 import { assertBranchManagedBy } from "@/lib/usecases/branchScope";
 import { getBusinessDay } from "@/lib/usecases/businessDay";
+import { checkInWindowVerdict } from "@/lib/usecases/shiftWindow";
 
 /**
  * The caller as the route handler knows it (SCRUM-68) — who clocks in, their role and the branch they
@@ -41,10 +45,12 @@ export type RecordCheckInUseCaseInput = {
 type CheckInTarget = {
   branchId: string;
   shiftId: string | null;
-  /** `shifts.start_time`, the hour the lateness verdict is measured against. */
-  shiftStartTime: string | null;
-  /** `shifts.end_time`, the hour that decides whether a check-out can still be undone. */
-  shiftEndTime: string | null;
+  /**
+   * The ca the arrival belongs to: `shifts.start_time` is the hour the lateness verdict is measured
+   * against, `end_time` the one that decides whether a check-out can still be undone and, since the ca's
+   * window rule, whether a check-in is inside its working time at all. `null` for an unscheduled arrival.
+   */
+  shift: Shift | null;
 };
 
 /** `created` is `false` when an existing record was re-opened ("Vào ca lại") instead of created. */
@@ -95,6 +101,10 @@ export class RecordCheckInUseCase {
       return { attendance: await this.rejoin(existing, now, target), created: false };
     }
 
+    // A brand-new arrival is judged against the ca's working time. An existing record never reaches this:
+    // re-opening it is the narrower "Vào ca lại" rule above, and its refusal already has its own sentence.
+    this.assertInsideShiftWindow(now, workDate, target);
+
     const attendance = await this.attendanceRepository.create({
       employeeId: input.callerId,
       branchId: target.branchId,
@@ -103,11 +113,41 @@ export class RecordCheckInUseCase {
       checkInAt: now.toISOString(),
       checkInLatitude: input.latitude,
       checkInLongitude: input.longitude,
-      status: resolveCheckInStatus(now, target.shiftStartTime),
+      status: resolveCheckInStatus(now, target.shift?.start_time ?? null),
       note: input.note,
     });
 
     return { attendance, created: true };
+  }
+
+  /**
+   * Refuses an arrival outside the ca's working time — too early, or once it has effectively finished.
+   *
+   * The hours are what the lateness verdict and the worked time are derived from, so a record written
+   * outside them describes work nobody did, and the same boundary already decides when a check-out may be
+   * undone, so the two rules cannot disagree. An unscheduled arrival (a manager who named no ca) has no
+   * window to be outside of, and a template without hours is left alone for the same reason.
+   */
+  private assertInsideShiftWindow(
+    now: Date,
+    workDate: string,
+    target: CheckInTarget,
+  ): void {
+    const verdict = checkInWindowVerdict(now, workDate, target.shift);
+
+    if (verdict === "NOT_STARTED") {
+      throw new AttendanceShiftNotStartedError(
+        target.shift?.name ?? "",
+        target.shift?.start_time ?? "",
+      );
+    }
+
+    if (verdict === "ENDED") {
+      throw new AttendanceShiftEndedError(
+        target.shift?.name ?? "",
+        target.shift?.end_time ?? "",
+      );
+    }
   }
 
   /**
@@ -130,15 +170,15 @@ export class RecordCheckInUseCase {
       throw new AttendanceAlreadyCheckedInError();
     }
 
-    if (!isShiftStillRunning(now, target.shiftEndTime)) {
+    if (!isShiftStillRunning(now, target.shift?.end_time ?? null)) {
       throw new AttendanceAlreadyCheckedInError(
-        "This shift's working time is over, so its check-out stands.",
+        "Ca này đã hết giờ làm nên giờ ra vẫn được giữ nguyên.",
       );
     }
 
     return this.attendanceRepository.reopen(
       existing.id,
-      resolveStoredStatus(existing, target.shiftStartTime),
+      resolveStoredStatus(existing, target.shift?.start_time ?? null),
     );
   }
 
@@ -159,13 +199,9 @@ export class RecordCheckInUseCase {
 
     if (input.shiftId === null) {
       // No ca chosen: the row is stored unscheduled, which the review screen shows as such — and without
-      // hours there is no "working time" to judge, so a check-out on it can never be undone.
-      return {
-        branchId: input.branchId,
-        shiftId: null,
-        shiftStartTime: null,
-        shiftEndTime: null,
-      };
+      // hours there is no "working time" to judge, so a check-out on it can never be undone and no
+      // check-in window applies.
+      return { branchId: input.branchId, shiftId: null, shift: null };
     }
 
     const shift = await this.shiftRepository.findById(input.shiftId);
@@ -174,12 +210,7 @@ export class RecordCheckInUseCase {
       throw new ShiftNotFoundError();
     }
 
-    return {
-      branchId: input.branchId,
-      shiftId: shift.id,
-      shiftStartTime: shift.start_time,
-      shiftEndTime: shift.end_time,
-    };
+    return { branchId: input.branchId, shiftId: shift.id, shift };
   }
 
   /**
@@ -223,8 +254,7 @@ export class RecordCheckInUseCase {
     return {
       branchId: assignment.branch_id,
       shiftId: assignment.shift_id,
-      shiftStartTime: assignment.shift?.start_time ?? null,
-      shiftEndTime: assignment.shift?.end_time ?? null,
+      shift: assignment.shift ?? null,
     };
   }
 

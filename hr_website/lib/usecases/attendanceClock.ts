@@ -40,7 +40,9 @@ function toInstant(workDate: string, time: string): Date | null {
  */
 export function getShiftWindow(
   workDate: string,
-  shift: Shift | null,
+  // Only the hours are read, so a caller that has no full `Shift` (the schedule guard, the check-in
+  // screen) can pass the part it has instead of fetching the catalogue row again.
+  shift: Pick<Shift, "start_time" | "end_time"> | null,
 ): { start: Date; end: Date } | null {
   if (!shift || !shift.start_time || !shift.end_time) {
     return null;

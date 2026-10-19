@@ -6,7 +6,7 @@
 export class AttendanceBranchNotAssignedError extends Error {
   constructor() {
     super(
-      "Your account is not assigned to a branch yet, so it cannot be clocked in.",
+      "Tài khoản của bạn chưa được gán chi nhánh nên chưa thể chấm công.",
     );
     this.name = "AttendanceBranchNotAssignedError";
   }

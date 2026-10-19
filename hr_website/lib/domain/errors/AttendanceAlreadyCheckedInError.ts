@@ -12,9 +12,7 @@
  * the same thing.
  */
 export class AttendanceAlreadyCheckedInError extends Error {
-  constructor(
-    message = "This shift has already been checked in today.",
-  ) {
+  constructor(message = "Ca này hôm nay đã được vào ca rồi.") {
     super(message);
     this.name = "AttendanceAlreadyCheckedInError";
   }

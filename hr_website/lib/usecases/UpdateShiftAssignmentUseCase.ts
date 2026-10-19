@@ -55,6 +55,10 @@ export class UpdateShiftAssignmentUseCase {
     }
 
     if (normalized.status === "SCHEDULED") {
+      // Only a *new* assignment is judged against the clock (SCRUM-30 rule, see
+      // `CreateShiftAssignmentUseCase`): this row already exists, so editing it — its note, its ca, its
+      // date — is a correction of the past, and deleting it is the other half of that. The overlap check
+      // is about the future of this employee's day and therefore runs for every write.
       await assertNoOverlappingShift(this.assignmentRepository, {
         employeeId: normalized.employeeId,
         workDate: normalized.workDate,

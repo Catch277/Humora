@@ -467,12 +467,17 @@
           "request_type",
           "title",
           "content",
+          "work_date",
+          "shift_id",
+          "target_employee_id",
           "status",
           "reject_reason",
           "approver_id",
           "created_at",
           "updated_at",
-          "requester"
+          "requester",
+          "shift",
+          "target_employee"
         ],
         "properties": {
           "id": {
@@ -500,6 +505,24 @@
           "content": {
             "type": "string",
             "nullable": true
+          },
+          "work_date": {
+            "type": "string",
+            "format": "date",
+            "nullable": true,
+            "description": "Ngày đơn hướng tới (SCRUM-82, YYYY-MM-DD); bắt buộc với nghỉ phép / đổi ca / điều chỉnh công và null với đơn “Khác” hoặc với dòng tạo trước SCRUM-82."
+          },
+          "shift_id": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true,
+            "description": "Ca được nhượng lại, chỉ với đơn “Đổi ca” (SCRUM-82); duyệt đơn này sẽ chuyển ca đó sang `target_employee_id`."
+          },
+          "target_employee_id": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true,
+            "description": "Đồng nghiệp nhận ca, chỉ với đơn “Đổi ca” (SCRUM-82); đã được kiểm tra rảnh ca bằng `eligible_swap_targets()` lúc gửi đơn và kiểm tra lại lúc duyệt."
           },
           "status": {
             "type": "string",
@@ -544,6 +567,50 @@
                 "type": "string"
               }
             }
+          },
+          "shift": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/Shift"
+              }
+            ],
+            "nullable": true,
+            "description": "Ca nhúng từ khoá ngoại requests_shift_id_fkey (SCRUM-82); null với mọi loại đơn không nêu ca."
+          },
+          "target_employee": {
+            "type": "object",
+            "nullable": true,
+            "description": "Đồng nghiệp nhúng từ khoá ngoại requests_target_employee_id_fkey (SCRUM-82); null với mọi loại đơn không nêu người nhận ca.",
+            "required": [
+              "id",
+              "full_name"
+            ],
+            "properties": {
+              "id": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "full_name": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      },
+      "SwapCandidate": {
+        "type": "object",
+        "required": [
+          "id",
+          "full_name"
+        ],
+        "description": "Một đồng nghiệp có thể nhận ca trong đơn “Đổi ca” (SCRUM-82): nhân viên đang làm việc, cùng chi nhánh, không phải người gửi đơn và rảnh trong ca đó — do `public.eligible_swap_targets()` quyết định.",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "full_name": {
+            "type": "string"
           }
         }
       },
@@ -2997,7 +3064,7 @@
             }
           },
           "409": {
-            "description": "Already reviewed, or approving would clash with the person's schedule.",
+            "description": "Already reviewed, approving would clash with the person's schedule, or the ca's working time has already passed on that work date (Asia/Bangkok) — approving a registration for an ended ca is refused by `shift_assignments_block_past` (SCRUM-81).",
             "content": {
               "application/json": {
                 "schema": {
@@ -3262,7 +3329,7 @@
       },
       "post": {
         "summary": "Schedule a shift",
-        "description": "Assigns one employee to one shift template on one business date. Answers `409` when the\nsame employee already has an overlapping shift that day (or the exact same template).\nRestricted to managers (`schedule:manage`, SCRUM-59) and enforced by RLS.\n",
+        "description": "Assigns one employee to one shift template on one business date. Answers `409` when the\nsame employee already has an overlapping shift that day (or the exact same template).\n\nAnswers `400` when the ca has already finished — earlier today, or on a day that is already gone:\na new row on a ca nobody can clock in for is exactly the record the check-in window must refuse.\nThe rule is enforced twice on purpose: `CreateShiftAssignmentUseCase` answers the sentence naming\nthe ca, and the `shift_assignments_block_past` trigger (SCRUM-81) refuses the row itself, so the\nsame guard covers the approval RPCs and anything else that writes the table.\nModifying or deleting an existing assignment stays possible (`PUT` / `DELETE`), because that is\nhow a mistake in the past is corrected; only a **new** assignment is refused.\nRestricted to managers (`schedule:manage`, SCRUM-59) and enforced by RLS.\n",
         "tags": [
           "Schedules"
         ],
@@ -3288,7 +3355,7 @@
             }
           },
           "400": {
-            "description": "The request body is invalid.",
+            "description": "The request body is invalid, or the shift's working time has already passed on that work date (Asia/Bangkok) — also when the database guard refuses the row.",
             "content": {
               "application/json": {
                 "schema": {
@@ -3353,7 +3420,7 @@
     "/api/schedules/{id}": {
       "put": {
         "summary": "Update a shift assignment",
-        "description": "Replaces the employee, branch, template, date, status and note of one assignment. Answers 409 on an overlap and 404 for an unknown or non-updatable row. Restricted to managers (`schedule:manage`, SCRUM-59). SCRUM-30.",
+        "description": "Replaces the employee, branch, template, date, status and note of one assignment. Answers 409 on an overlap and 404 for an unknown or non-updatable row; an existing row may still be modified even when the ca has already passed, because that is how a mistake in the past is corrected. Restricted to managers (`schedule:manage`, SCRUM-59). SCRUM-30.",
         "tags": [
           "Schedules"
         ],
@@ -3935,7 +4002,7 @@
       },
       "post": {
         "summary": "Submit a request",
-        "description": "Files the caller's own đơn (SCRUM-41: nghỉ phép, đổi ca, điều chỉnh công) as `PENDING` for a\nmanager to review. This is the submit half of the ticket — the queue above can only fill if\nsomebody writes a row, and nothing else in this app inserts into `public.requests`.\nThe requester always comes from the session (`requests_insert_own` refuses a row whose\n`user_id` is not the caller), and every role holds `request:create` **except the\norganization's `OWNER`** (SCRUM-63): the owner sits above the approval chain and reviews the\nqueue instead of filing into it.\n",
+        "description": "Files the caller's own đơn (SCRUM-41: nghỉ phép, đổi ca, điều chỉnh công) as `PENDING` for a\nmanager to review. This is the submit half of the ticket — the queue above can only fill if\nsomebody writes a row, and nothing else in this app inserts into `public.requests`.\nThe requester always comes from the session (`requests_insert_own` refuses a row whose\n`user_id` is not the caller), and every role holds `request:create` **except the\norganization's `OWNER`** (SCRUM-63): the owner sits above the approval chain and reviews the\nqueue instead of filing into it.\n\nSCRUM-82: a đơn that acts on a day must name it (`work_date`), and \"Đổi ca\" additionally names the\nca (`shift_id`) and the colleague who takes it (`target_employee_id`). The day may not be in the\npast — a schedule is a statement about work still to come, exactly like `POST /api/schedules`\n(`SCRUM-81`) — and the ca named must be one the caller still holds, on that day, and not already\nover. `GET /api/requests/swap-candidates` is what fills the colleague picker.\n",
         "tags": [
           "Requests"
         ],
@@ -3976,6 +4043,25 @@
                     "maxLength": 500,
                     "nullable": true,
                     "description": "Nội dung chi tiết; bỏ trống hoặc null là đơn không có ghi chú thêm."
+                  },
+                  "work_date": {
+                    "type": "string",
+                    "format": "date",
+                    "nullable": true,
+                    "example": "2026-10-20",
+                    "description": "Ngày đơn hướng tới (SCRUM-82). Bắt buộc với nghỉ phép / đổi ca / điều chỉnh công, phải từ hôm nay trở đi (giờ Asia/Bangkok); bỏ trống với đơn “Khác”."
+                  },
+                  "shift_id": {
+                    "type": "string",
+                    "format": "uuid",
+                    "nullable": true,
+                    "description": "Ca cần đổi (public.shifts.id). Bắt buộc với đơn “Đổi ca”, và phải là ca bạn đang được xếp trong ngày đó."
+                  },
+                  "target_employee_id": {
+                    "type": "string",
+                    "format": "uuid",
+                    "nullable": true,
+                    "description": "Đồng nghiệp nhận ca (public.users.id). Bắt buộc với đơn “Đổi ca”; phải nằm trong danh sách GET /api/requests/swap-candidates."
                   }
                 }
               }
@@ -3994,7 +4080,7 @@
             }
           },
           "400": {
-            "description": "The JSON body is invalid, request_type is unknown, or title/content is blank or too long.",
+            "description": "The JSON body is invalid, request_type is unknown, title/content is blank or too long, work_date is missing or malformed for the type, shift_id/target_employee_id is missing or malformed for a \"Đổi ca\" request, the day is in the past, or the ca is no longer the caller's own or has already ended.",
             "content": {
               "application/json": {
                 "schema": {
@@ -4033,6 +4119,16 @@
               }
             }
           },
+          "409": {
+            "description": "The colleague named by a \"Đổi ca\" request cannot take that ca (SCRUM-82) — they are not in the caller's branch, have left, or took an overlapping ca in the meantime. The screen reloads GET /api/requests/swap-candidates and the caller picks again.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
           "500": {
             "description": "An unexpected server error occurred.",
             "content": {
@@ -4049,7 +4145,7 @@
     "/api/requests/{id}/review": {
       "patch": {
         "summary": "Approve or reject a request",
-        "description": "Sets `requests.status` together with `reject_reason` and `approver_id`. Restricted to\nmanagers (SCRUM-59 `request:review`): the route answers `403` for another role, the use\ncase repeats the check and the `requests_update_managers` RLS policy (SCRUM-41) repeats it\nin the database.\n",
+        "description": "Sets `requests.status` together with `reject_reason` and `approver_id`. Restricted to\nmanagers (SCRUM-59 `request:review`): the route answers `403` for another role, the use\ncase repeats the check and the `requests_update_managers` RLS policy (SCRUM-41) repeats it\nin the database.\n\nSCRUM-83: approving a đơn also *applies* it, in the same statement, through\n`requests_apply_approved_effects` — a \"Nghỉ phép\" đơn writes the `Nghỉ` ca on that day, a\n\"Đổi ca\" đơn moves the assignment to the colleague who takes it. Rejecting applies nothing.\nThe trigger re-checks the schedule before it moves anything, which is why the caller can read\n`409` here: the manager's own approval is the confirmation, so the swap has to be applied or\nrefused at this instant, and a refusal leaves the đơn `PENDING` for them to reject.\n",
         "tags": [
           "Requests"
         ],
@@ -4135,6 +4231,102 @@
           },
           "404": {
             "description": "The request does not exist or is not reviewable by the caller.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The đơn cannot be applied (SCRUM-83) — the day it names has passed, the ca it hands over is no longer the requester's, that ca has already ended, somebody already checked in for it, or the colleague who takes it is not free. The message names the ca, the day and the colleague; nothing was stored, so the đơn is still PENDING and can be rejected.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "An unexpected server error occurred.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/requests/swap-candidates": {
+      "get": {
+        "summary": "List the colleagues who may take a ca",
+        "description": "Fills the \"đồng nghiệp nhận ca\" picker of a \"Đổi ca\" đơn (SCRUM-82): the active `EMPLOYEE`\naccounts of the caller's own branch who are free in that ca on that day, never the caller.\n\nThe rule is `public.eligible_swap_targets()` — a `security definer` function that reuses\n`shift_conflict_reason()`, i.e. exactly the test the approval trigger (`SCRUM-83`) runs before\nit moves the assignment. The list and the decision therefore cannot drift, and a ca the caller\ndoes not hold simply answers an empty array.\n\nRLS cannot answer this question: the `shift_assignments` read policy (SCRUM-63) shows an\n`EMPLOYEE` only their own rows, so \"is this colleague free?\" has to be asked in the database.\n",
+        "tags": [
+          "Requests"
+        ],
+        "parameters": [
+          {
+            "in": "query",
+            "name": "work_date",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "date"
+            },
+            "description": "Ngày của ca cần nhượng (YYYY-MM-DD)."
+          },
+          {
+            "in": "query",
+            "name": "shift_id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "description": "Ca cần nhượng (public.shifts.id)."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The colleagues who may take that ca, empty when nobody is free.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/SwapCandidate"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "work_date is missing or not a calendar date, or shift_id is missing or not a UUID.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Bạn cần đăng nhập để thực hiện thao tác này.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The role may not file a request (SCRUM-59 — the organization's OWNER never does).",
             "content": {
               "application/json": {
                 "schema": {
@@ -7459,7 +7651,7 @@
     "/api/attendance/check-in": {
       "post": {
         "summary": "Clock in",
-        "description": "Records one arrival (SCRUM-68): `check_in_at`, the GPS point it was taken at and the status the\nca's hours justify (`ON_TIME`, or `LATE` beyond a five-minute grace). The distance is derived by\nthe database from the point against the branch centre, so it is never part of the request.\n\nAn `EMPLOYEE` clocks in against a ca they are scheduled for on that business day — `shift_id` is\nrequired and the branch (and the hours) come from that assignment, which must be their own\nbranch. A `MANAGER` names a branch they are the chi nhánh trưởng of (SCRUM-61) and may name a ca\n(`shift_id`, any template of the catalogue).\n\nThe organization's `OWNER` never clocks in (`attendance:checkin` is not theirs, SCRUM-68), so\nthis endpoint answers `403` for them and `attendance_insert_own` refuses the row in the database.\n\nThe point is recorded, not judged: an arrival outside the branch geofence is stored like any\nother and the reviewer reads the verdict on `/attendance`.\n\nSending the same ca again is **\"Vào ca lại\"** while that ca is still running: an employee who\nclosed it by mistake gets the same row back, re-opened (`200`), with the giờ vào they reported\nstill in place — a second tap is not a second record. The status is re-derived from that giờ vào\n(so a row an earlier check-out had stamped \"Về sớm\" reads `LATE` again when the arrival was in\nfact late), and a manager's correction is never overwritten. Once the ca is over the check-out\nstands (`409`), and a row that is still open is a plain duplicate (`409`).\n",
+        "description": "Records one arrival (SCRUM-68): `check_in_at`, the GPS point it was taken at and the status the\nca's hours justify (`ON_TIME`, or `LATE` beyond a five-minute grace). The distance is derived by\nthe database from the point against the branch centre, so it is never part of the request.\n\nAn `EMPLOYEE` clocks in against a ca they are scheduled for on that business day — `shift_id` is\nrequired and the branch (and the hours) come from that assignment, which must be their own\nbranch. A `MANAGER` names a branch they are the chi nhánh trưởng of (SCRUM-61) and may name a ca\n(`shift_id`, any template of the catalogue).\n\nThe organization's `OWNER` never clocks in (`attendance:checkin` is not theirs, SCRUM-68), so\nthis endpoint answers `403` for them and `attendance_insert_own` refuses the row in the database.\n\nThe point is recorded, not judged: an arrival outside the branch geofence is stored like any\nother and the reviewer reads the verdict on `/attendance`.\n\nA ca is clocked in **inside its working time**: the window is `[start − 5', end − 5']`, the same\ngrace that decides Đi muộn and that governs \"Vào ca lại\". An arrival before it opens answers\n`409` with its own sentence, one after it has closed answers `409` as well. An unscheduled\narrival (a manager who named no ca) and a template without hours have no window and stay allowed.\n\nSending the same ca again is **\"Vào ca lại\"** while that ca is still running: an employee who\nclosed it by mistake gets the same row back, re-opened (`200`), with the giờ vào they reported\nstill in place — a second tap is not a second record. The status is re-derived from that giờ vào\n(so a row an earlier check-out had stamped \"Về sớm\" reads `LATE` again when the arrival was in\nfact late), and a manager's correction is never overwritten. Once the ca is over the check-out\nstands (`409`), and a row that is still open is a plain duplicate (`409`).\n",
         "tags": [
           "Attendance"
         ],
@@ -7567,7 +7759,7 @@
             }
           },
           "409": {
-            "description": "This ca is already open for today (or its working time is over, so the check-out stands), or the caller has no ca scheduled for this business day.",
+            "description": "This ca is already open for today (or its working time is over, so the check-out stands), the arrival is outside the ca's working time, or the caller has no ca scheduled for this business day.",
             "content": {
               "application/json": {
                 "schema": {

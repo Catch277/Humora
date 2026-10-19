@@ -34,6 +34,7 @@ import {
   effectiveWorkedHours,
 } from "@/lib/usecases/attendanceAutoClose";
 import { isShiftStillRunning } from "@/lib/usecases/attendanceStatus";
+import { checkInWindowVerdict } from "@/lib/usecases/shiftWindow";
 
 // SCRUM-61 needs `manager_id`: it is what says whether the caller heads the branch.
 type BranchOption = Pick<Branch, "id" | "name" | "manager_id">;
@@ -301,12 +302,21 @@ export default function CheckInPage() {
   }
 
   /** The ca the manager picked, for the re-open window of their own check-out. */
-  const managerShiftEnd =
-    shifts.find((shift) => shift.id === shiftChoice)?.end_time ?? null;
+  const managerShift = shifts.find((shift) => shift.id === shiftChoice) ?? null;
+  const managerShiftEnd = managerShift?.end_time ?? null;
   const managerRecord = recordFor(shiftChoice || null);
   const managerCanRejoin =
     managerRecord?.check_out_at != null &&
     isShiftStillRunning(now, managerShiftEnd);
+
+  // A ca is clocked in during its working time, so a chosen ca outside it blocks a *new* arrival (the API
+  // answers 409 for the same reason). No ca named means nothing to judge — an unscheduled arrival stays
+  // exactly as it was — and "Vào ca lại" keeps its own, narrower rule: the ca must still be running, which
+  // is a question the window already answers the other way round.
+  const managerWindow =
+    shiftChoice === "" ? "OPEN" : checkInWindowVerdict(now, today, managerShift);
+  const managerWindowOpen = managerWindow === "OPEN";
+  const managerCheckInBlocked = !managerWindowOpen && !managerCanRejoin;
 
 
   function actionErrorMessage(
@@ -638,7 +648,7 @@ export default function CheckInPage() {
                 managerCanRejoin ? secondaryButtonClassName : primaryButtonClassName
               }
               onClick={() => submitCheckIn(shiftChoice || null, managerCanRejoin)}
-              disabled={busy !== "" || !selectedBranchId}
+              disabled={busy !== "" || !selectedBranchId || managerCheckInBlocked}
             >
               {busy === "check-in" ? (
                 <Loader2 size={14} className="animate-spin" />
@@ -653,6 +663,20 @@ export default function CheckInPage() {
                   ? t("checkIn.rejoin")
                   : t("checkIn.checkIn")}
             </button>
+
+            {managerCheckInBlocked ? (
+              <p className="text-[11px] font-semibold text-rose-600">
+                {managerWindow === "ENDED"
+                  ? t("checkIn.window.ended", {
+                      shift: managerShift?.name ?? t("common.shift"),
+                      end: formatClockTime(managerShiftEnd),
+                    })
+                  : t("checkIn.window.notStarted", {
+                      shift: managerShift?.name ?? t("common.shift"),
+                      start: formatClockTime(managerShift?.start_time ?? null),
+                    })}
+              </p>
+            ) : null}
           </div>
         ) : todayAssignments.length === 0 ? (
           <div className="p-6 text-center text-xs text-slate-400">
@@ -670,6 +694,10 @@ export default function CheckInPage() {
                 : { at: null, automatic: false };
               // The ca is still running, so the check-out can still be undone (the API re-checks the clock).
               const canRejoin = canReopen(record);
+              // A ca is clocked in during its working time; outside it the API answers 409, so the button
+              // is not offered at all and the row says which side of the window the clock is on.
+              const windowVerdict = checkInWindowVerdict(now, today, assignment.shift);
+              const windowOpen = windowVerdict === "OPEN";
               // A template without hours cannot judge punctuality, so the row is only ever `ON_TIME` —
               // say it here instead of letting "Đúng giờ" look like a verdict the ca never supported.
               const shiftHours = assignment.shift?.start_time
@@ -725,19 +753,27 @@ export default function CheckInPage() {
                       ) : null}
                     </span>
                   ) : (
-                    <button
-                      type="button"
-                      className={primaryButtonClassName}
-                      onClick={() => submitCheckIn(assignment.shift_id)}
-                      disabled={busy !== ""}
-                    >
-                      {busy === "check-in" ? (
-                        <Loader2 size={14} className="animate-spin" />
-                      ) : (
-                        <LogIn size={14} />
-                      )}
-                      {busy === "check-in" ? t("checkIn.checkingIn") : t("checkIn.checkIn")}
-                    </button>
+                    windowOpen ? (
+                      <button
+                        type="button"
+                        className={primaryButtonClassName}
+                        onClick={() => submitCheckIn(assignment.shift_id)}
+                        disabled={busy !== ""}
+                      >
+                        {busy === "check-in" ? (
+                          <Loader2 size={14} className="animate-spin" />
+                        ) : (
+                          <LogIn size={14} />
+                        )}
+                        {busy === "check-in" ? t("checkIn.checkingIn") : t("checkIn.checkIn")}
+                      </button>
+                    ) : (
+                      <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-semibold text-slate-600">
+                        {windowVerdict === "ENDED"
+                          ? t("checkIn.windowBadgeEnded")
+                          : t("checkIn.windowBadgeNotStarted")}
+                      </span>
+                    )
                   )}
                 </li>
               );

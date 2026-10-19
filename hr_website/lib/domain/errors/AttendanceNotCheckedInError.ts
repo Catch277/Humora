@@ -5,7 +5,7 @@
  */
 export class AttendanceNotCheckedInError extends Error {
   /** The message stays optional so a caller may explain the case; the default is "no row to close". */
-  constructor(message = "No check-in was found for this business day.") {
+  constructor(message = "Không tìm thấy bản ghi vào ca nào trong ngày làm việc này.") {
     super(message);
     this.name = "AttendanceNotCheckedInError";
   }

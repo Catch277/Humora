@@ -9,11 +9,14 @@ import {
   SHIFT_ASSIGNMENT_STATUSES,
   type ShiftAssignmentStatus,
 } from "@/lib/domain/entities/Shift";
+import { isCalendarDate } from "@/app/api/_lib/calendarDate";
+
+// Re-exported so both schedule handlers keep importing this one module, exactly as they did before the
+// check moved to the shared `app/api/_lib` folder (SCRUM-82 needed the same rule for request payloads).
+export { isCalendarDate };
 
 export const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-
-const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 
 const STATUS_SET: ReadonlySet<string> = new Set(SHIFT_ASSIGNMENT_STATUSES);
 
@@ -29,22 +32,6 @@ export type ParsedScheduleRequest = {
 export type ScheduleRequestResult =
   | { ok: true; input: ParsedScheduleRequest }
   | { ok: false; error: string };
-
-/** Round-trips the calendar date so `2026-02-31` is rejected instead of rolling into March. */
-export function isCalendarDate(value: string): boolean {
-  if (!DATE_PATTERN.test(value)) {
-    return false;
-  }
-
-  const [year, month, day] = value.split("-").map(Number);
-  const parsed = new Date(Date.UTC(year, month - 1, day));
-
-  return (
-    parsed.getUTCFullYear() === year &&
-    parsed.getUTCMonth() === month - 1 &&
-    parsed.getUTCDate() === day
-  );
-}
 
 export function parseScheduleRequest(payload: unknown): ScheduleRequestResult {
   if (typeof payload !== "object" || payload === null) {
