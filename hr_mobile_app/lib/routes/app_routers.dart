@@ -4,6 +4,7 @@ import '../models/home_employee.dart';
 import '../models/account_employee.dart';
 import '../models/work_schedule_employee.dart';
 import '../models/leave_request_employee.dart';
+import '../models/policy_benefits.dart';
 
 class AppRoutes {
   // 1. Định nghĩa Tên đường dẫn (Route Names)
@@ -13,6 +14,7 @@ class AppRoutes {
   static const String account_employee = '/employee/account';
   static const String work_schedule_employee = '/employee/work_schedule';
   static const String leave_request_employee = '/employee/leave_request';
+  static const String policy_benefits = '/employee/policy_benefits';
 
   // Ví dụ các trang sau này bạn sẽ thêm vào:
   // static const String home = '/home';
@@ -27,6 +29,7 @@ class AppRoutes {
       account_employee: (context) => const AccountEmployeeScreen(),
       work_schedule_employee: (context) => const WorkScheduleScreen(),
       leave_request_employee: (context) => const LeaveRequestEmployeeScreen(),
+      policy_benefits: (context) => const PolicyBenefitsScreen(),
       // home: (context) => const HomeScreen(),
       // profile: (context) => const ProfileScreen(),
     };
