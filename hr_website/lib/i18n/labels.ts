@@ -2,6 +2,7 @@ import type { AttendanceStatus } from "@/lib/domain/entities/Attendance";
 import type { EmployeeStatusValue } from "@/lib/domain/entities/EmployeeStatus";
 import type { RequestType } from "@/lib/domain/entities/RequestEntity";
 import type { ShiftAssignmentStatus } from "@/lib/domain/entities/Shift";
+import type { ShiftRegistrationStatus } from "@/lib/domain/entities/ShiftRegistration";
 import type { MessageKey, Translate } from "@/lib/i18n/translate";
 import { translateVi } from "@/lib/i18n/translate";
 
@@ -32,6 +33,21 @@ export const SHIFT_ASSIGNMENT_STATUS_KEYS: Record<ShiftAssignmentStatus, Message
   SCHEDULED: "shiftStatus.scheduled",
   LEAVE: "shiftStatus.leave",
   CANCELLED: "shiftStatus.cancelled",
+};
+
+/**
+ * `shift_registrations.status` (SCRUM-23) — the employee's request, not the ca it becomes. `/schedules`
+ * renders it on the pending block and in the review dialog, so the four codes live here instead of in a
+ * table of that one screen.
+ */
+export const SHIFT_REGISTRATION_STATUS_KEYS: Record<
+  ShiftRegistrationStatus,
+  MessageKey
+> = {
+  PENDING: "shiftRegistrationStatus.pending",
+  APPROVED: "shiftRegistrationStatus.approved",
+  REJECTED: "shiftRegistrationStatus.rejected",
+  CANCELLED: "shiftRegistrationStatus.cancelled",
 };
 
 export const EMPLOYEE_STATUS_KEYS: Record<EmployeeStatusValue, MessageKey> = {
@@ -94,6 +110,13 @@ export function shiftAssignmentStatusLabel(
   t: Translate = translateVi,
 ): string {
   return labelOf(SHIFT_ASSIGNMENT_STATUS_KEYS, status, t);
+}
+
+export function shiftRegistrationStatusLabel(
+  status: ShiftRegistrationStatus,
+  t: Translate = translateVi,
+): string {
+  return labelOf(SHIFT_REGISTRATION_STATUS_KEYS, status, t);
 }
 
 export function employeeStatusLabel(

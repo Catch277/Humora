@@ -3,9 +3,12 @@
 import {
   Building2,
   CalendarOff,
+  CalendarPlus,
   CalendarRange,
+  Check,
   ChevronLeft,
   ChevronRight,
+  Clock,
   Loader2,
   Pencil,
   Plus,
@@ -28,7 +31,11 @@ import {
   type ShiftAssignment,
   type ShiftAssignmentStatus,
 } from "@/lib/domain/entities/Shift";
-import { formatClockTime, formatDayMonth, weekdayLong } from "@/lib/i18n/format";
+import {
+  MAX_SHIFT_NOTE_LENGTH,
+  type ShiftRegistration,
+} from "@/lib/domain/entities/ShiftRegistration";
+import { formatClockTime, formatDateTime, formatDayMonth, weekdayLong } from "@/lib/i18n/format";
 import { shiftAssignmentStatusLabel } from "@/lib/i18n/labels";
 import { normalizeForSearch } from "@/lib/searchText";
 import { shiftMinutes } from "@/lib/usecases/shiftAssignmentInput";
@@ -71,10 +78,20 @@ type ModalState =
   | { mode: "edit"; assignment: ShiftAssignment }
   | null;
 
+/** What an employee files from this screen (`POST /api/shift-registrations`, SCRUM-23). */
+type RegisterForm = {
+  shiftId: string;
+  workDate: string;
+  note: string;
+};
+
 type LoadResult = {
   assignments: ShiftAssignment[];
   shifts: Shift[];
   branches: Branch[];
+  /** Pending đăng ký ca (SCRUM-91); a failed read never breaks the week table. */
+  registrations: ShiftRegistration[];
+  registrationError: string | null;
   error: string | null;
 };
 
@@ -280,6 +297,30 @@ export default function SchedulesPage() {
   const [assigningBranch, setAssigningBranch] = useState(false);
   const [assignError, setAssignError] = useState("");
 
+  /**
+   * SCRUM-91 — đăng ký ca. `registrations` is the pending queue the API answered, already narrowed to the
+   * caller (a manager reads the organization, an employee only their own rows). `registrationError` is its
+   * own notice: a database without SCRUM-23 must not make the week table look broken.
+   */
+  const [registrations, setRegistrations] = useState<ShiftRegistration[]>([]);
+  const [registrationError, setRegistrationError] = useState("");
+  /** A sentence about something that just succeeded (a registration sent, one withdrawn). */
+  const [notice, setNotice] = useState("");
+  /** The registration the review dialog is open for; `reviewBusy` keeps its buttons honest. */
+  const [reviewTarget, setReviewTarget] = useState<ShiftRegistration | null>(null);
+  const [reviewReason, setReviewReason] = useState("");
+  const [reviewError, setReviewError] = useState("");
+  const [reviewBusy, setReviewBusy] = useState(false);
+  const [withdrawingId, setWithdrawingId] = useState("");
+  const [registerOpen, setRegisterOpen] = useState(false);
+  const [registerForm, setRegisterForm] = useState<RegisterForm>({
+    shiftId: "",
+    workDate: "",
+    note: "",
+  });
+  const [registerError, setRegisterError] = useState("");
+  const [registering, setRegistering] = useState(false);
+
   // The employee picker browses the SCRUM-24 staff directory, so it needs `is_active` — the quick
   // search endpoint does not carry it. A 403 is a normal outcome (SCRUM-59 `directory:view`), and in
   // that case the picker explains itself instead of showing an error banner: only a manager can write
@@ -303,15 +344,24 @@ export default function SchedulesPage() {
     let cancelled = false;
 
     async function load(): Promise<LoadResult> {
-      // The catalogue fills the shift picker; the branch list names the rows.
-      const [scheduleResponse, shiftsResponse, branchesResponse] =
-        await Promise.all([
-          fetch(`/api/schedules?start_date=${weekStart}&end_date=${weekEnd}`, {
-            cache: "no-store",
-          }),
-          fetch("/api/shifts", { cache: "no-store" }),
-          fetch("/api/branches", { cache: "no-store" }),
-        ]);
+      // The catalogue fills the shift picker; the branch list names the rows; the pending đăng ký ca
+      // (SCRUM-91) are what a branch head still has to decide.
+      const [
+        scheduleResponse,
+        shiftsResponse,
+        branchesResponse,
+        registrationsResponse,
+      ] = await Promise.all([
+        fetch(`/api/schedules?start_date=${weekStart}&end_date=${weekEnd}`, {
+          cache: "no-store",
+        }),
+        fetch("/api/shifts", { cache: "no-store" }),
+        fetch("/api/branches", { cache: "no-store" }),
+        // No date bound on purpose: a request for next week is exactly the one a manager must not miss, and
+        // a bell (`SHIFT_REGISTERED`) links here without saying which week. The grid below draws only the
+        // rows that fall inside the displayed week.
+        fetch("/api/shift-registrations?status=PENDING", { cache: "no-store" }),
+      ]);
 
       if (!scheduleResponse.ok) {
         const data = (await scheduleResponse.json().catch(() => null)) as {
@@ -322,6 +372,8 @@ export default function SchedulesPage() {
           assignments: [],
           shifts: [],
           branches: [],
+          registrations: [],
+          registrationError: null,
           error: data?.error ?? t("schedules.error.load"),
         };
       }
@@ -333,6 +385,9 @@ export default function SchedulesPage() {
       // an unreadable list hides every Sửa/Xoá button and blocks "Xếp ca" in the modal — the screen
       // looks like a permission problem instead of a failed request.
       const branchesFailed = !branchesResponse.ok;
+      // The registration queue is an addition, never a prerequisite: a database that has not run SCRUM-23
+      // answers 500 here and the week table keeps working.
+      const registrationsFailed = !registrationsResponse.ok;
 
       return {
         assignments: (await scheduleResponse.json()) as ShiftAssignment[],
@@ -340,6 +395,12 @@ export default function SchedulesPage() {
         branches: branchesFailed
           ? []
           : ((await branchesResponse.json()) as Branch[]),
+        registrations: registrationsFailed
+          ? []
+          : ((await registrationsResponse.json()) as ShiftRegistration[]),
+        registrationError: registrationsFailed
+          ? t("schedules.registration.loadFailed")
+          : null,
         error: shiftsFailed
           ? t("schedules.error.catalogue")
           : branchesFailed
@@ -357,6 +418,8 @@ export default function SchedulesPage() {
         setAssignments(result.assignments);
         setShifts(result.shifts);
         setBranches(result.branches);
+        setRegistrations(result.registrations);
+        setRegistrationError(result.registrationError ?? "");
         setPageError(result.error ?? "");
         setLoading(false);
       })
@@ -366,6 +429,7 @@ export default function SchedulesPage() {
         }
 
         setAssignments([]);
+        setRegistrations([]);
         setPageError(t("error.network"));
         setLoading(false);
       });
@@ -506,6 +570,12 @@ export default function SchedulesPage() {
   const scopesByBranch = isManagerRole(profile?.role) && !managesAllBranches;
 
   /**
+   * Whether the role may decide a đăng ký ca at all (`schedule:manage`, the same capability the review route
+   * checks). The per-row half of the rule is `manageableIds.has(registration.branch_id)`.
+   */
+  const canReviewRegistrations = can("schedule:manage");
+
+  /**
    * A manager's schedule is their own branches' schedule: rows of another branch stay out of the week table
    * *and* out of the counters below, so a KPI never promises a number the list does not show. The owner
    * keeps the whole organization.
@@ -522,6 +592,25 @@ export default function SchedulesPage() {
           )
         : assignments,
     [assignments, scopesByBranch, manageableIds],
+  );
+
+  /**
+   * SCRUM-91: the pending đăng ký ca this caller may act on.
+   *
+   * RLS hands every manager of the organization the whole list (`shift_registrations_select`, SCRUM-60) while
+   * `review_shift_registration()` refuses anyone but the owner or the head of that registration's branch. The
+   * screen therefore narrows the queue to the branches they head, exactly like `visibleAssignments`: a
+   * "Duyệt" that would answer `403` is a bug in the page, not a permission. An `EMPLOYEE` keeps what the use
+   * case returned — their own rows, whatever the query string says.
+   */
+  const visibleRegistrations = useMemo(
+    () =>
+      scopesByBranch
+        ? registrations.filter((registration) =>
+            manageableIds.has(registration.branch_id),
+          )
+        : registrations,
+    [registrations, scopesByBranch, manageableIds],
   );
 
   /**
@@ -571,6 +660,77 @@ export default function SchedulesPage() {
     });
   }, [tableAssignments, branchFilter, statusFilter, query]);
 
+  /**
+   * The registrations the week table draws: the branch filter and the name search apply, the status filter
+   * does not — `PENDING` is not one of the three `shift_assignments` statuses, so a status chip hides the
+   * pending blocks rather than pretending one of them matches.
+   */
+  const gridRegistrations = useMemo(() => {
+    if (statusFilter !== ALL) {
+      return [];
+    }
+
+    const keyword = query.trim().toLowerCase();
+
+    return visibleRegistrations.filter(
+      (registration) =>
+        (branchFilter === ALL || registration.branch_id === branchFilter) &&
+        (!keyword ||
+          (registration.employee?.full_name ?? "")
+            .toLowerCase()
+            .includes(keyword)),
+    );
+  }, [visibleRegistrations, branchFilter, statusFilter, query]);
+
+  /** One bucket per ca × day — the same key shape `cellsByShiftAndDay` uses. */
+  const registrationsByShiftAndDay = useMemo(() => {
+    const grouped = new Map<string, ShiftRegistration[]>();
+
+    gridRegistrations.forEach((registration) => {
+      const key = `${registration.shift_id}|${registration.work_date}`;
+      const bucket = grouped.get(key);
+
+      if (bucket) {
+        bucket.push(registration);
+      } else {
+        grouped.set(key, [registration]);
+      }
+    });
+
+    return grouped;
+  }, [gridRegistrations]);
+
+  /** The pending registrations inside the displayed week — everything the grid can actually draw. */
+  const pendingThisWeek = useMemo(
+    () =>
+      gridRegistrations.filter(
+        (registration) =>
+          registration.work_date >= weekStart &&
+          registration.work_date <= weekEnd,
+      ),
+    [gridRegistrations, weekStart, weekEnd],
+  );
+
+  /**
+   * The queue panel lists every pending registration of the branches in view, including one for a week the
+   * manager is not looking at (the row says "ngoài tuần đang xem"): a request that only shows up when somebody
+   * happens to switch weeks is a request that gets forgotten.
+   */
+  const queueRegistrations = useMemo(
+    () =>
+      visibleRegistrations
+        .filter(
+          (registration) =>
+            branchFilter === ALL || registration.branch_id === branchFilter,
+        )
+        .sort(
+          (first, second) =>
+            first.work_date.localeCompare(second.work_date) ||
+            first.created_at.localeCompare(second.created_at),
+        ),
+    [visibleRegistrations, branchFilter],
+  );
+
   const weekDays = useMemo(
     () => Array.from({ length: 7 }, (_, index) => addDays(weekStart, index)),
     [weekStart],
@@ -604,8 +764,20 @@ export default function SchedulesPage() {
       }
     });
 
+    // A pending registration can name a template the catalogue no longer carries (retired by SCRUM-85): the
+    // request still needs a row, otherwise its block has nowhere to render and it silently disappears.
+    pendingThisWeek.forEach((registration) => {
+      if (
+        registration.shift &&
+        !isDayOffTemplate(registration.shift) &&
+        !byId.has(registration.shift.id)
+      ) {
+        byId.set(registration.shift.id, registration.shift);
+      }
+    });
+
     return Array.from(byId.values()).sort(compareShiftsByStartTime);
-  }, [shifts, visibleAssignments]);
+  }, [shifts, visibleAssignments, pendingThisWeek]);
 
   /**
    * The week table's rows: the catalogue with one blank rest row in every real gap between two ca
@@ -983,6 +1155,201 @@ export default function SchedulesPage() {
       setDeletingId("");
     }
   }
+  /** Opens the review dialog for one pending đăng ký ca. */
+  function openReview(registration: ShiftRegistration) {
+    setReviewTarget(registration);
+    setReviewReason("");
+    setReviewError("");
+    setNotice("");
+  }
+
+  function closeReview() {
+    if (reviewBusy) {
+      return;
+    }
+
+    setReviewTarget(null);
+    setReviewReason("");
+    setReviewError("");
+  }
+
+  /**
+   * Approve/reject through `POST /api/shift-registrations/{id}/review`.
+   *
+   * Approving is not two calls: `review_shift_registration()` writes the `shift_assignments` row in the same
+   * transaction, so this only reloads and the week table shows the ca it produced.
+   */
+  async function submitReview(approve: boolean) {
+    if (!reviewTarget) {
+      return;
+    }
+
+    const reason = reviewReason.trim();
+
+    if (!approve && !reason) {
+      setReviewError(t("schedules.registration.rejectRequired"));
+      return;
+    }
+
+    setReviewBusy(true);
+    setReviewError("");
+    setNotice("");
+
+    try {
+      const response = await fetch(
+        `/api/shift-registrations/${reviewTarget.id}/review`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            approve,
+            reject_reason: approve ? null : reason,
+          }),
+        },
+      );
+
+      if (!response.ok) {
+        if (response.status === 403) {
+          setReviewError(t("schedules.registration.forbidden"));
+          return;
+        }
+
+        if (response.status === 404) {
+          setReviewError(t("schedules.registration.gone"));
+          setReviewTarget(null);
+          refresh();
+          return;
+        }
+
+        // 409 is the schedule explaining itself (on leave that day, overlapping hours, the ca already ended):
+        // the API sent a sentence, so show it instead of a generic "failed".
+        const data = (await response.json().catch(() => null)) as {
+          error?: string;
+        } | null;
+        setReviewError(data?.error ?? t("schedules.registration.reviewFailed"));
+        return;
+      }
+
+      setReviewTarget(null);
+      setReviewReason("");
+      refresh();
+    } catch {
+      setReviewError(t("error.network"));
+    } finally {
+      setReviewBusy(false);
+    }
+  }
+
+  /** Withdraws the caller's own pending registration (`POST …/{id}/cancel`). */
+  async function withdraw(registration: ShiftRegistration) {
+    if (
+      !window.confirm(
+        t("schedules.registration.withdrawConfirm", {
+          shift: registration.shift?.name ?? t("common.shift"),
+          day: formatDayMonth(registration.work_date),
+        }),
+      )
+    ) {
+      return;
+    }
+
+    setWithdrawingId(registration.id);
+    setPageError("");
+    setNotice("");
+
+    try {
+      const response = await fetch(
+        `/api/shift-registrations/${registration.id}/cancel`,
+        { method: "POST" },
+      );
+
+      if (!response.ok) {
+        const data = (await response.json().catch(() => null)) as {
+          error?: string;
+        } | null;
+        setPageError(data?.error ?? t("schedules.registration.withdrawFailed"));
+        return;
+      }
+
+      setNotice(t("schedules.registration.withdrawn"));
+      refresh();
+    } catch {
+      setPageError(t("error.network"));
+    } finally {
+      setWithdrawingId("");
+    }
+  }
+
+  function openRegister() {
+    setRegisterForm({
+      shiftId: "",
+      workDate: isCurrentWeek ? todayInBangkok() : weekStart,
+      note: "",
+    });
+    setRegisterError("");
+    setNotice("");
+    setRegisterOpen(true);
+  }
+
+  function closeRegister() {
+    if (registering) {
+      return;
+    }
+
+    setRegisterOpen(false);
+    setRegisterError("");
+  }
+
+  /**
+   * Files a registration for the caller (`POST /api/shift-registrations`). The employee and the branch are not
+   * in the body: the session carries the first and `users.branch_id` the second, and the API refuses a ca that
+   * belongs to another branch.
+   */
+  async function submitRegistration() {
+    if (!registerForm.shiftId) {
+      setRegisterError(t("schedules.registration.shiftRequired"));
+      return;
+    }
+
+    if (!registerForm.workDate) {
+      setRegisterError(t("schedules.registration.dateRequired"));
+      return;
+    }
+
+    setRegistering(true);
+    setRegisterError("");
+    setNotice("");
+
+    try {
+      const response = await fetch("/api/shift-registrations", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          shift_id: registerForm.shiftId,
+          work_date: registerForm.workDate,
+          note: registerForm.note.trim() || null,
+        }),
+      });
+
+      if (!response.ok) {
+        const data = (await response.json().catch(() => null)) as {
+          error?: string;
+        } | null;
+        setRegisterError(data?.error ?? t("schedules.registration.submitFailed"));
+        return;
+      }
+
+      setRegisterOpen(false);
+      setNotice(t("schedules.registration.sent"));
+      refresh();
+    } catch {
+      setRegisterError(t("error.network"));
+    } finally {
+      setRegistering(false);
+    }
+  }
+
+
 
   /**
    * The ca the create dialog was opened from — clicking "Thêm" inside a ca row of the week table fixes
@@ -990,7 +1357,6 @@ export default function SchedulesPage() {
    * stays available. `unlockShift` clears it when the manager wants a different ca after all.
    */
   const lockedCreateShift = modal?.mode === "create" ? modal.lockedShift : null;
-
   /**
    * The ca the picker offers: the templates of the chosen employee's branch plus the branch-agnostic ones
    * (SCRUM-63), in timetable order.
@@ -1024,6 +1390,24 @@ export default function SchedulesPage() {
 
     return options;
   }, [form.branchId, modal, shifts]);
+
+  /**
+   * SCRUM-91: what an employee may register for — the working templates of their own branch plus the
+   * branch-agnostic ones, in timetable order. The same rules as the manager's picker (`selectableShifts`), but
+   * the branch comes from the profile rather than the dialog: `users.branch_id` is what the insert policy and
+   * `CreateShiftRegistrationUseCase` both check.
+   */
+  const registerableShifts = useMemo(() => {
+    const branchId = profile?.branch_id ?? null;
+
+    return shifts
+      .filter(
+        (shift) =>
+          !isDayOffTemplate(shift) &&
+          (shift.branch_id === null || shift.branch_id === branchId),
+      )
+      .sort(compareShiftsByStartTime);
+  }, [shifts, profile?.branch_id]);
 
   return (
     <div className="space-y-5">
@@ -1080,6 +1464,15 @@ export default function SchedulesPage() {
               className="rounded-lg border border-slate-200 bg-surface px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50"
             >
               {t("schedules.backToThisWeek")}
+            </button>
+          )}
+          {isEmployeeRole(profile?.role) && (
+            <button
+              type="button"
+              onClick={openRegister}
+              className="inline-flex items-center gap-2 rounded-lg border border-primary bg-surface px-4 py-2 text-xs font-semibold text-primary transition-colors hover:bg-blue-50"
+            >
+              <CalendarPlus size={14} /> {t("schedules.registration.createButton")}
             </button>
           )}
           {can("schedule:manage") && (
@@ -1168,6 +1561,143 @@ export default function SchedulesPage() {
         <div className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-xs text-rose-700">
           {pageError}
         </div>
+      )}
+
+      {notice && (
+        <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-xs text-emerald-700">
+          {notice}
+        </div>
+      )}
+
+      {/*
+        Its own notice, not `pageError`: on a database that has not run
+        SCRUM-23_shift_registration_swap.sql the registration queue is missing while the week table is fine,
+        and saying so next to a working schedule is the only honest way to report it.
+      */}
+      {registrationError && (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
+          {registrationError}
+        </div>
+      )}
+
+      {/*
+        Đăng ký ca chờ duyệt (SCRUM-91). A cell of the week table is ~110px wide, so the grid can only say
+        "somebody asked for this ca"; the decision itself (and the reason a rejection needs) belongs here,
+        where the request has room to state who asked, for which day and when.
+      */}
+      {queueRegistrations.length > 0 && (
+        <section className="overflow-hidden rounded-xl border border-amber-200/80 bg-amber-50/40 shadow-sm">
+          <div className="flex flex-col gap-2 border-b border-amber-200/70 px-3 py-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-start gap-2.5">
+              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-amber-100 text-amber-700">
+                <Clock size={16} />
+              </span>
+              <div>
+                <p className="text-sm font-semibold text-slate-900">
+                  {canReviewRegistrations
+                    ? t("schedules.registration.panelTitle")
+                    : t("schedules.registration.panelTitleMine")}
+                </p>
+                <p className="mt-0.5 text-[10px] leading-relaxed text-slate-500">
+                  {canReviewRegistrations
+                    ? t("schedules.registration.panelScope")
+                    : t("schedules.registration.panelScopeMine")}
+                </p>
+              </div>
+            </div>
+            <span className="self-start whitespace-nowrap rounded-full bg-amber-100 px-2.5 py-1 text-[11px] font-semibold text-amber-700 sm:self-auto">
+              {t("schedules.registration.panelCount", {
+                count: queueRegistrations.length,
+              })}
+            </span>
+          </div>
+
+          <ul className="divide-y divide-amber-200/60">
+            {queueRegistrations.map((registration) => {
+              const outsideWeek =
+                registration.work_date < weekStart ||
+                registration.work_date > weekEnd;
+              const reviewable =
+                canReviewRegistrations && manageableIds.has(registration.branch_id);
+              const mine = registration.employee_id === viewerId;
+
+              return (
+                <li
+                  key={registration.id}
+                  className="flex flex-col gap-2 px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between"
+                >
+                  <div className="min-w-0">
+                    <p className="text-xs font-semibold text-slate-900">
+                      {registration.employee?.full_name ??
+                        t("schedules.deletedEmployee")}
+                      {inactiveEmployeeIds.has(registration.employee_id) && (
+                        <span className="ml-1 font-normal text-amber-600">
+                          {t("common.inactiveTag")}
+                        </span>
+                      )}
+                    </p>
+                    <p className="mt-0.5 text-[11px] text-slate-600">
+                      <span className="font-semibold text-slate-800">
+                        {registration.shift?.name ?? t("common.shift")}
+                      </span>
+                      {" · "}
+                      {weekdayLong(registration.work_date, locale)}{" "}
+                      {formatDayMonth(registration.work_date)}
+                      {" · "}
+                      {branchNames.get(registration.branch_id) ??
+                        t("common.deletedBranch")}
+                      {outsideWeek && (
+                        <span className="ml-1 text-[10px] text-amber-700">
+                          ({t("schedules.registration.outsideWeek")})
+                        </span>
+                      )}
+                    </p>
+                    {registration.note && (
+                      <p
+                        className="mt-0.5 truncate text-[10px] text-slate-500"
+                        title={registration.note}
+                      >
+                        {registration.note}
+                      </p>
+                    )}
+                    <p className="mt-0.5 text-[10px] text-slate-400">
+                      {t("schedules.registration.submittedAt", {
+                        time: formatDateTime(registration.created_at, locale),
+                      })}
+                    </p>
+                  </div>
+
+                  <div className="flex shrink-0 items-center gap-1.5">
+                    {reviewable ? (
+                      <button
+                        type="button"
+                        onClick={() => openReview(registration)}
+                        className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-2 text-[11px] font-semibold text-white transition-colors hover:bg-primary-strong"
+                      >
+                        <Check size={12} />
+                        {t("schedules.registration.reviewAction")}
+                      </button>
+                    ) : mine ? (
+                      <button
+                        type="button"
+                        onClick={() => void withdraw(registration)}
+                        disabled={withdrawingId === registration.id}
+                        className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-surface px-3 py-2 text-[11px] font-semibold text-slate-600 transition-colors hover:bg-slate-50 disabled:opacity-50"
+                      >
+                        {withdrawingId === registration.id ? (
+                          <Loader2 size={12} className="animate-spin" />
+                        ) : (
+                          <X size={12} />
+                        )}
+                        {t("schedules.registration.withdraw")}
+                      </button>
+                    ) : null}
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        </section>
       )}
 
       <section className="overflow-hidden rounded-xl border border-slate-200/80 bg-surface shadow-sm">
@@ -1454,6 +1984,93 @@ export default function SchedulesPage() {
                                 )}
                               </div>
                             ))}
+
+                            {/*
+                              SCRUM-91: a pending đăng ký ca, dashed because it is not work yet — approving it
+                              is what turns it into the solid block above. A manager who heads the branch opens
+                              the review dialog from here; the employee sees their own request and can
+                              withdraw it.
+                            */}
+                            {(registrationsByShiftAndDay.get(`${row.shift.id}|${day}`) ?? []).map(
+                              (registration) => {
+                                const reviewable =
+                                  canReviewRegistrations &&
+                                  manageableIds.has(registration.branch_id);
+                                const mine = registration.employee_id === viewerId;
+                                const content = (
+                                  <>
+                                    <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-surface text-[9px] font-bold text-amber-600">
+                                      {initials(registration.employee?.full_name)}
+                                    </span>
+                                    <div className="min-w-0 flex-1">
+                                      <p className="text-[11px] font-semibold text-slate-900">
+                                        {registration.employee?.full_name ??
+                                          t("schedules.deletedEmployee")}
+                                      </p>
+                                      <span className="mt-1 inline-flex items-center gap-1 whitespace-nowrap rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-700">
+                                        <Clock size={9} />
+                                        {t("schedules.registration.pendingBadge")}
+                                      </span>
+                                      {registration.note && (
+                                        <p
+                                          className="mt-0.5 truncate text-[10px] text-slate-500"
+                                          title={registration.note}
+                                        >
+                                          {registration.note}
+                                        </p>
+                                      )}
+                                    </div>
+                                  </>
+                                );
+
+                                return (
+                                  <div
+                                    key={registration.id}
+                                    className="rounded-lg border border-dashed border-amber-300 bg-amber-50/60 px-2.5 py-2"
+                                  >
+                                    {reviewable ? (
+                                      <button
+                                        type="button"
+                                        onClick={() => openReview(registration)}
+                                        aria-label={t(
+                                          "schedules.registration.blockAria",
+                                          {
+                                            name:
+                                              registration.employee?.full_name ??
+                                              t("schedules.thisEmployee"),
+                                            shift: row.shift.name,
+                                            day: formatDayMonth(day),
+                                          },
+                                        )}
+                                        className="flex w-full items-start gap-1.5 text-left"
+                                      >
+                                        {content}
+                                      </button>
+                                    ) : (
+                                      <div className="flex items-start gap-1.5">
+                                        {content}
+                                      </div>
+                                    )}
+
+                                    {mine && !reviewable && (
+                                      <button
+                                        type="button"
+                                        onClick={() => void withdraw(registration)}
+                                        disabled={withdrawingId === registration.id}
+                                        className="mt-1.5 inline-flex w-full items-center justify-center gap-1 rounded-md border border-amber-300 py-1 text-[10px] font-semibold text-amber-700 transition-colors hover:bg-amber-100 disabled:opacity-50"
+                                      >
+                                        {withdrawingId === registration.id ? (
+                                          <Loader2 size={10} className="animate-spin" />
+                                        ) : (
+                                          <X size={10} />
+                                        )}
+                                        {t("schedules.registration.withdraw")}
+                                      </button>
+                                    )}
+                                  </div>
+                                );
+                              },
+                            )}
 
                             {/*
                               The old per-day "Thêm ca" moved into the cell: it is the only spot that knows
@@ -1860,6 +2477,275 @@ export default function SchedulesPage() {
               >
                 {saving && <Loader2 size={13} className="animate-spin" />}
                 {saving ? t("common.saving") : t("schedules.saveShift")}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {reviewTarget && (
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-900/40 p-4 sm:items-center">
+          <div className="max-h-[85dvh] w-full max-w-md overflow-y-auto rounded-2xl bg-surface p-4 shadow-2xl sm:p-6">
+            <div className="flex items-start justify-between">
+              <div className="flex items-start gap-3">
+                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-amber-50 text-amber-600">
+                  <Clock size={18} />
+                </span>
+                <div>
+                  <h2 className="font-bold text-slate-900">
+                    {t("schedules.registration.reviewTitle")}
+                  </h2>
+                  <p className="mt-1 text-xs text-slate-500">
+                    {t("schedules.registration.reviewSubtitle")}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                aria-label={t("common.close")}
+                onClick={closeReview}
+              >
+                <X size={18} className="text-slate-400" />
+              </button>
+            </div>
+
+            <dl className="mt-4 space-y-2 rounded-lg border border-slate-200 bg-app p-3 text-xs">
+              <div className="flex justify-between gap-3">
+                <dt className="text-slate-500">{t("schedules.employeeLabel")}</dt>
+                <dd className="text-right font-semibold text-slate-900">
+                  {reviewTarget.employee?.full_name ??
+                    t("schedules.deletedEmployee")}
+                  {inactiveEmployeeIds.has(reviewTarget.employee_id) && (
+                    <span className="ml-1 font-normal text-amber-600">
+                      {t("common.inactiveTag")}
+                    </span>
+                  )}
+                </dd>
+              </div>
+              <div className="flex justify-between gap-3">
+                <dt className="text-slate-500">{t("common.shift")}</dt>
+                <dd className="text-right font-semibold text-slate-900">
+                  {reviewTarget.shift?.name ?? t("common.shift")}
+                  <span className="ml-1 font-normal tabular-nums text-slate-500">
+                    {formatClockTime(reviewTarget.shift?.start_time ?? null)} –{" "}
+                    {formatClockTime(reviewTarget.shift?.end_time ?? null)}
+                  </span>
+                </dd>
+              </div>
+              <div className="flex justify-between gap-3">
+                <dt className="text-slate-500">{t("schedules.workDateLabel")}</dt>
+                <dd className="whitespace-nowrap text-right font-semibold text-slate-900">
+                  {weekdayLong(reviewTarget.work_date, locale)}{" "}
+                  {formatDayMonth(reviewTarget.work_date)}
+                </dd>
+              </div>
+              <div className="flex justify-between gap-3">
+                <dt className="text-slate-500">{t("common.branch")}</dt>
+                <dd className="text-right font-semibold text-slate-900">
+                  {branchNames.get(reviewTarget.branch_id) ??
+                    t("common.deletedBranch")}
+                </dd>
+              </div>
+              <div className="flex justify-between gap-3">
+                <dt className="text-slate-500">{t("common.receivedAt")}</dt>
+                <dd className="whitespace-nowrap text-right text-slate-700">
+                  {formatDateTime(reviewTarget.created_at, locale)}
+                </dd>
+              </div>
+              {reviewTarget.note && (
+                <div className="border-t border-slate-200 pt-2">
+                  <dt className="text-slate-500">{t("common.note")}</dt>
+                  <dd className="mt-0.5 text-slate-700">{reviewTarget.note}</dd>
+                </div>
+              )}
+            </dl>
+
+            <label className="mt-4 block text-xs font-semibold text-slate-600">
+              {t("schedules.registration.rejectLabel")}{" "}
+              <span className="text-rose-500">*</span>
+              <textarea
+                value={reviewReason}
+                onChange={(event) => setReviewReason(event.target.value)}
+                maxLength={MAX_SHIFT_NOTE_LENGTH}
+                rows={2}
+                placeholder={t("schedules.registration.rejectPlaceholder")}
+                className={`${inputClassName} resize-none`}
+              />
+            </label>
+
+            {reviewError && (
+              <div className="mt-3 rounded-lg border border-rose-200 bg-rose-50 p-3 text-xs text-rose-700">
+                {reviewError}
+              </div>
+            )}
+
+            {/*
+              Two decisions, one dialog: the reason box is only required by `Từ chối`, but both buttons live
+              here so a manager never has to guess where the other half of the decision is.
+            */}
+            <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+              <button
+                type="button"
+                onClick={closeReview}
+                disabled={reviewBusy}
+                className="rounded-lg border border-slate-200 px-4 py-2 text-xs font-semibold disabled:opacity-50"
+              >
+                {t("common.cancel")}
+              </button>
+              <button
+                type="button"
+                onClick={() => void submitReview(false)}
+                disabled={reviewBusy}
+                className="inline-flex items-center justify-center gap-2 rounded-lg border border-rose-200 bg-rose-50 px-4 py-2 text-xs font-semibold text-rose-700 transition-colors hover:bg-rose-100 disabled:opacity-50"
+              >
+                {reviewBusy ? (
+                  <Loader2 size={13} className="animate-spin" />
+                ) : (
+                  <X size={13} />
+                )}
+                {t("schedules.registration.rejectAction")}
+              </button>
+              <button
+                type="button"
+                onClick={() => void submitReview(true)}
+                disabled={reviewBusy}
+                className="inline-flex items-center justify-center gap-2 rounded-lg bg-primary px-4 py-2 text-xs font-semibold text-white shadow-sm transition-colors hover:bg-primary-strong disabled:opacity-50"
+              >
+                {reviewBusy ? (
+                  <Loader2 size={13} className="animate-spin" />
+                ) : (
+                  <Check size={13} />
+                )}
+                {t("schedules.registration.approveAction")}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {registerOpen && (
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-900/40 p-4 sm:items-center">
+          <div className="max-h-[85dvh] w-full max-w-md overflow-y-auto rounded-2xl bg-surface p-4 shadow-2xl sm:p-6">
+            <div className="flex items-start justify-between">
+              <div className="flex items-start gap-3">
+                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-blue-50 text-primary">
+                  <CalendarPlus size={18} />
+                </span>
+                <div>
+                  <h2 className="font-bold text-slate-900">
+                    {t("schedules.registration.createTitle")}
+                  </h2>
+                  <p className="mt-1 text-xs text-slate-500">
+                    {t("schedules.registration.createSubtitle")}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                aria-label={t("common.close")}
+                onClick={closeRegister}
+              >
+                <X size={18} className="text-slate-400" />
+              </button>
+            </div>
+
+            {/*
+              `users.branch_id` is what the insert policy checks, so an unassigned account gets a sentence
+              pointing at the staff screen instead of a form whose submit must fail (SCRUM-63).
+            */}
+            {!profile?.branch_id ? (
+              <p className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs leading-relaxed text-amber-800">
+                {t("schedules.registration.noBranch")}
+              </p>
+            ) : (
+              <>
+                <label className="mt-4 block text-xs font-semibold text-slate-600">
+                  {t("schedules.registration.shiftLabel")}{" "}
+                  <span className="text-rose-500">*</span>
+                  <select
+                    value={registerForm.shiftId}
+                    onChange={(event) =>
+                      setRegisterForm((value) => ({
+                        ...value,
+                        shiftId: event.target.value,
+                      }))
+                    }
+                    className={inputClassName}
+                  >
+                    <option value="">{t("schedules.chooseShift")}</option>
+                    {registerableShifts.map((shift) => (
+                      <option key={shift.id} value={shift.id}>
+                        {shift.name} ({formatClockTime(shift.start_time)} –{" "}
+                        {formatClockTime(shift.end_time)})
+                      </option>
+                    ))}
+                  </select>
+                  {registerableShifts.length === 0 && (
+                    <span className="mt-1 block text-[11px] font-normal text-amber-700">
+                      {t("schedules.registration.noShifts")}
+                    </span>
+                  )}
+                </label>
+
+                <label className="mt-4 block text-xs font-semibold text-slate-600">
+                  {t("schedules.workDateLabel")}{" "}
+                  <span className="text-rose-500">*</span>
+                  <input
+                    type="date"
+                    min={today}
+                    value={registerForm.workDate}
+                    onChange={(event) =>
+                      setRegisterForm((value) => ({
+                        ...value,
+                        workDate: event.target.value,
+                      }))
+                    }
+                    className={inputClassName}
+                  />
+                </label>
+
+                <label className="mt-4 block text-xs font-semibold text-slate-600">
+                  {t("common.note")}
+                  <textarea
+                    value={registerForm.note}
+                    onChange={(event) =>
+                      setRegisterForm((value) => ({
+                        ...value,
+                        note: event.target.value,
+                      }))
+                    }
+                    maxLength={MAX_SHIFT_NOTE_LENGTH}
+                    rows={2}
+                    placeholder={t("schedules.notePlaceholder")}
+                    className={`${inputClassName} resize-none`}
+                  />
+                </label>
+
+                {registerError && (
+                  <div className="mt-3 rounded-lg border border-rose-200 bg-rose-50 p-3 text-xs text-rose-700">
+                    {registerError}
+                  </div>
+                )}
+              </>
+            )}
+
+            <div className="mt-5 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={closeRegister}
+                disabled={registering}
+                className="rounded-lg border border-slate-200 px-4 py-2 text-xs font-semibold disabled:opacity-50"
+              >
+                {t("common.cancel")}
+              </button>
+              <button
+                type="button"
+                onClick={() => void submitRegistration()}
+                disabled={registering || !profile?.branch_id}
+                className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-xs font-semibold text-white shadow-sm transition-colors hover:bg-primary-strong disabled:opacity-50"
+              >
+                {registering && <Loader2 size={13} className="animate-spin" />}
+                {registering
+                  ? t("common.saving")
+                  : t("schedules.registration.submit")}
               </button>
             </div>
           </div>
