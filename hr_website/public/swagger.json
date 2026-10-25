@@ -1787,6 +1787,403 @@
           }
         }
       },
+      "PayProfile": {
+        "type": "object",
+        "required": [
+          "id",
+          "organization_id",
+          "employee_id",
+          "hourly_rate",
+          "overtime_multiplier",
+          "fixed_allowance",
+          "effective_from",
+          "note",
+          "created_at"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "organization_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "employee_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "hourly_rate": {
+            "type": "integer",
+            "description": "VND cho một giờ (0..10.000.000)."
+          },
+          "overtime_multiplier": {
+            "type": "number",
+            "description": "Hệ số nhân cho giờ của ca tăng ca (1..5)."
+          },
+          "fixed_allowance": {
+            "type": "integer",
+            "description": "Phụ cấp cố định mỗi tháng; 0 nghĩa là không có."
+          },
+          "effective_from": {
+            "type": "string",
+            "format": "date",
+            "description": "Ngày đơn giá bắt đầu có hiệu lực."
+          },
+          "note": {
+            "type": "string",
+            "nullable": true
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "Payslip": {
+        "type": "object",
+        "required": [
+          "id",
+          "organization_id",
+          "employee_id",
+          "branch_id",
+          "period_start",
+          "period_end",
+          "status",
+          "regular_minutes",
+          "overtime_minutes",
+          "shifts_counted",
+          "shifts_skipped",
+          "work_amount",
+          "other_earnings",
+          "gross_amount",
+          "deduction_amount",
+          "net_amount",
+          "generated_at",
+          "published_at",
+          "published_by",
+          "acknowledged_at",
+          "dispute_note",
+          "disputed_at",
+          "dispute_resolved_at",
+          "void_reason",
+          "voided_at",
+          "created_at",
+          "updated_at"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "organization_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "employee_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "branch_id": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "period_start": {
+            "type": "string",
+            "format": "date"
+          },
+          "period_end": {
+            "type": "string",
+            "format": "date"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "DRAFT",
+              "PUBLISHED",
+              "VOID"
+            ],
+            "description": "DRAFT sinh lại được; PUBLISHED là bản ghi đã trả và bị đóng băng; VOID giữ lại để đối soát."
+          },
+          "regular_minutes": {
+            "type": "integer"
+          },
+          "overtime_minutes": {
+            "type": "integer"
+          },
+          "shifts_counted": {
+            "type": "integer"
+          },
+          "shifts_skipped": {
+            "type": "integer",
+            "description": "Số ca có chấm công nhưng không được tính (thiếu giờ ra, ca 0 phút…)."
+          },
+          "work_amount": {
+            "type": "integer",
+            "description": "Tổng tiền của các ca."
+          },
+          "other_earnings": {
+            "type": "integer",
+            "description": "Phụ cấp cố định + các khoản EARNING nhập tay."
+          },
+          "gross_amount": {
+            "type": "integer"
+          },
+          "deduction_amount": {
+            "type": "integer"
+          },
+          "net_amount": {
+            "type": "integer"
+          },
+          "generated_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "published_at": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "published_by": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "acknowledged_at": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "dispute_note": {
+            "type": "string",
+            "nullable": true,
+            "description": "Nội dung khiếu nại của nhân viên."
+          },
+          "disputed_at": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "dispute_resolved_at": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "void_reason": {
+            "type": "string",
+            "nullable": true
+          },
+          "voided_at": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "PayslipWorkLine": {
+        "type": "object",
+        "required": [
+          "id",
+          "payslip_id",
+          "work_date",
+          "minutes",
+          "is_overtime",
+          "hourly_rate",
+          "multiplier",
+          "amount"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "payslip_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "attendance_id": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "work_date": {
+            "type": "string",
+            "format": "date"
+          },
+          "shift_name": {
+            "type": "string",
+            "nullable": true
+          },
+          "minutes": {
+            "type": "integer"
+          },
+          "is_overtime": {
+            "type": "boolean"
+          },
+          "hourly_rate": {
+            "type": "integer"
+          },
+          "multiplier": {
+            "type": "number"
+          },
+          "amount": {
+            "type": "integer"
+          }
+        }
+      },
+      "PayslipItem": {
+        "type": "object",
+        "required": [
+          "id",
+          "payslip_id",
+          "kind",
+          "code",
+          "label",
+          "amount",
+          "source",
+          "created_at"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "payslip_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "EARNING",
+              "DEDUCTION"
+            ]
+          },
+          "code": {
+            "type": "string",
+            "example": "BONUS"
+          },
+          "label": {
+            "type": "string",
+            "example": "Thưởng doanh số"
+          },
+          "amount": {
+            "type": "integer"
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "AUTO",
+              "MANUAL"
+            ],
+            "description": "AUTO là phụ cấp cố định do hệ thống sinh ra và không xoá được."
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "PayslipDetail": {
+        "type": "object",
+        "required": [
+          "payslip",
+          "work_lines",
+          "items"
+        ],
+        "properties": {
+          "payslip": {
+            "$ref": "#/components/schemas/Payslip"
+          },
+          "work_lines": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PayslipWorkLine"
+            }
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PayslipItem"
+            }
+          }
+        }
+      },
+      "PayEstimate": {
+        "type": "object",
+        "required": [
+          "period_start",
+          "period_end",
+          "has_pay_profile",
+          "regular_minutes",
+          "overtime_minutes",
+          "shifts_counted",
+          "shifts_skipped",
+          "work_amount",
+          "allowance_amount",
+          "gross_estimate"
+        ],
+        "properties": {
+          "period_start": {
+            "type": "string",
+            "format": "date"
+          },
+          "period_end": {
+            "type": "string",
+            "format": "date"
+          },
+          "has_pay_profile": {
+            "type": "boolean",
+            "description": "false nghĩa là tài khoản chưa có đơn giá giờ nào, nên màn hình không hiện 0 ₫."
+          },
+          "regular_minutes": {
+            "type": "integer"
+          },
+          "overtime_minutes": {
+            "type": "integer"
+          },
+          "shifts_counted": {
+            "type": "integer"
+          },
+          "shifts_skipped": {
+            "type": "integer"
+          },
+          "work_amount": {
+            "type": "integer"
+          },
+          "allowance_amount": {
+            "type": "integer"
+          },
+          "gross_estimate": {
+            "type": "integer"
+          }
+        }
+      },
+      "PublishPayslipsResult": {
+        "type": "object",
+        "required": [
+          "published",
+          "held_for_complaints"
+        ],
+        "properties": {
+          "published": {
+            "type": "integer"
+          },
+          "held_for_complaints": {
+            "type": "integer",
+            "description": "Số phiếu bị giữ lại vì nhân viên còn khiếu nại bảng công chưa xử lý."
+          }
+        }
+      },
       "ErrorResponse": {
         "type": "object",
         "required": [
@@ -4342,6 +4739,1250 @@
           },
           "500": {
             "description": "An unexpected server error occurred.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/payroll/profiles": {
+      "get": {
+        "summary": "List the hourly rates",
+        "description": "Đơn giá giờ của nhân viên (SCRUM-90), mới nhất trước. Chủ sở hữu đọc được toàn bộ tổ chức; mọi vai\ntrò khác chỉ đọc được đơn giá của chính mình (RLS `pay_profiles_select`).\n\nMột lần tăng lương là một dòng mới (`effective_from`), không phải sửa dòng cũ, nên lịch sử — và con\nsố mà một phiếu lương đã phát hành được tính từ đó — vẫn còn nguyên.\n",
+        "tags": [
+          "Payroll"
+        ],
+        "responses": {
+          "200": {
+            "description": "The rates the caller may read.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/PayProfile"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Bạn cần đăng nhập để thực hiện thao tác này.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Vai trò của bạn không được phép làm việc này.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Không thể tải bảng đơn giá giờ.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "summary": "Store one hourly rate",
+        "description": "Ghi đơn giá giờ của một nhân viên, hiệu lực từ `effectiveFrom` (SCRUM-90). Chỉ chủ sở hữu tổ chức\n(`payroll:manage`); `set_pay_profile` đọc tổ chức và người thao tác từ phiên đăng nhập nên không có\ntrường nào trong body chỉ được sang tổ chức khác.\n\nGửi lại cùng `(employeeId, effectiveFrom)` sẽ cập nhật dòng đó (unique index), nhờ vậy sửa một con\nsố vừa nhập sai không tạo ra hai dòng cùng ngày.\n",
+        "tags": [
+          "Payroll"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "employeeId",
+                  "hourlyRate",
+                  "effectiveFrom"
+                ],
+                "properties": {
+                  "employeeId": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "hourlyRate": {
+                    "type": "integer",
+                    "description": "VND cho một giờ, 0..10.000.000."
+                  },
+                  "effectiveFrom": {
+                    "type": "string",
+                    "format": "date",
+                    "description": "Ngày bắt đầu áp dụng (YYYY-MM-DD)."
+                  },
+                  "overtimeMultiplier": {
+                    "type": "number",
+                    "description": "Hệ số ca tăng ca, 1..5, tối đa 2 chữ số thập phân (mặc định 1.5)."
+                  },
+                  "fixedAllowance": {
+                    "type": "integer",
+                    "description": "Phụ cấp cố định mỗi tháng, 0..1.000.000.000 (mặc định 0)."
+                  },
+                  "note": {
+                    "type": "string",
+                    "nullable": true,
+                    "description": "Ghi chú của người nhập (tối đa 500 ký tự)."
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The stored rate.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "id"
+                  ],
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "format": "uuid"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Một trường không hợp lệ (UUID, số nguyên trong khoảng, ngày, ghi chú quá dài).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Bạn cần đăng nhập để thực hiện thao tác này.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Chỉ chủ sở hữu tổ chức mới được quản lý bảng lương.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Không tìm thấy nhân viên trong tổ chức.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Không thể lưu đơn giá giờ.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/payroll/payslips": {
+      "get": {
+        "summary": "List the payslips of one month",
+        "description": "Phiếu lương của một tháng (SCRUM-90), sắp theo nhân viên. RLS quyết định phạm vi: chủ sở hữu đọc\ntoàn bộ tổ chức, quản lý và nhân viên chỉ đọc phiếu **đã phát hành** của chính mình — nên bộ lọc\n`employee_id` chỉ thu hẹp kết quả, không mở thêm quyền.\n\nTên nhân viên và chi nhánh không nằm trong payload: màn hình đã có danh sách nhân sự và chi nhánh,\nvà một embed vào `users` sẽ hỏng vì bảng `payslips` trỏ tới `users` hai lần.\n",
+        "tags": [
+          "Payroll"
+        ],
+        "parameters": [
+          {
+            "in": "query",
+            "name": "month",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "example": "2026-10"
+            },
+            "description": "Tháng cần xem (YYYY-MM, theo giờ Việt Nam)."
+          },
+          {
+            "in": "query",
+            "name": "employee_id",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "description": "Chỉ lấy phiếu của một nhân viên (chủ sở hữu); người khác nhận danh sách rỗng."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The payslips of that month.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Payslip"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "month không phải YYYY-MM, hoặc employee_id không phải UUID.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Bạn cần đăng nhập để thực hiện thao tác này.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Vai trò của bạn không được phép làm việc này.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Không thể tải bảng lương.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/payroll/payslips/{id}": {
+      "get": {
+        "summary": "One payslip with its work lines and items",
+        "description": "Chi tiết một phiếu lương (SCRUM-90): các ca đã được trả (ngày, ca, số phút, đơn giá, hệ số, thành\ntiền) và các khoản mục ngoài giờ (phụ cấp, thưởng, khấu trừ — kèm `source` để màn hình biết khoản\nnào do hệ thống sinh ra).\n\n\"Không tìm thấy\" và \"không phải của bạn\" trả cùng một câu: phiếu nháp vô hình với nhân viên, phiếu\ncủa tổ chức khác vô hình với mọi người, nên phân biệt hai trường hợp sẽ biến endpoint thành công\ncụ dò id.\n",
+        "tags": [
+          "Payroll"
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The payslip and the rows that explain it.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PayslipDetail"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "id không phải UUID.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Bạn cần đăng nhập để thực hiện thao tác này.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Vai trò của bạn không được phép làm việc này.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Không tìm thấy phiếu lương.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Không thể tải phiếu lương.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/payroll/payslips/{id}/void": {
+      "post": {
+        "summary": "Void a payslip with a reason",
+        "description": "Huỷ một phiếu lương nháp hoặc đã phát hành (SCRUM-90). Chỉ chủ sở hữu tổ chức.\n\nĐây là cách duy nhất để sửa một phiếu đã phát hành: số tiền của nó bị đóng băng, nên chủ sở hữu huỷ\n(lý do được lưu vào `payroll_audit_log` cùng người thao tác) rồi tạo lại tháng đó. Nhân viên không\ncòn thấy phiếu đã huỷ (`payslips_select` chỉ mở `PUBLISHED`), và một phiếu `VOID` không bao giờ\nquay lại trạng thái khác.\n",
+        "tags": [
+          "Payroll"
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "reason"
+                ],
+                "properties": {
+                  "reason": {
+                    "type": "string",
+                    "example": "Nhập sai đơn giá giờ của ca tối",
+                    "description": "5-300 ký tự."
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The payslip is void.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "id",
+                    "status"
+                  ],
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "VOID"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "id không phải UUID, hoặc reason quá ngắn/quá dài.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Bạn cần đăng nhập để thực hiện thao tác này.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Chỉ chủ sở hữu tổ chức mới được quản lý bảng lương.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Không tìm thấy phiếu lương.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Phiếu đã ở trạng thái không thể huỷ.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Không thể huỷ phiếu lương.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/payroll/payslips/{id}/resolve-dispute": {
+      "post": {
+        "summary": "Mark the employee's khiếu nại as handled",
+        "description": "Đánh dấu khiếu nại của nhân viên trên phiếu lương đã được xử lý (SCRUM-90). Chỉ chủ sở hữu tổ chức.\n\nThao tác này chỉ ghi `dispute_resolved_at`; nội dung khiếu nại vẫn được giữ để đối soát. Muốn sửa\ncon số thì phải huỷ phiếu và tạo lại — khiếu nại không bao giờ tự sửa tiền.\n",
+        "tags": [
+          "Payroll"
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The dispute is marked resolved.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "id",
+                    "resolved"
+                  ],
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    "resolved": {
+                      "type": "boolean"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "id không phải UUID.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Bạn cần đăng nhập để thực hiện thao tác này.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Chỉ chủ sở hữu tổ chức mới được quản lý bảng lương.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Phiếu này không có khiếu nại nào đang mở.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Không thể xử lý khiếu nại.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/payroll/payslips/{id}/items": {
+      "post": {
+        "summary": "Add a phụ cấp / thưởng / khấu trừ to a DRAFT",
+        "description": "Thêm một khoản mục vào phiếu lương nháp (SCRUM-90). Chỉ chủ sở hữu tổ chức, và chỉ khi phiếu còn\n`DRAFT` — phiếu đã phát hành là bản ghi số tiền đã trả nên bị đóng băng.\n\n`kind` quyết định khoản này cộng vào hay trừ ra; `code` là mã ngắn để đối soát (BONUS, MEAL, BHXH,\nPIT, ADVANCE…), `label` là câu nhân viên đọc trên phiếu. BHXH/BHYT/BHTN và thuế TNCN cố ý **không**\ntự tính (luật thay đổi) — chúng được nhập tay như một khoản `DEDUCTION`.\n\nTổng của phiếu được `payroll_recalc` tính lại ngay trong cùng transaction, nên response của lần đọc\nkế tiếp đã đúng; `PAYSLIP_DEDUCTIONS_EXCEED_GROSS` là `400` khi khấu trừ vượt thu nhập.\n",
+        "tags": [
+          "Payroll"
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "kind",
+                  "code",
+                  "label",
+                  "amount"
+                ],
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "EARNING",
+                      "DEDUCTION"
+                    ]
+                  },
+                  "code": {
+                    "type": "string",
+                    "example": "BONUS",
+                    "description": "2-30 ký tự A-Z, 0-9 hoặc dấu gạch dưới (được viết hoa tự động)."
+                  },
+                  "label": {
+                    "type": "string",
+                    "example": "Thưởng doanh số",
+                    "description": "1-80 ký tự."
+                  },
+                  "amount": {
+                    "type": "integer",
+                    "description": "VND, 1..1.000.000.000."
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "The new item id.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "id"
+                  ],
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "format": "uuid"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Một trường không hợp lệ, hoặc khấu trừ vượt quá thu nhập của phiếu.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Bạn cần đăng nhập để thực hiện thao tác này.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Chỉ chủ sở hữu tổ chức mới được quản lý bảng lương.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Không tìm thấy phiếu lương nháp cần thêm khoản mục.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Không thể thêm khoản mục.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/payroll/payslips/{id}/items/{itemId}": {
+      "delete": {
+        "summary": "Remove a MANUAL item from a DRAFT",
+        "description": "Xoá một khoản mục nhập tay khỏi phiếu lương nháp (SCRUM-90). Chỉ chủ sở hữu tổ chức.\n\nKhoản do hệ thống sinh ra (`source = AUTO`, tức phụ cấp cố định) trả `409`: nó là kết quả của quy\ntắc và sẽ được sinh lại ở lần tạo phiếu kế tiếp. Phiếu đã phát hành cũng trả `409` — muốn sửa thì\nhuỷ phiếu rồi sinh lại.\n",
+        "tags": [
+          "Payroll"
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "in": "path",
+            "name": "itemId",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "The item is gone."
+          },
+          "400": {
+            "description": "id hoặc itemId không phải UUID.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Bạn cần đăng nhập để thực hiện thao tác này.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Chỉ chủ sở hữu tổ chức mới được quản lý bảng lương.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Không tìm thấy khoản mục trong phiếu lương.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Khoản mục do hệ thống sinh ra, hoặc phiếu đã phát hành.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Không thể xoá khoản mục.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/payroll/payslips/{id}/dispute": {
+      "post": {
+        "summary": "Raise a khiếu nại against one's own payslip",
+        "description": "Nhân viên thắc mắc về phiếu lương của chính mình (SCRUM-90).\n\nKhiếu nại **không sửa** con số: nó lưu lại lời giải thích, báo cho chủ sở hữu (`payslip_disputed`)\nvà khiến phiếu đó bị giữ lại ở lần phát hành kế tiếp (`publish_payslips`) cho tới khi được xử lý.\nChỉ gửi được khi phiếu `PUBLISHED`, là của chính người gọi, và không có khiếu nại nào đang mở.\n",
+        "tags": [
+          "Payroll"
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "note"
+                ],
+                "properties": {
+                  "note": {
+                    "type": "string",
+                    "example": "Ngày 12 em vào ca đủ 4 tiếng nhưng phiếu chỉ tính 2 tiếng.",
+                    "description": "5-500 ký tự."
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The dispute is recorded.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "id",
+                    "disputed"
+                  ],
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    "disputed": {
+                      "type": "boolean"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "id không phải UUID, hoặc note quá ngắn/quá dài.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Bạn cần đăng nhập để thực hiện thao tác này.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Vai trò của bạn không được phép làm việc này.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Phiếu không tồn tại với bạn, hoặc đã có khiếu nại đang mở.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Không thể gửi khiếu nại.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/payroll/payslips/{id}/acknowledge": {
+      "post": {
+        "summary": "Acknowledge one's own published payslip",
+        "description": "Nhân viên xác nhận \"đã xem, đúng số\" cho phiếu lương của chính mình (SCRUM-90).\n\n`acknowledge_payslip` chỉ ghi được khi phiếu `PUBLISHED` và `employee_id = auth.uid()`, nên không\ncó id nào ở đây xác nhận được phiếu của người khác — trường hợp đó trả `404` như mọi phiếu không\ntồn tại. Bấm lần thứ hai không đổi dấu thời gian (`coalesce(acknowledged_at, now())`).\n",
+        "tags": [
+          "Payroll"
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The payslip is acknowledged.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "id",
+                    "acknowledged"
+                  ],
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    "acknowledged": {
+                      "type": "boolean"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "id không phải UUID.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Bạn cần đăng nhập để thực hiện thao tác này.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Vai trò của bạn không được phép làm việc này.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Không tìm thấy phiếu lương đã phát hành của bạn.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Không thể xác nhận phiếu lương.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/payroll/payslips/publish": {
+      "post": {
+        "summary": "Publish every DRAFT of a finished month",
+        "description": "Phát hành phiếu lương của một tháng đã kết thúc (SCRUM-90). Chỉ chủ sở hữu tổ chức.\n\nPhiếu của nhân viên còn khiếu nại bảng công **chưa xử lý** trong tháng đó sẽ bị **giữ lại**\n(`held_for_complaints`) chứ không phát hành: một con số đang bị thắc mắc không được công bố như\nsố cuối cùng. Nhân viên nhận được thông báo `payslip_published` khi phiếu của họ được phát hành\n(nếu project đã chạy SCRUM-70).\n\nĐây là bước duy nhất khiến phiếu trở nên bất biến: sau khi phát hành, số tiền và các dòng chi tiết\nkhông sửa được nữa — muốn sửa phải huỷ (`void`) rồi sinh lại.\n",
+        "tags": [
+          "Payroll"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "month"
+                ],
+                "properties": {
+                  "month": {
+                    "type": "string",
+                    "example": "2026-09"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "How many payslips were published and how many were held.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublishPayslipsResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "month không hợp lệ, hoặc tháng chưa kết thúc (`PAYROLL_PERIOD_NOT_FINISHED`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Bạn cần đăng nhập để thực hiện thao tác này.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Chỉ chủ sở hữu tổ chức mới được quản lý bảng lương.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Không thể phát hành phiếu lương.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/payroll/payslips/generate": {
+      "post": {
+        "summary": "Create or refresh the DRAFT payslips of a month",
+        "description": "Sinh phiếu lương nháp cho một tháng (SCRUM-90). Chỉ chủ sở hữu tổ chức. `generate_payslips` tính\ngiờ từ `attendance.worked_seconds`, cắt theo độ dài ca được xếp, nhân với đơn giá giờ hiệu lực\ntrong tháng, cộng phụ cấp cố định — tất cả trong một transaction, bằng đúng hàm mà \"thu nhập tạm\ntính\" của nhân viên dùng.\n\nAi bị bỏ qua và vì sao: tài khoản `OWNER` (không ai trả lương cho chủ sở hữu), người chưa có đơn\ngiá giờ hiệu lực trong tháng, và người không có ca nào được tính. Phiếu đã phát hành không bị\nđụng tới; phiếu nháp được ghi lại từ đầu (các khoản `MANUAL` đã nhập vẫn giữ).\n",
+        "tags": [
+          "Payroll"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "month"
+                ],
+                "properties": {
+                  "month": {
+                    "type": "string",
+                    "example": "2026-09"
+                  },
+                  "employeeId": {
+                    "type": "string",
+                    "format": "uuid",
+                    "description": "Chỉ sinh cho một nhân viên."
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "How many drafts the month now holds.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "drafts"
+                  ],
+                  "properties": {
+                    "drafts": {
+                      "type": "integer"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "month không hợp lệ, hoặc tháng nằm ở tương lai (`PAYROLL_FUTURE_PERIOD`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Bạn cần đăng nhập để thực hiện thao tác này.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Chỉ chủ sở hữu tổ chức mới được quản lý bảng lương.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Không thể tạo phiếu lương.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/payroll/estimate": {
+      "get": {
+        "summary": "Mid-month pay estimate of the caller",
+        "description": "\"Thu nhập tạm tính\" của chính người gọi trong một tháng (SCRUM-90).\n\nCon số được tính bằng đúng hàm mà bộ sinh phiếu lương dùng (`my_pay_estimate` →\n`payroll_work_lines`), nên số nhân viên thấy giữa tháng là quy tắc sẽ trả cho họ, không phải một\ncách tính thứ hai. Kết quả dừng ở `gross_estimate`: khấu trừ là quyết định của chủ sở hữu và chỉ\ntồn tại khi đã có phiếu lương.\n\n`has_pay_profile = false` nghĩa là chưa ai đặt đơn giá giờ cho tài khoản này — màn hình nói rõ\nđiều đó thay vì hiển thị `0 ₫` như thể không có ngày công nào.\n",
+        "tags": [
+          "Payroll"
+        ],
+        "parameters": [
+          {
+            "in": "query",
+            "name": "month",
+            "schema": {
+              "type": "string",
+              "example": "2026-10"
+            },
+            "description": "Tháng cần tạm tính (YYYY-MM); bỏ trống thì lấy tháng hiện tại theo giờ Việt Nam."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The estimate of the caller for that month.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PayEstimate"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "month không phải YYYY-MM.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Bạn cần đăng nhập để thực hiện thao tác này.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Vai trò của bạn không được phép làm việc này.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Không thể tính thu nhập tạm tính.",
             "content": {
               "application/json": {
                 "schema": {
