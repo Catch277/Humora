@@ -317,6 +317,63 @@ The inbox is a **read surface**; the database is its only producer (SCRUM-70/71/
   table the app already selects is added, so there is no `42703` risk and no app-side order dependency —
   unlike SCRUM-68/69.
 
+## Shift registration: nhân viên đăng ký ca → quản lý duyệt (SCRUM-23 / SCRUM-91)
+
+`shift_registrations` and `review_shift_registration()` shipped with **SCRUM-23**, but nothing in the app ever
+called them: the table had no reader, so an employee's request could not be seen, let alone decided. `/schedules`
+is now that reader, and it is the only screen of the flow.
+
+- **The database already owns the rules; the screen must not repeat them.** `review_shift_registration(id,
+  approve, reject_reason)` is `security definer`, refuses anyone but `is_organization_owner()` or
+  `heads_branch(branch_id)`, refuses a non-`PENDING` row, **creates the `shift_assignments` row in the same
+  transaction** when approving, and answers `23P01` when the person is on leave, already holds the ca or works
+  overlapping hours. Approving is therefore **one** call — the screen never posts an assignment afterwards.
+- **The route is `schedule:manage`, the row is the branch.** `POST /api/shift-registrations/{id}/review` starts
+  with `requireCapability("schedule:manage")`, but `shift_registrations_select` (SCRUM-60) lets every manager of
+  the organization *read* every registration. The screen narrows the queue with `manageableIds` — the same
+  `scopesByBranch` rule `visibleAssignments` uses — so a manager never sees a "Duyệt" that answers `403`.
+  `ListShiftRegistrationsUseCase` keeps forcing `employee_id = caller` for a non-manager, so an employee sees
+  their own rows whatever the query string says.
+- **Three surfaces, one source.** The week table draws a pending request as a **dashed amber block** in the cell
+  of its ca × day (`registrationsByShiftAndDay`, the same key shape as `cellsByShiftAndDay`); the queue panel
+  under the KPIs lists every pending request with the facts a decision needs (who, which ca + hours, which day,
+  which branch, the note, when it was sent); the review dialog holds the reason box and both buttons. A cell is
+  ~110px wide, which is why the panel — not the block — is where the decision is explained.
+- **The queue is fetched without a date bound** (`GET /api/shift-registrations?status=PENDING`): a request for
+  next week is exactly the one a manager must not miss, and a `SHIFT_REGISTERED` bell links to `/schedules`
+  without saying which week. The grid draws only rows inside the displayed week; the panel marks the rest with
+  `schedules.registration.outsideWeek`. A **status chip** (`Đi làm` / `Nghỉ phép` / `Đã huỷ`) hides the pending
+  blocks — `PENDING` is not one of the three `shift_assignments` statuses, so matching it would be a lie.
+- **A failed read is not a broken screen.** The registrations request is a fourth element of the load
+  `Promise.all`; a database without `SCRUM-23` answers `500` there, so the page keeps its week table and shows
+  `schedules.registration.loadFailed` (naming the script) instead of turning the schedule into an error.
+- **An employee files from the same screen** (`Đăng ký ca`, `POST /api/shift-registrations`; withdraw with
+  `POST …/{id}/cancel`). The body carries only `shift_id`, `work_date`, `note` — the employee comes from the
+  session and the branch from `users.branch_id`, and an account without a branch reads a sentence pointing at
+  `/staff` instead of a form whose submit must fail (SCRUM-63). `registerableShifts` applies the same rule as
+  the manager's picker: working templates of that branch plus the branch-agnostic ones, `Nghỉ` never offered.
+  This is the **producer** of the flow today: the mobile widget
+  (`hr_mobile_app/lib/widgets/widget_open_shift_registration.dart`) still only shows a snackbar — no `.dart`
+  file on any branch writes `shift_registrations`. Wiring the phone is a change in that repository (its own
+  `AGENTS.md`), not here.
+- **Every sentence a manager reads is Vietnamese.** Those `raise exception` texts are English and the applied
+  script is never edited, so `lib/domain/shiftWorkflowMessages.ts` maps the stored texts (registration, swap and
+  conflict sentences) and `throwShiftWorkflowError()` passes them through it. The **class** still decides the
+  HTTP status — never a message — and `23505` gets a sentence of its own because Postgres' unique-violation text
+  is not one ("đã có trong lịch, hoặc bạn đã đăng ký ca này rồi"). A new `raise exception` in this workflow needs
+  an entry there; `shiftWorkflowInput.ts` and the domain error defaults are Vietnamese already.
+- **Labels**: `shiftRegistrationStatusLabel(status, t)` (`lib/i18n/labels.ts`) — `PENDING` / `APPROVED` /
+  `REJECTED` / `CANCELLED` — never a screen-local table. Copy lives under `schedules.registration.*` in both
+  dictionaries.
+- **Notifications (SCRUM-91).** The database is the producer, as everywhere else: `after insert` (PENDING only)
+  rings the organization's owners **and** that branch's head (`SHIFT_REGISTERED`, actor removed), `after update`
+  PENDING → REJECTED rings the employee with the reason (`SHIFT_REGISTRATION_REJECTED`), and approval stays
+  silent because the assignment it creates already fires `SHIFT_ASSIGNED` (SCRUM-71 §4). Both codes sit under the
+  `schedule` category in `lib/domain/notificationCatalog.ts` and `shift_registration` maps to `/schedules` in
+  `ENTITY_SCREENS`, so "Xem" lands on the screen that decides it. Deploy order: `SCRUM-23` → `SCRUM-70`/`71` →
+  `SCRUM-91` (the script raises when one is missing); no column the app selects is added, so there is no
+  `42703` risk and no ordering constraint with the build.
+
 ## Payroll: giờ công × đơn giá giờ (SCRUM-90)
 
 The mobile app shipped this first (`origin/feature/payroll-and-employee-features`, commit `7b7a018`), and the
@@ -1169,6 +1226,21 @@ screen that talks to Supabase Auth directly instead of through `app/api/**`.
   (viết thường, khác mã của SCRUM-71/72) nằm ở nhóm `payroll` mới trong `notificationCatalog.ts`. Chạy
   `SCRUM-90` (sau `SCRUM-69`) **trước** khi deploy build này; ca tăng ca cần `shifts.is_overtime = true`
   (hoặc tên bắt đầu bằng "Tăng ca") thì hệ số 1.5 mới áp dụng.
+- Đăng ký ca (SCRUM-23 + SCRUM-91): nhân viên đăng ký ca → trưởng chi nhánh/chủ sở hữu thấy ngay trên
+  `/schedules` — khối **nét đứt màu hổ phách** trong ô của ca × ngày và bảng "Đăng ký ca chờ duyệt" phía trên
+  lưới tuần — rồi duyệt hoặc từ chối (từ chối phải nêu lý do). Duyệt chỉ là **một** lời gọi:
+  `review_shift_registration()` tạo luôn `shift_assignments` trong cùng transaction (409 khi nhân viên nghỉ
+  phép, đã có ca đó, trùng giờ hoặc ca đã kết thúc), nên màn hình không gửi ca lần thứ hai. Hàng đợi lấy
+  `status=PENDING` **không giới hạn ngày** (đăng ký cho tuần sau vẫn phải thấy; dòng ngoài tuần đang xem được
+  ghi chú), còn lưới chỉ vẽ các đăng ký trong tuần và ẩn chúng khi đang lọc theo trạng thái ca. Nhân viên tự
+  đăng ký/huỷ ngay trên trang này; app mobile hiện chỉ hiện snackbar chứ chưa ghi vào `shift_registrations`,
+  nên việc nối điện thoại là thay đổi ở `hr_mobile_app/`. Câu lỗi tiếng Anh do `SCRUM-23` raise được dịch ở
+  `lib/domain/shiftWorkflowMessages.ts` (phân loại 403/404/409/400 vẫn theo lớp lỗi, không theo câu chữ). Chạy
+  `SCRUM-91_shift_registration_notifications.sql` (sau SCRUM-23 và SCRUM-70/71) để có chuông `SHIFT_REGISTERED`
+  cho chủ sở hữu + trưởng chi nhánh và `SHIFT_REGISTRATION_REJECTED` cho nhân viên kèm lý do; duyệt cố ý không
+  gửi thêm vì đã có `SHIFT_ASSIGNED`.
+
+
 
 - Giao diện điện thoại: `md` (768px) là mốc duy nhất. Danh sách điều hướng chỉ nằm ở
   `components/navigation.ts` — `Sidebar` cho màn hình rộng, `MobileNav` là ngăn kéo trượt cho điện thoại (mở
