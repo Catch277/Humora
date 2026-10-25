@@ -72,52 +72,33 @@ class _LoginScreenState extends State<LoginScreen>
       );
 
       if (response.user != null) {
+        // Ứng dụng dành cho nhân viên/quản lý chi nhánh; chủ sở hữu dùng web.
+        final profile = await supabase
+            .from('users')
+            .select('role, is_active')
+            .eq('id', response.user!.id)
+            .maybeSingle();
+        final role = (profile?['role'] ?? '').toString().toUpperCase();
+        if (profile == null || profile['is_active'] == false || role == 'OWNER') {
+          await supabase.auth.signOut();
+          if (!mounted) return;
+          _showSnackBar(
+            profile == null
+                ? 'Tài khoản chưa hoàn tất đăng ký.'
+                : (role == 'OWNER'
+                    ? 'Tài khoản chủ sở hữu vui lòng dùng bản web.'
+                    : 'Tài khoản đã bị vô hiệu hoá.'),
+            Colors.orangeAccent,
+          );
+          return;
+        }
         if (!mounted) return;
-        _showSnackBar('Đăng nhập thành công!', const Color(0xFF10B981));
-
-        // Chuyển tới màn hình Home Employee
         Navigator.pushReplacementNamed(context, AppRoutes.home_employee);
       }
     } on AuthException catch (e) {
       _showSnackBar(e.message, Colors.redAccent);
-    } catch (e) {
-      _showSnackBar('Đã có lỗi xảy ra: $e', Colors.redAccent);
-    } finally {
-      if (mounted) setState(() => _isLoading = false);
-    }
-  }
-
-  // 2. Hàm Tự động tạo 1 tài khoản mới trên Supabase và điền tự động
-  Future<void> _autoCreateAccountAndFill() async {
-    setState(() => _isLoading = true);
-
-    // Tạo email & password ngẫu nhiên dạng nv_1234@company.com
-    final randomId = DateTime.now().millisecondsSinceEpoch.toString().substring(8);
-    final autoEmail = 'employee_$randomId@company.com';
-    const autoPassword = 'password123';
-
-    try {
-      // Gọi API Đăng ký tài khoản trên Supabase
-      final response = await supabase.auth.signUp(
-        email: autoEmail,
-        password: autoPassword,
-      );
-
-      if (response.user != null) {
-        // Tự động điền thông tin vừa tạo vào 2 ô TextField
-        _emailController.text = autoEmail;
-        _passwordController.text = autoPassword;
-
-        if (!mounted) return;
-        _showSnackBar(
-          'Đã tự tạo tài khoản thành công trên Supabase!\nEmail: $autoEmail',
-          const Color(0xFF2563EB),
-        );
-      }
-    } on AuthException catch (e) {
-      _showSnackBar(e.message, Colors.redAccent);
-    } catch (e) {
-      _showSnackBar('Lỗi tự tạo tài khoản: $e', Colors.redAccent);
+    } catch (_) {
+      _showSnackBar('Không đăng nhập được. Kiểm tra mạng rồi thử lại.', Colors.redAccent);
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -432,7 +413,7 @@ Container(
                                           ),
                                         )
                                       : const Text(
-                                          'Login',
+                                          'Đăng nhập',
                                           style: TextStyle(
                                             color: Colors.white,
                                             fontSize: 18,

@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
+import '../core/app_colors.dart';
+import '../data/services/notification_service.dart';
 import '../routes/app_routers.dart';
 
+/// Thanh điều hướng chính: Trang chủ • Lịch làm • Thông báo • Tài khoản.
 class BottomNavBar extends StatelessWidget {
   final int currentIndex;
-  final ValueChanged<int>? onTap; // Cho phép truyền callback hoặc null
+  final ValueChanged<int>? onTap;
 
   const BottomNavBar({
     super.key,
@@ -12,56 +15,63 @@ class BottomNavBar extends StatelessWidget {
   });
 
   void _handleTap(BuildContext context, int index) {
-    // 1. Gọi callback onTap từ màn hình cha nếu có truyền vào
-    if (onTap != null) {
-      onTap!(index);
-    }
-
-    // 2. Chuyển trang qua Route Name nếu chọn tab khác với tab hiện tại
+    onTap?.call(index);
     if (index == currentIndex) return;
 
-    switch (index) {
-      case 0: // Tab Trang chủ
-        Navigator.pushReplacementNamed(context, AppRoutes.home_employee);
-        break;
-      case 1: // Tab Bản tin (Nếu có route)
-        break;
-      case 2: // Tab Tin nhắn (Nếu có route)
-        break;
-      case 3: // Tab Tài khoản
-        Navigator.pushReplacementNamed(context, AppRoutes.account_employee);
-        break;
-    }
+    const routes = [
+      AppRoutes.home_employee,
+      AppRoutes.work_schedule_employee,
+      AppRoutes.notifications,
+      AppRoutes.account_employee,
+    ];
+    Navigator.pushReplacementNamed(context, routes[index]);
   }
 
   @override
   Widget build(BuildContext context) {
-    return BottomNavigationBar(
-      currentIndex: currentIndex,
-      selectedItemColor: const Color(0xFF3860F4),
-      unselectedItemColor: Colors.grey,
-      selectedFontSize: 14,
-      unselectedFontSize: 13,
-      type: BottomNavigationBarType.fixed,
-      onTap: (index) => _handleTap(context, index),
-      items: const [
-        BottomNavigationBarItem(
-          icon: Icon(Icons.home_outlined, size: 26),
-          label: 'Trang chủ',
-        ),
-        BottomNavigationBarItem(
-          icon: Icon(Icons.newspaper_outlined, size: 26),
-          label: 'Bản tin',
-        ),
-        BottomNavigationBarItem(
-          icon: Icon(Icons.chat_bubble_outline, size: 26),
-          label: 'Tin nhắn',
-        ),
-        BottomNavigationBarItem(
-          icon: Icon(Icons.person_outline, size: 26),
-          label: 'Tài khoản',
-        ),
-      ],
+    return DecoratedBox(
+      decoration: const BoxDecoration(
+        color: AppColors.surface,
+        border: Border(top: BorderSide(color: AppColors.border)),
+      ),
+      child: NavigationBar(
+        selectedIndex: currentIndex,
+        height: 66,
+        backgroundColor: AppColors.surface,
+        surfaceTintColor: Colors.transparent,
+        indicatorColor: AppColors.primarySoft,
+        labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
+        onDestinationSelected: (i) => _handleTap(context, i),
+        destinations: [
+          const NavigationDestination(
+            icon: Icon(Icons.home_outlined),
+            selectedIcon: Icon(Icons.home_rounded, color: AppColors.primary),
+            label: 'Trang chủ',
+          ),
+          const NavigationDestination(
+            icon: Icon(Icons.calendar_month_outlined),
+            selectedIcon: Icon(Icons.calendar_month_rounded, color: AppColors.primary),
+            label: 'Lịch làm',
+          ),
+          NavigationDestination(
+            icon: ValueListenableBuilder<int>(
+              valueListenable: NotificationService.unreadCount,
+              builder: (_, n, __) => Badge(
+                isLabelVisible: n > 0,
+                label: Text(n > 99 ? '99+' : '$n'),
+                child: const Icon(Icons.notifications_none_rounded),
+              ),
+            ),
+            selectedIcon: const Icon(Icons.notifications_rounded, color: AppColors.primary),
+            label: 'Thông báo',
+          ),
+          const NavigationDestination(
+            icon: Icon(Icons.person_outline_rounded),
+            selectedIcon: Icon(Icons.person_rounded, color: AppColors.primary),
+            label: 'Tài khoản',
+          ),
+        ],
+      ),
     );
   }
 }

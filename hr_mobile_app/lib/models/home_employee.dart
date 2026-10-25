@@ -3,13 +3,13 @@ import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:intl/intl.dart';
 
+import '../core/app_colors.dart';
 import '../services/attendance_api.dart';
 import '../widgets/bottom_nav_bar.dart';
 import '../widgets/employee_home/home_header.dart';
 import '../widgets/employee_home/checkin_card.dart';
 import '../widgets/employee_home/performance_card.dart';
 import '../widgets/employee_home/hr_services_grid.dart';
-import '../widgets/employee_home/internal_news_card.dart';
 import 'camera_checkin.dart'; // Import màn hình camera
 
 class _LocationException implements Exception {
@@ -26,7 +26,8 @@ class HomeEmployeeScreen extends StatefulWidget {
 
 class _HomeEmployeeScreenState extends State<HomeEmployeeScreen> {
   int _selectedIndex = 0;
-  bool _isSalaryVisible = true;
+  int _refreshTick = 0;
+  String _shiftLabel = 'Ca làm việc';
 
   Timer? _timer;
   DateTime _currentTime = DateTime.now();
@@ -101,6 +102,17 @@ class _HomeEmployeeScreenState extends State<HomeEmployeeScreen> {
         _shiftId = (open ?? target)?['shift_id'] as String?;
         final start = _parseHm(target?['start_time'] as String?);
         if (start != null) _shiftStart = start;
+        final name = (target?['shift_name'] ?? target?['name'])?.toString();
+        final st = target?['start_time']?.toString();
+        final en = target?['end_time']?.toString();
+        String hm(String? t) => (t != null && t.length >= 5) ? t.substring(0, 5) : '';
+        if (name != null && name.isNotEmpty) {
+          _shiftLabel = (st != null && en != null) ? '$name (${hm(st)} - ${hm(en)})' : name;
+        } else if (st != null && en != null) {
+          _shiftLabel = 'Ca ${hm(st)} - ${hm(en)}';
+        } else {
+          _shiftLabel = 'Ca làm việc';
+        }
       });
     } catch (e) {
       _showError(e);
@@ -267,63 +279,44 @@ class _HomeEmployeeScreenState extends State<HomeEmployeeScreen> {
     final period = DateFormat('a').format(_currentTime) == 'AM' ? 'SA' : 'CH';
 
     return Scaffold(
-      body: Container(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [
-              Color(0xFF8BB5EA), // Xanh lam sáng phía trên
-              Color(0xFF6B9BD2), // Xanh mờ ở giữa
-              Color(0xFF90BBEA), // Xanh ánh nhạt phía dưới
-            ],
-          ),
-        ),
-        child: SafeArea(
-          bottom: false,
-          child: SingleChildScrollView(
-            child: Column(
-              children: [
-                HomeHeader(
+      backgroundColor: AppColors.background,
+      body: RefreshIndicator(
+        onRefresh: () async {
+          await _loadToday();
+          if (mounted) setState(() => _refreshTick++);
+        },
+        child: SingleChildScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          child: Column(
+            children: [
+              SafeArea(
+                bottom: false,
+                child: HomeHeader(
                   formattedDate: _getFormattedDate(),
                   greeting: _getGreeting(),
                 ),
-                const SizedBox(height: 16),
-                CheckInCard(
+              ),
+              Transform.translate(
+                offset: const Offset(0, -24),
+                child: CheckInCard(
                   timeFormat: timeFormat,
                   period: period,
                   countdownText: _getCountdownToShiftStart(),
                   onCheckIn: _handleCheckIn,
                   isCheckedIn: _isCheckedIn,
                   checkInTime: _checkInTime,
+                  shiftLabel: _shiftLabel,
                 ),
-                const SizedBox(height: 20),
-                PerformanceCard(
-                  isSalaryVisible: _isSalaryVisible,
-                  onToggleSalary: () {
-                    setState(() {
-                      _isSalaryVisible = !_isSalaryVisible;
-                    });
-                  },
-                ),
-                const SizedBox(height: 20),
-                const HrServicesGrid(),
-                const SizedBox(height: 20),
-                const InternalNewsCard(),
-                const SizedBox(height: 30),
-              ],
-            ),
+              ),
+              PerformanceCard(refreshTick: _refreshTick),
+              const SizedBox(height: 16),
+              const HrServicesGrid(),
+              const SizedBox(height: 28),
+            ],
           ),
         ),
       ),
-      bottomNavigationBar: BottomNavBar(
-        currentIndex: _selectedIndex,
-        onTap: (index) {
-          setState(() {
-            _selectedIndex = index;
-          });
-        },
-      ),
+      bottomNavigationBar: BottomNavBar(currentIndex: _selectedIndex),
     );
   }
 }

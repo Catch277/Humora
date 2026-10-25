@@ -7,6 +7,7 @@ class CheckInCard extends StatelessWidget {
   final VoidCallback onCheckIn;
   final bool isCheckedIn;
   final String checkInTime;
+  final String shiftLabel;
 
   const CheckInCard({
     super.key,
@@ -16,6 +17,7 @@ class CheckInCard extends StatelessWidget {
     required this.onCheckIn,
     required this.isCheckedIn,
     required this.checkInTime,
+    this.shiftLabel = 'Ca làm việc',
   });
 
   @override
@@ -67,14 +69,13 @@ class CheckInCard extends StatelessWidget {
                       ),
                       const SizedBox(height: 2),
                       RichText(
-                        text: const TextSpan(
+                        text: TextSpan(
                           style: TextStyle(fontSize: 14, color: Colors.black87),
                           children: [
                             TextSpan(
-                              text: 'Ca hành chính ',
-                              style: TextStyle(fontWeight: FontWeight.bold),
+                              text: shiftLabel,
+                              style: const TextStyle(fontWeight: FontWeight.bold),
                             ),
-                            TextSpan(text: '(08:30 - 17:30)'),
                           ],
                         ),
                       ),
