@@ -317,6 +317,61 @@ The inbox is a **read surface**; the database is its only producer (SCRUM-70/71/
   table the app already selects is added, so there is no `42703` risk and no app-side order dependency —
   unlike SCRUM-68/69.
 
+## Payroll: giờ công × đơn giá giờ (SCRUM-90)
+
+The mobile app shipped this first (`origin/feature/payroll-and-employee-features`, commit `7b7a018`), and the
+schema, RPCs and RLS are **one script both clients share**: `supabase/sql/SCRUM-90_payroll.sql`.
+
+- **Apply it by hand first**, after `SCRUM-21/30/51/59/63` and `SCRUM-69` (it raises if any is missing). It
+  adds `shifts.is_overtime`, five tables (`pay_profiles`, `payslips`, `payslip_work_lines`, `payslip_items`,
+  `payroll_audit_log`) and 17 functions. No existing route reads a payroll column, so a database without the
+  script cannot break today's build — unlike SCRUM-63/68.
+- **Nobody writes those tables.** Each has RLS with a SELECT policy only, and `INSERT/UPDATE/DELETE` are
+  revoked from `anon`/`authenticated`; every change goes through a `security definer` function that starts
+  with `payroll_require_owner()`. That is why `SupabasePayrollRepository` has no insert/update call at all: a
+  client that could write `net_amount` could pay itself.
+- **Money is computed in SQL only** — `payroll_work_lines` caps each ca at the scheduled template's length,
+  multiplies overtime rows, rounds once per ca; `payroll_recalc` derives the totals and the CHECK keeps
+  `gross = work + other_earnings`, `net = gross - deduction`. `my_pay_estimate` calls the same function, so a
+  mid-month number and a payslip cannot disagree. Never re-implement that arithmetic in TypeScript.
+- **Lifecycle**: `DRAFT` → `PUBLISHED` → `VOID`. A published payslip's money is frozen by `payslips_guard` /
+  `payslip_children_guard` (also against the SQL editor), so a correction is void + generate again, and
+  `payroll_audit_log` keeps who did what. `publish_payslips` **holds** a payslip whose employee still has an
+  unresolved `attendance.complaint` in that month (`held_for_complaints`) — a disputed number never goes out
+  as final.
+- **Who sees what**: the owner sees the organization (`payroll:manage` + `payroll:view`); a manager and an
+  employee see their own **PUBLISHED** payslip (`payslips_select`: `employee_id = auth.uid() and status =
+  'PUBLISHED'`) and their own rate. A DRAFT is invisible to its employee, and "not found" and "not yours" are
+  deliberately the same answer.
+- **Error vocabulary**: the RPCs raise a machine token (`PAYROLL_OWNER_ONLY`, `PAYSLIP_IMMUTABLE: …`,
+  `PAYSLIP_NOT_FOUND_OR_NOT_DRAFT`, `PAYSLIP_DEDUCTIONS_EXCEED_GROSS`, …) plus a Postgres state.
+  `lib/domain/payrollMessages.ts` turns the token into copy and
+  `lib/infrastructure/repositories/payrollErrors.ts` turns it into one of four domain errors (403/404/409/400).
+  Classification is by **token, not by `code`**: `P0002` covers both "no such payslip" (a `404`) and "that
+  payslip already has an open khiếu nại" (a `409`).
+- **Routes** (`app/api/payroll/**`): `GET|PUT /profiles`, `GET /payslips?month=YYYY-MM`, `GET /payslips/{id}`,
+  `POST /payslips/generate`, `POST /payslips/publish`, `POST /payslips/{id}/items`,
+  `DELETE /payslips/{id}/items/{itemId}`, `POST …/void`, `POST …/resolve-dispute`, `POST …/acknowledge`,
+  `POST …/dispute`, `GET /estimate`. `_lib/payrollRequest.ts` mirrors every CHECK of the script (a bad body
+  answers `400` naming the field, never `500`), and `_lib/payrollErrorResponse.ts` is the only place a payroll
+  failure picks a status.
+- **No embedded selects.** `payslips` points at `users` twice (`employee_id`, `published_by`), so an
+  unqualified `employee:users (…)` embed would answer `PGRST201`; `/payroll` resolves names from
+  `GET /api/users` and `GET /api/branches`, which it loads anyway.
+- **`/payroll`** (`payroll:view` for every role; the rates tab and every write sit behind `payroll:manage`):
+  month navigator, the caller's mid-month estimate, four KPIs over published payslips, the payslip table, a
+  rates tab that flags exactly the employees the generator will skip, and a drawer with the paid ca, the
+  items, void / resolve-dispute, and the employee's acknowledge / khiếu nại. The screen is fully i18n'd
+  (`payroll.*`, `payrollError.*`) — a new payroll string goes in both dictionaries.
+- **Notifications**: `publish_payslips` writes `payslip_published` and `dispute_payslip` writes
+  `payslip_disputed` — lowercase, unlike the SCRUM-71/72 codes, and the catalog is keyed by the stored value
+  verbatim. Both live under a new `payroll` category in `lib/domain/notificationCatalog.ts`, whose chip and
+  icon (`app/notifications/page.tsx`) changed with it. The script guards each call with `to_regprocedure`, so
+  a project without SCRUM-70 still publishes.
+- **Not shipped**: a real end-of-month job (that needs `pg_cron`), BHXH/BHYT/BHTN and thuế TNCN (entered as
+  MANUAL deductions rather than computed), and any audit-log view in the app — `payroll_audit_log` is
+  owner-readable in SQL only.
+
 ## Password reset by email (forgot password)
 
 `/login` has a "Quên mật khẩu?" panel and `/reset-password` is where the emailed link lands. The flow
@@ -1095,6 +1150,25 @@ screen that talks to Supabase Auth directly instead of through `app/api/**`.
   Authentication → Passkeys (bật + Relying Party ID = tên miền thật, `localhost` khi dev) và **HTTPS** khi chạy
   thật — Passkey vẫn là tính năng thử nghiệm của Supabase và phải bật riêng cho từng thiết bị. Yêu cầu Face ID
   trước khi chấm công là bước tiếp theo (SCRUM-80), hiện chưa bật.
+
+- Bảng lương theo giờ (SCRUM-90): `supabase/sql/SCRUM-90_payroll.sql` (dùng chung với app mobile) tạo
+  `pay_profiles`, `payslips`, `payslip_work_lines`, `payslip_items`, `payroll_audit_log` và 17 hàm
+  `security definer`. **Không ai ghi thẳng vào bảng**: mỗi bảng chỉ có policy SELECT, quyền ghi bị thu hồi,
+  và mọi thay đổi đi qua hàm bắt đầu bằng `payroll_require_owner()` — vì thế repository không có
+  insert/update nào. Tiền được tính **chỉ trong SQL** (`payroll_work_lines` cắt theo độ dài ca, nhân hệ số
+  tăng ca, làm tròn một lần mỗi ca; `payroll_recalc` cộng tổng), nên "thu nhập tạm tính" giữa tháng của nhân
+  viên dùng đúng hàm mà phiếu lương dùng. Vòng đời `DRAFT` → `PUBLISHED` → `VOID`: phiếu đã phát hành bị
+  đóng băng (trigger chặn cả SQL editor), muốn sửa phải huỷ rồi tạo lại; `publish_payslips` **giữ lại** phiếu
+  của nhân viên còn khiếu nại bảng công chưa xử lý. Chủ sở hữu thấy toàn tổ chức (`payroll:manage`), quản lý
+  và nhân viên chỉ thấy phiếu `PUBLISHED` của mình (RLS). Mã lỗi của hàm (`PAYROLL_OWNER_ONLY`,
+  `PAYSLIP_IMMUTABLE`, …) được dịch ở `lib/domain/payrollMessages.ts` và phân loại 403/404/409/400 ở
+  `payrollErrors.ts` — phân loại theo **token**, không theo mã Postgres. Màn hình `/payroll` (i18n đầy đủ) có
+  chọn tháng, thu nhập tạm tính, 4 chỉ số (chỉ tính phiếu đã phát hành), bảng phiếu, tab "Đơn giá giờ" (cảnh
+  báo người chưa có đơn giá nên bị bỏ qua khi tạo phiếu) và ngăn chi tiết với các ca được trả, khoản mục, huỷ
+  phiếu, xử lý khiếu nại, xác nhận/khiếu nại của nhân viên. Thông báo `payslip_published` / `payslip_disputed`
+  (viết thường, khác mã của SCRUM-71/72) nằm ở nhóm `payroll` mới trong `notificationCatalog.ts`. Chạy
+  `SCRUM-90` (sau `SCRUM-69`) **trước** khi deploy build này; ca tăng ca cần `shifts.is_overtime = true`
+  (hoặc tên bắt đầu bằng "Tăng ca") thì hệ số 1.5 mới áp dụng.
 
 - Giao diện điện thoại: `md` (768px) là mốc duy nhất. Danh sách điều hướng chỉ nằm ở
   `components/navigation.ts` — `Sidebar` cho màn hình rộng, `MobileNav` là ngăn kéo trượt cho điện thoại (mở
