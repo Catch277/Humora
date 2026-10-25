@@ -1,5 +1,5 @@
 export class ShiftWorkflowInputError extends Error {
-  constructor(message = "The shift request is invalid.") {
+  constructor(message = "Yêu cầu về ca làm việc không hợp lệ.") {
     super(message);
     this.name = "ShiftWorkflowInputError";
   }

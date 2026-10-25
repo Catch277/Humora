@@ -1,5 +1,5 @@
 export class ShiftSwapNotFoundError extends Error {
-  constructor(message = "Shift swap not found.") {
+  constructor(message = "Không tìm thấy yêu cầu chuyển ca.") {
     super(message);
     this.name = "ShiftSwapNotFoundError";
   }

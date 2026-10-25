@@ -9,7 +9,7 @@ export class RespondShiftSwapUseCase {
   constructor(private readonly repository: IShiftSwapRepository) {}
 
   execute(command: RespondShiftSwapCommand): Promise<ShiftSwap> {
-    assertUuid(command.swapId, "The swap id");
+    assertUuid(command.swapId, "Mã yêu cầu chuyển ca");
 
     return this.repository.respond(command.swapId, command.accept);
   }

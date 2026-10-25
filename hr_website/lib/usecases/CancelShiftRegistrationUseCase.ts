@@ -16,7 +16,7 @@ export class CancelShiftRegistrationUseCase {
   async execute(
     command: CancelShiftRegistrationCommand,
   ): Promise<ShiftRegistration> {
-    assertUuid(command.registrationId, "The registration id");
+    assertUuid(command.registrationId, "Mã đăng ký ca");
 
     const registration = await this.repository.findById(command.registrationId);
 
@@ -26,7 +26,7 @@ export class CancelShiftRegistrationUseCase {
 
     if (registration.status !== "PENDING") {
       throw new ShiftWorkflowStateError(
-        "Only a pending registration can be cancelled.",
+        "Chỉ đăng ký đang chờ duyệt mới huỷ được.",
       );
     }
 

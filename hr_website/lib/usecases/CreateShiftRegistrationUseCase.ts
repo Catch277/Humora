@@ -36,7 +36,7 @@ export class CreateShiftRegistrationUseCase {
   ): Promise<ShiftRegistration> {
     if (!command.callerBranchId) {
       throw new ShiftWorkflowInputError(
-        "Your account is not assigned to a branch, so it cannot register for shifts.",
+        "Tài khoản của bạn chưa được gán chi nhánh nên chưa đăng ký ca được.",
       );
     }
 
@@ -56,7 +56,7 @@ export class CreateShiftRegistrationUseCase {
 
     if (!getShiftWindow(command.workDate, shift)) {
       throw new ShiftWorkflowInputError(
-        "This shift has no working hours, so it cannot be registered.",
+        "Ca làm việc này không có giờ làm việc nên không đăng ký được.",
       );
     }
 

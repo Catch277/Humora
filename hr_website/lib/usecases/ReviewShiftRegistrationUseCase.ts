@@ -24,7 +24,7 @@ export class ReviewShiftRegistrationUseCase {
 
   execute(command: ReviewShiftRegistrationCommand): Promise<ShiftRegistration> {
     assertManagerRole(command.callerRole);
-    assertUuid(command.registrationId, "The registration id");
+    assertUuid(command.registrationId, "Mã đăng ký ca");
 
     return this.repository.review(command.registrationId, {
       approve: command.approve,

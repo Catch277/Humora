@@ -9,7 +9,7 @@ export class CancelShiftSwapUseCase {
   constructor(private readonly repository: IShiftSwapRepository) {}
 
   execute(command: CancelShiftSwapCommand): Promise<ShiftSwap> {
-    assertUuid(command.swapId, "The swap id");
+    assertUuid(command.swapId, "Mã yêu cầu chuyển ca");
 
     return this.repository.cancel(command.swapId);
   }

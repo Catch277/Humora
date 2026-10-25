@@ -11,7 +11,7 @@ const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 
 export function assertUuid(value: string, label: string): void {
   if (!UUID_PATTERN.test(value)) {
-    throw new ShiftWorkflowInputError(`${label} must be a UUID.`);
+    throw new ShiftWorkflowInputError(`${label} không hợp lệ (cần một UUID).`);
   }
 }
 
@@ -24,7 +24,7 @@ export function assertDate(value: string, label: string): void {
     Number.isNaN(parsed.getTime()) ||
     parsed.toISOString().slice(0, 10) !== value
   ) {
-    throw new ShiftWorkflowInputError(`${label} must be a date (YYYY-MM-DD).`);
+    throw new ShiftWorkflowInputError(`${label} phải là ngày dạng YYYY-MM-DD.`);
   }
 }
 
@@ -44,7 +44,7 @@ export function normalizeShiftNote(
 
   if (text && text.length > MAX_SHIFT_NOTE_LENGTH) {
     throw new ShiftWorkflowInputError(
-      `${label} must be at most ${MAX_SHIFT_NOTE_LENGTH} characters.`,
+      `${label} tối đa ${MAX_SHIFT_NOTE_LENGTH} ký tự.`,
     );
   }
 
@@ -54,7 +54,7 @@ export function normalizeShiftNote(
 export function assertManagerRole(role: string): void {
   if (!MANAGER_ROLES.has(normalizeRole(role))) {
     throw new ShiftWorkflowForbiddenError(
-      "Only the owner or a manager may review shift requests.",
+      "Chỉ chủ sở hữu hoặc quản lý mới duyệt được yêu cầu về ca làm việc.",
     );
   }
 }

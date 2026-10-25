@@ -1,5 +1,5 @@
 export class ShiftWorkflowStateError extends Error {
-  constructor(message = "The request is not in a state that allows this action.") {
+  constructor(message = "Yêu cầu đang ở trạng thái không cho phép thao tác này.") {
     super(message);
     this.name = "ShiftWorkflowStateError";
   }

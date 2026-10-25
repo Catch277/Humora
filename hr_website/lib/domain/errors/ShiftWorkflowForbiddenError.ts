@@ -1,5 +1,5 @@
 export class ShiftWorkflowForbiddenError extends Error {
-  constructor(message = "You may not perform this action on shifts.") {
+  constructor(message = "Bạn không có quyền thực hiện thao tác này với ca làm việc.") {
     super(message);
     this.name = "ShiftWorkflowForbiddenError";
   }

@@ -172,7 +172,7 @@ export class SupabaseShiftRegistrationRepository
 
     if (!data) {
       throw new ShiftWorkflowStateError(
-        "Only a pending registration can be cancelled.",
+        "Chỉ đăng ký đang chờ duyệt mới huỷ được.",
       );
     }
 

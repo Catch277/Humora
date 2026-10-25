@@ -22,7 +22,7 @@ export class ReviewShiftSwapUseCase {
 
   execute(command: ReviewShiftSwapCommand): Promise<ShiftSwap> {
     assertManagerRole(command.callerRole);
-    assertUuid(command.swapId, "The swap id");
+    assertUuid(command.swapId, "Mã yêu cầu chuyển ca");
 
     return this.repository.review(command.swapId, {
       approve: command.approve,

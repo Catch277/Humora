@@ -3,6 +3,7 @@ import { ShiftWorkflowConflictError } from "@/lib/domain/errors/ShiftWorkflowCon
 import { ShiftWorkflowForbiddenError } from "@/lib/domain/errors/ShiftWorkflowForbiddenError";
 import { ShiftWorkflowInputError } from "@/lib/domain/errors/ShiftWorkflowInputError";
 import { ShiftWorkflowStateError } from "@/lib/domain/errors/ShiftWorkflowStateError";
+import { shiftWorkflowMessage } from "@/lib/domain/shiftWorkflowMessages";
 
 type PostgrestLikeError = { code?: string; message: string };
 
@@ -18,6 +19,11 @@ type PostgrestLikeError = { code?: string; message: string };
  *
  * `notFound` is supplied by the caller because "not found" means a different resource for each
  * repository. Anything unrecognised becomes a plain `Error` that the route logs and answers `500`.
+ *
+ * The **class** decides the HTTP status; the **sentence** is passed through `shiftWorkflowMessage()` so a
+ * caller reads Vietnamese (those SQL scripts raise English, and `/schedules` shows the text verbatim now
+ * that it can review a registration). Translating here, not in a route, keeps both halves together:
+ * no route matches on the wording.
  */
 export function throwShiftWorkflowError(
   error: PostgrestLikeError,
@@ -28,18 +34,23 @@ export function throwShiftWorkflowError(
     case "P0002":
       throw notFound;
     case "42501":
-      throw new ShiftWorkflowForbiddenError(error.message);
+      throw new ShiftWorkflowForbiddenError(shiftWorkflowMessage(error.message));
     case "22023":
-      throw new ShiftWorkflowStateError(error.message);
+      throw new ShiftWorkflowStateError(shiftWorkflowMessage(error.message));
     case "23P01":
+      throw new ShiftWorkflowConflictError(shiftWorkflowMessage(error.message));
     case "23505":
-      throw new ShiftWorkflowConflictError(error.message);
+      // A unique index only — Postgres' own text ("duplicate key value violates unique constraint …") is not
+      // a sentence a caller should read, so the two conflicts it can mean are named instead.
+      throw new ShiftWorkflowConflictError(
+        "Ca làm việc này đã có trong lịch, hoặc bạn đã đăng ký ca này trong ngày đó rồi.",
+      );
     case "23P02":
       // The trigger's sentence already names the ca, its date and its end hour.
       throw new PastShiftAssignmentError(error.message);
     case "23503":
       throw new ShiftWorkflowInputError(
-        "The shift or the branch in the request does not exist.",
+        "Ca làm việc hoặc chi nhánh trong yêu cầu không tồn tại.",
       );
     default:
       throw new Error(`Unable to ${action}: ${error.message}`);
