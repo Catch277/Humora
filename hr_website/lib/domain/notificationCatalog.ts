@@ -90,6 +90,14 @@ export const NOTIFICATION_TYPES: Readonly<Record<string, NotificationTypeMeta>> 
   SHIFT_CHANGED: { key: "notificationType.shiftChanged", category: "schedule" },
   SHIFT_REMOVED: { key: "notificationType.shiftRemoved", category: "schedule" },
   SHIFT_LEAVE: { key: "notificationType.shiftLeave", category: "schedule" },
+  // SCRUM-91: an employee registers for a ca on the phone and the branch head is the audience; a rejection
+  // goes back the other way. Approval is deliberately silent — the assignment the approval creates already
+  // rings `SHIFT_ASSIGNED` (SCRUM-71 §4), so a second bell would only say the same thing twice.
+  SHIFT_REGISTERED: { key: "notificationType.shiftRegistered", category: "schedule" },
+  SHIFT_REGISTRATION_REJECTED: {
+    key: "notificationType.shiftRegistrationRejected",
+    category: "schedule",
+  },
 
   // ── Chấm công ────────────────────────────────────────────────────────────────────────────
   ATTENDANCE_LATE: { key: "notificationType.attendanceLate", category: "attendance" },
@@ -201,6 +209,9 @@ const ENTITY_SCREENS: Readonly<Record<string, readonly string[]>> = {
   revenue: ["/revenue"],
   request: ["/requests"],
   shift_assignment: ["/schedules"],
+  // SCRUM-91: a pending đăng ký ca is decided on the schedule, which is also where the ca it turns into
+  // appears — the same screen for both halves of the flow.
+  shift_registration: ["/schedules"],
   attendance: ["/attendance", "/check-in"],
   user: ["/staff"],
   branch: ["/branches"],
