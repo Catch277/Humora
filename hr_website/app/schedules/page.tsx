@@ -31,6 +31,8 @@ import {
 import { formatClockTime, formatDayMonth, weekdayLong } from "@/lib/i18n/format";
 import { shiftAssignmentStatusLabel } from "@/lib/i18n/labels";
 import { normalizeForSearch } from "@/lib/searchText";
+import { shiftMinutes } from "@/lib/usecases/shiftAssignmentInput";
+import { isShiftAlreadyOver } from "@/lib/usecases/shiftWindow";
 
 // SCRUM-61 needs `manager_id`: it is what says whether the caller heads the branch.
 type Branch = { id: string; name: string; manager_id: string | null };
@@ -59,8 +61,13 @@ type ScheduleForm = {
   note: string;
 };
 
+/**
+ * `lockedShift` is the ca the dialog was opened *from* — see `openCreate`: clicking "Thêm" inside a ca row
+ * of the week table fixes that ca, because the row already says which ca is being added. The toolbar
+ * button ("Xếp ca") leaves it `null`, which is what keeps the manual picker for an arbitrary assignment.
+ */
 type ModalState =
-  | { mode: "create"; workDate: string }
+  | { mode: "create"; workDate: string; lockedShift: Shift | null }
   | { mode: "edit"; assignment: ShiftAssignment }
   | null;
 
@@ -157,6 +164,58 @@ function compareShiftsByStartTime(first: Shift, second: Shift): number {
   return startComparison !== 0
     ? startComparison
     : first.name.localeCompare(second.name, "vi");
+}
+
+/**
+ * One row of the week table: a ca of the catalogue, or the pause between two of them.
+ *
+ * A break is deliberately *not* a `public.shifts` row. A stored template would appear in the "Ca làm
+ * việc" picker and could be assigned like work, and `shiftsOverlap` would have to learn about it. The
+ * catalogue already describes the pause — the gap between one ca's end and the next ca's start — so the
+ * table reads it from there and draws a row nothing can be scheduled onto.
+ */
+type ScheduleWeekRow =
+  | { kind: "shift"; shift: Shift }
+  | { kind: "break"; startTime: string; endTime: string };
+
+/**
+ * Interleaves the catalogue with one blank rest row per real gap between two working ca.
+ *
+ * The input is already ordered (`compareShiftsByStartTime`, the day off last), so only consecutive
+ * entries can have a pause between them. Nothing is drawn for a zero-length template ("Nghỉ"), a
+ * template without hours, two ca that touch (`end === start` is back-to-back work) or an overlap — and
+ * nothing after the day off, because a clock row can never follow it.
+ */
+function withRestRows(shifts: Shift[]): ScheduleWeekRow[] {
+  const rows: ScheduleWeekRow[] = [];
+
+  shifts.forEach((shift, index) => {
+    rows.push({ kind: "shift", shift });
+
+    const next = shifts[index + 1];
+
+    if (!next || isDayOffTemplate(shift) || isDayOffTemplate(next)) {
+      return;
+    }
+
+    const endTime = shift.end_time;
+    const startTime = next.start_time;
+
+    if (!endTime || !startTime) {
+      return;
+    }
+
+    const end = shiftMinutes(endTime);
+    const start = shiftMinutes(startTime);
+
+    if (end === null || start === null || end >= start) {
+      return;
+    }
+
+    rows.push({ kind: "break", startTime: endTime, endTime: startTime });
+  });
+
+  return rows;
 }
 
 /** Two-letter avatar for the schedule rows; falls back to "--" for a hidden profile. */
@@ -466,6 +525,24 @@ export default function SchedulesPage() {
   );
 
   /**
+   * The assignments the week table can show — i.e. the ones that sit on a ca.
+   *
+   * SCRUM-86 makes an approved "Nghỉ phép" act on the ca the employee actually holds, so a day off is
+   * the `LEAVE` marker inside that block and no longer a row of the timetable. A legacy row written on
+   * the zero-length "Nghỉ" template (SCRUM-83 used to create one when the employee had no ca that day)
+   * therefore has nowhere to render, and it must not be counted either: a KPI never promises a number the
+   * list below cannot show. `/employee-status` is where a day off without a ca is still visible.
+   */
+  const tableAssignments = useMemo(
+    () =>
+      visibleAssignments.filter(
+        (assignment) =>
+          assignment.shift === null || !isDayOffTemplate(assignment.shift),
+      ),
+    [visibleAssignments],
+  );
+
+  /**
    * The branches the filter offers: the caller's own scope when they have one, otherwise the branches
    * they can read — for an employee that is the branch they work at (SCRUM-63), never one whose rows
    * would stay hidden.
@@ -475,7 +552,7 @@ export default function SchedulesPage() {
   const filtered = useMemo(() => {
     const keyword = query.trim().toLowerCase();
 
-    return visibleAssignments.filter((assignment) => {
+    return tableAssignments.filter((assignment) => {
       if (branchFilter !== ALL && assignment.branch_id !== branchFilter) {
         return false;
       }
@@ -492,7 +569,7 @@ export default function SchedulesPage() {
         .toLowerCase()
         .includes(keyword);
     });
-  }, [visibleAssignments, branchFilter, statusFilter, query]);
+  }, [tableAssignments, branchFilter, statusFilter, query]);
 
   const weekDays = useMemo(
     () => Array.from({ length: 7 }, (_, index) => addDays(weekStart, index)),
@@ -500,25 +577,41 @@ export default function SchedulesPage() {
   );
 
   /**
-   * The rows of the week table: every ca of the organization, earliest first, the day off last.
+   * The rows of the week table: every *working* ca of the organization, earliest first.
    *
-   * The catalogue is not the whole truth — a template deleted since the ca was written, or a failed
-   * `GET /api/shifts`, would drop a row that still holds assignments — so the embedded copy on the row
-   * keeps it visible instead of hiding work.
+   * A zero-length template ("Nghỉ") is a day off, not a time of day: since SCRUM-86 a day off is the
+   * `LEAVE` marker on the ca the employee holds, so it is deliberately not a row (and `ListShiftsUseCase`
+   * does not offer it either). The catalogue is not the whole truth — a template retired since the ca was
+   * written (SCRUM-85), or a failed `GET /api/shifts`, would drop a row that still holds assignments — so
+   * the embedded copy on the row keeps it visible instead of hiding work.
    */
   const shiftRows = useMemo(() => {
     const byId = new Map<string, Shift>();
 
-    shifts.forEach((shift) => byId.set(shift.id, shift));
+    shifts.forEach((shift) => {
+      if (!isDayOffTemplate(shift)) {
+        byId.set(shift.id, shift);
+      }
+    });
 
     visibleAssignments.forEach((assignment) => {
-      if (assignment.shift && !byId.has(assignment.shift.id)) {
+      if (
+        assignment.shift &&
+        !isDayOffTemplate(assignment.shift) &&
+        !byId.has(assignment.shift.id)
+      ) {
         byId.set(assignment.shift.id, assignment.shift);
       }
     });
 
     return Array.from(byId.values()).sort(compareShiftsByStartTime);
   }, [shifts, visibleAssignments]);
+
+  /**
+   * The week table's rows: the catalogue with one blank rest row in every real gap between two ca
+   * (`withRestRows`). The pauses are derived, never fetched — see the type above for why.
+   */
+  const tableRows = useMemo(() => withRestRows(shiftRows), [shiftRows]);
 
   /** One cell per ca × day, keyed by `shiftId|workDate`; the blocks in a cell read in name order. */
   const cellsByShiftAndDay = useMemo(() => {
@@ -576,28 +669,34 @@ export default function SchedulesPage() {
     [staff],
   );
 
-  const scheduledCount = visibleAssignments.filter(
+  const scheduledCount = tableAssignments.filter(
     (assignment) => assignment.status === "SCHEDULED",
   ).length;
-  const leaveCount = visibleAssignments.filter(
+  const leaveCount = tableAssignments.filter(
     (assignment) => assignment.status === "LEAVE",
   ).length;
   const employeeCount = new Set(
-    visibleAssignments.map((assignment) => assignment.employee_id),
+    tableAssignments.map((assignment) => assignment.employee_id),
   ).size;
   const branchCount = new Set(
-    visibleAssignments.map((assignment) => assignment.branch_id),
+    tableAssignments.map((assignment) => assignment.branch_id),
   ).size;
   const isCurrentWeek = weekStart === startOfWeek(todayInBangkok());
 
-  function openCreate(workDate: string) {
+  /**
+   * Opens the dialog for a new assignment. `lockedShift` is given when the click came from inside a ca row
+   * of the week table: that row *is* the ca being added, so it arrives already chosen and shown as a
+   * statement instead of making the manager pick the thing they just clicked on. The toolbar button calls
+   * this with no ca, which keeps the picker for an assignment that is not tied to a row.
+   */
+  function openCreate(workDate: string, lockedShift: Shift | null = null) {
     // SCRUM-63: the branch is not picked here any more — it is where the chosen employee works, set by
     // `selectEmployee` below. Picking the branch first would let somebody schedule a person into a
     // branch that is not theirs, which the API (`assertBranchManagedBy`) refuses anyway.
     setForm({
       employeeId: "",
       branchId: "",
-      shiftId: "",
+      shiftId: lockedShift?.id ?? "",
       workDate,
       status: "SCHEDULED",
       note: "",
@@ -608,7 +707,31 @@ export default function SchedulesPage() {
     setFormError("");
     setAssignBranchId("");
     setAssignError("");
-    setModal({ mode: "create", workDate });
+    setModal({ mode: "create", workDate, lockedShift });
+  }
+
+  /**
+   * Lets the manager pick a different ca after all — the same escape hatch the employee field has
+   * ("Đổi nhân viên"), so clicking the wrong row is not a dead end.
+   *
+   * The choice is kept only when the picker can actually show it: the options are the chosen employee's
+   * branch templates plus the branch-agnostic ones (SCRUM-63), and a `select` whose value no option
+   * carries would render as "Chọn ca" while still sending the old id.
+   */
+  function unlockShift() {
+    const locked = modal?.mode === "create" ? modal.lockedShift : null;
+
+    setModal((value) =>
+      value?.mode === "create" ? { ...value, lockedShift: null } : value,
+    );
+    setForm((value) => ({
+      ...value,
+      shiftId:
+        locked && (locked.branch_id === null || locked.branch_id === value.branchId)
+          ? locked.id
+          : "",
+    }));
+    setFormError("");
   }
 
   function openEdit(assignment: ShiftAssignment) {
@@ -723,6 +846,13 @@ export default function SchedulesPage() {
   }
 
   async function submit() {
+    // Opening the dialog from a ca row fixes that ca (see `openCreate`); the toolbar button leaves the
+    // picker free. Both end up here, so the ca is resolved once and everything below — the validation, the
+    // clock rule, the payload — reads the same value.
+    const isEdit = modal?.mode === "edit";
+    const lockedShift = modal?.mode === "create" ? modal.lockedShift : null;
+    const shiftId = lockedShift?.id ?? form.shiftId;
+
     if (!form.employeeId) {
       setFormError(t("schedules.error.employeeRequired"));
       return;
@@ -733,7 +863,7 @@ export default function SchedulesPage() {
       return;
     }
 
-    if (!form.shiftId) {
+    if (!shiftId) {
       setFormError(t("schedules.error.shiftRequired"));
       return;
     }
@@ -743,11 +873,34 @@ export default function SchedulesPage() {
       return;
     }
 
+    // A ca that has already finished cannot be worked, so a *new* row on it is one nobody can clock in for
+    // (the API repeats this in `CreateShiftAssignmentUseCase`; the check here is what turns it into a
+    // message inside the dialog instead of a round trip). Editing an existing row is a modification and
+    // stays possible, which is why this is the create path only — the same reason a day off skips it.
+    // The locked ca is used as it is: a template of a row the catalogue no longer carries (`GET /api/shifts`
+    // failed, or it was deleted since the ca was written) still has hours to judge the rule by.
+    const pickedShift =
+      lockedShift ?? shifts.find((shift) => shift.id === shiftId) ?? null;
+
+    if (
+      !isEdit &&
+      form.status === "SCHEDULED" &&
+      isShiftAlreadyOver(new Date(), form.workDate, pickedShift)
+    ) {
+      setFormError(
+        t("schedules.error.shiftEnded", {
+          shift: pickedShift?.name ?? t("common.shift"),
+          date: formatDayMonth(form.workDate, locale),
+          time: formatClockTime(pickedShift?.end_time ?? null),
+        }),
+      );
+      return;
+    }
+
     setSaving(true);
     setFormError("");
 
     try {
-      const isEdit = modal?.mode === "edit";
       const response = await fetch(
         isEdit ? `/api/schedules/${modal.assignment.id}` : "/api/schedules",
         {
@@ -756,7 +909,7 @@ export default function SchedulesPage() {
           body: JSON.stringify({
             employee_id: form.employeeId,
             branch_id: form.branchId,
-            shift_id: form.shiftId,
+            shift_id: shiftId,
             work_date: form.workDate,
             status: form.status,
             note: form.note.trim() || null,
@@ -831,17 +984,46 @@ export default function SchedulesPage() {
     }
   }
 
-  // SCRUM-63: the branch belongs to the chosen employee, so before one is chosen (`branchId === ""`) there
-  // is nothing to match a template against — not even the organization-wide ones with `branch_id = null`.
-  const selectableShifts =
-    form.branchId === ""
-      ? []
-      : shifts
-          .filter(
-            (shift) =>
-              shift.branch_id === null || shift.branch_id === form.branchId,
-          )
-          .sort(compareShiftsByStartTime);
+  /**
+   * The ca the create dialog was opened from — clicking "Thêm" inside a ca row of the week table fixes
+   * that row's ca (see `openCreate`), while the toolbar button ("Xếp ca") leaves it `null` so the picker
+   * stays available. `unlockShift` clears it when the manager wants a different ca after all.
+   */
+  const lockedCreateShift = modal?.mode === "create" ? modal.lockedShift : null;
+
+  /**
+   * The ca the picker offers: the templates of the chosen employee's branch plus the branch-agnostic ones
+   * (SCRUM-63), in timetable order.
+   *
+   * SCRUM-86: a day off is not a ca any more — it is the `LEAVE` marker written on the ca the employee
+   * holds when the đơn is approved — so the zero-length `Nghỉ` template is not offered (`isDayOffTemplate`
+   * also covers a legacy branch-specific zero-length template).
+   *
+   * SCRUM-85: a retired template (`Ca tối`) is not offered either, *except* the one the row being edited
+   * already points at. Without that exception the select would hold a value no option carries — it would
+   * render as "Chọn ca" while still sending the old id — so a manager could not even change the status of
+   * a legacy ca.
+   */
+  const selectableShifts = useMemo(() => {
+    if (form.branchId === "") {
+      return [];
+    }
+
+    const options = shifts
+      .filter(
+        (shift) =>
+          !isDayOffTemplate(shift) &&
+          (shift.branch_id === null || shift.branch_id === form.branchId),
+      )
+      .sort(compareShiftsByStartTime);
+    const editingShift = modal?.mode === "edit" ? modal.assignment.shift : null;
+
+    if (editingShift && !options.some((shift) => shift.id === editingShift.id)) {
+      options.push(editingShift);
+    }
+
+    return options;
+  }, [form.branchId, modal, shifts]);
 
   return (
     <div className="space-y-5">
@@ -1105,154 +1287,198 @@ export default function SchedulesPage() {
                   </tr>
                 )}
 
-                {shiftRows.map((shift) => (
-                  <tr
-                    key={shift.id}
-                    className="border-t border-slate-100 align-top"
-                  >
-                    <th
-                      scope="row"
-                      className="bg-app px-4 py-3 text-left align-top"
+                {tableRows.map((row) =>
+                  row.kind === "break" ? (
+                    /*
+                      A pause between two ca. Its hours come from the two templates around it, so the row
+                      cannot disagree with them, and its cells stay empty on purpose: a break is not work,
+                      nothing can be assigned to it and there is no "Thêm" here.
+                    */
+                    <tr
+                      key={`break-${row.startTime}-${row.endTime}`}
+                      className="border-t border-dashed border-slate-200"
                     >
-                      <p className="text-[11px] font-semibold text-slate-800">
-                        {shift.name}
-                      </p>
-                      <p className="mt-0.5 text-[10px] font-normal tabular-nums text-slate-500">
-                        {isDayOffTemplate(shift)
-                          ? t("schedules.dayOff")
-                          : `${formatClockTime(shift.start_time, "--:--")} – ${formatClockTime(shift.end_time, "--:--")}`}
-                      </p>
-                      {/* A template only some branches use (SCRUM-30 sets `branch_id`) — name it. */}
-                      {shift.branch_id !== null && (
-                        <p className="mt-0.5 text-[10px] font-normal text-slate-400">
-                          {branchNames.get(shift.branch_id) ?? t("common.deletedBranch")}
+                      <th scope="row" className="bg-app px-4 py-3 text-left align-top">
+                        <p className="text-[11px] font-semibold text-slate-400">
+                          {t("schedules.breakLabel")}
                         </p>
-                      )}
-                    </th>
-
-                    {weekDays.map((day) => (
-                      <td
-                        key={day}
-                        className="group border-l border-slate-100 px-2 py-2 align-top transition-colors hover:bg-slate-50/70"
+                        <p className="mt-0.5 text-[10px] font-normal tabular-nums text-slate-400">
+                          {formatClockTime(row.startTime)} – {formatClockTime(row.endTime)}
+                        </p>
+                      </th>
+                      {weekDays.map((day) => (
+                        <td
+                          key={day}
+                          aria-hidden="true"
+                          className="border-l border-slate-100 bg-slate-50/40 px-2 py-2"
+                        >
+                          <div className="h-7" />
+                        </td>
+                      ))}
+                    </tr>
+                  ) : (
+                    <tr
+                      key={row.shift.id}
+                      className="border-t border-slate-100 align-top"
+                    >
+                      <th
+                        scope="row"
+                        className="bg-app px-4 py-3 text-left align-top"
                       >
-                        <div className="space-y-1.5">
-                          {(
-                            cellsByShiftAndDay.get(`${shift.id}|${day}`) ?? []
-                          ).map((assignment) => (
-                            <div
-                              key={assignment.id}
-                              className={`rounded-lg border px-2.5 py-2 ${
-                                STATUS_SURFACES[assignment.status]
-                              }`}
-                            >
-                              <div className="flex items-start gap-1.5">
-                                <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-surface text-[9px] font-bold text-primary">
-                                  {initials(assignment.employee?.full_name)}
-                                </span>
+                        <p className="text-[11px] font-semibold text-slate-800">
+                          {row.shift.name}
+                        </p>
+                        <p className="mt-0.5 text-[10px] font-normal tabular-nums text-slate-500">
+                          {`${formatClockTime(row.shift.start_time, "--:--")} – ${formatClockTime(row.shift.end_time, "--:--")}`}
+                        </p>
+                        {/* A template only some branches use (SCRUM-30 sets `branch_id`) — name it. */}
+                        {row.shift.branch_id !== null && (
+                          <p className="mt-0.5 text-[10px] font-normal text-slate-400">
+                            {branchNames.get(row.shift.branch_id) ?? t("common.deletedBranch")}
+                          </p>
+                        )}
+                      </th>
 
-                                <div className="min-w-0 flex-1">
-                                  <p className="text-[11px] font-semibold text-slate-900">
-                                    {assignment.employee?.full_name ??
-                                      t("schedules.deletedEmployee")}
-                                    {inactiveEmployeeIds.has(
-                                      assignment.employee_id,
-                                    ) && (
-                                      <span className="ml-1 font-normal text-amber-600">
-                                        {t("common.inactiveTag")}
-                                      </span>
+                      {weekDays.map((day) => (
+                        <td
+                          key={day}
+                          className="group border-l border-slate-100 px-2 py-2 align-top transition-colors hover:bg-slate-50/70"
+                        >
+                          <div className="space-y-1.5">
+                            {(
+                              cellsByShiftAndDay.get(`${row.shift.id}|${day}`) ?? []
+                            ).map((assignment) => (
+                              <div
+                                key={assignment.id}
+                                className={`rounded-lg border px-2.5 py-2 ${
+                                  STATUS_SURFACES[assignment.status]
+                                }`}
+                              >
+                                <div className="flex items-start gap-1.5">
+                                  <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-surface text-[9px] font-bold text-primary">
+                                    {initials(assignment.employee?.full_name)}
+                                  </span>
+
+                                  <div className="min-w-0 flex-1">
+                                    <p className="text-[11px] font-semibold text-slate-900">
+                                      {assignment.employee?.full_name ??
+                                        t("schedules.deletedEmployee")}
+                                      {inactiveEmployeeIds.has(
+                                        assignment.employee_id,
+                                      ) && (
+                                        <span className="ml-1 font-normal text-amber-600">
+                                          {t("common.inactiveTag")}
+                                        </span>
+                                      )}
+                                    </p>
+                                    {assignment.status === "LEAVE" ? (
+                                      /*
+                                        SCRUM-86: an approved “Nghỉ phép” đơn marks the ca it covers as LEAVE,
+                                        so the box itself says “Nghỉ”. An empty cell in the same row is a
+                                        person who simply has no ca that day — a different fact, and the one
+                                        this label exists to tell apart.
+                                      */
+                                      <p className="mt-0.5 text-[10px] font-semibold text-blue-700">
+                                        {t("schedules.leaveBlock")}
+                                      </p>
+                                    ) : (
+                                      <p className="mt-0.5 truncate text-[10px] text-slate-500">
+                                        {branchNames.get(assignment.branch_id) ??
+                                          t("common.deletedBranch")}
+                                      </p>
                                     )}
-                                  </p>
-                                  <p className="mt-0.5 truncate text-[10px] text-slate-500">
-                                    {branchNames.get(assignment.branch_id) ??
-                                      t("common.deletedBranch")}
-                                  </p>
+                                  </div>
+
+                                  {can("schedule:manage") &&
+                                    manageableIds.has(assignment.branch_id) && (
+                                      <div className="flex shrink-0 items-center gap-0.5">
+                                        <button
+                                          type="button"
+                                          onClick={() => openEdit(assignment)}
+                                          title={t("schedules.editShiftTitle")}
+                                          aria-label={t("schedules.editShiftAria", {
+                                            name:
+                                              assignment.employee?.full_name ??
+                                              t("schedules.thisEmployee"),
+                                          })}
+                                          className="rounded p-0.5 text-slate-400 transition-colors hover:bg-surface hover:text-primary"
+                                        >
+                                          <Pencil size={11} />
+                                        </button>
+                                        <button
+                                          type="button"
+                                          onClick={() => void remove(assignment)}
+                                          disabled={deletingId === assignment.id}
+                                          title={t("schedules.deleteShiftTitle")}
+                                          aria-label={t("schedules.deleteShiftAria", {
+                                            name:
+                                              assignment.employee?.full_name ??
+                                              t("schedules.thisEmployee"),
+                                          })}
+                                          className="rounded p-0.5 text-slate-400 transition-colors hover:bg-surface hover:text-rose-600 disabled:opacity-50"
+                                        >
+                                          {deletingId === assignment.id ? (
+                                            <Loader2
+                                              size={11}
+                                              className="animate-spin"
+                                            />
+                                          ) : (
+                                            <Trash2 size={11} />
+                                          )}
+                                        </button>
+                                      </div>
+                                    )}
                                 </div>
 
-                                {can("schedule:manage") &&
-                                  manageableIds.has(assignment.branch_id) && (
-                                    <div className="flex shrink-0 items-center gap-0.5">
-                                      <button
-                                        type="button"
-                                        onClick={() => openEdit(assignment)}
-                                        title={t("schedules.editShiftTitle")}
-                                        aria-label={t("schedules.editShiftAria", {
-                                          name:
-                                            assignment.employee?.full_name ??
-                                            t("schedules.thisEmployee"),
-                                        })}
-                                        className="rounded p-0.5 text-slate-400 transition-colors hover:bg-surface hover:text-primary"
-                                      >
-                                        <Pencil size={11} />
-                                      </button>
-                                      <button
-                                        type="button"
-                                        onClick={() => void remove(assignment)}
-                                        disabled={deletingId === assignment.id}
-                                        title={t("schedules.deleteShiftTitle")}
-                                        aria-label={t("schedules.deleteShiftAria", {
-                                          name:
-                                            assignment.employee?.full_name ??
-                                            t("schedules.thisEmployee"),
-                                        })}
-                                        className="rounded p-0.5 text-slate-400 transition-colors hover:bg-surface hover:text-rose-600 disabled:opacity-50"
-                                      >
-                                        {deletingId === assignment.id ? (
-                                          <Loader2
-                                            size={11}
-                                            className="animate-spin"
-                                          />
-                                        ) : (
-                                          <Trash2 size={11} />
-                                        )}
-                                      </button>
-                                    </div>
-                                  )}
+                                {/*
+                                  A cancelled ca keeps its pill; the day off is said by the block itself
+                                  (`schedules.leaveBlock`), so a second “Nghỉ phép” pill would only repeat it.
+                                */}
+                                {assignment.status === "CANCELLED" && (
+                                  <span
+                                    className={`mt-1 inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold ${
+                                      STATUS_BADGES[assignment.status]
+                                    }`}
+                                  >
+                                    {shiftAssignmentStatusLabel(assignment.status, t)}
+                                  </span>
+                                )}
+
+                                {assignment.note && (
+                                  <p
+                                    className="mt-0.5 truncate text-[10px] text-slate-500"
+                                    title={assignment.note}
+                                  >
+                                    {assignment.note}
+                                  </p>
+                                )}
                               </div>
+                            ))}
 
-                              {assignment.status !== "SCHEDULED" && (
-                                <span
-                                  className={`mt-1 inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold ${
-                                    STATUS_BADGES[assignment.status]
-                                  }`}
-                                >
-                                  {shiftAssignmentStatusLabel(assignment.status, t)}
-                                </span>
-                              )}
-
-                              {assignment.note && (
-                                <p
-                                  className="mt-0.5 truncate text-[10px] text-slate-500"
-                                  title={assignment.note}
-                                >
-                                  {assignment.note}
-                                </p>
-                              )}
-                            </div>
-                          ))}
-
-                          {/*
-                            The old per-day "Thêm ca" moved into the cell: it is the only spot that knows
-                            both the day and the ca being added. Revealed on hover so the week stays a
-                            table, and reachable by keyboard through `focus-visible`.
-                          */}
-                          {can("schedule:manage") && (
-                            <button
-                              type="button"
-                              onClick={() => openCreate(day)}
-                              aria-label={t("schedules.addShiftAria", {
-                                shift: shift.name,
-                                day: formatDayMonth(day),
-                              })}
-                              className="flex w-full items-center justify-center gap-1 rounded-lg border border-dashed border-slate-200 py-2 text-[10px] font-semibold text-slate-400 transition-opacity hover:border-primary hover:text-primary focus-visible:opacity-100 md:py-1.5 md:opacity-0 md:group-hover:opacity-100"
-                            >
-                              <Plus size={11} /> {t("schedules.addShift")}
-                            </button>
-                          )}
-                        </div>
-                      </td>
-                    ))}
-                  </tr>
-                ))}
+                            {/*
+                              The old per-day "Thêm ca" moved into the cell: it is the only spot that knows
+                              both the day and the ca being added. Revealed on hover so the week stays a
+                              table, and reachable by keyboard through `focus-visible`.
+                            */}
+                            {can("schedule:manage") && (
+                              <button
+                                type="button"
+                                onClick={() => openCreate(day, row.shift)}
+                                aria-label={t("schedules.addShiftAria", {
+                                  shift: row.shift.name,
+                                  day: formatDayMonth(day),
+                                })}
+                                className="flex w-full items-center justify-center gap-1 rounded-lg border border-dashed border-slate-200 py-2 text-[10px] font-semibold text-slate-400 transition-opacity hover:border-primary hover:text-primary focus-visible:opacity-100 md:py-1.5 md:opacity-0 md:group-hover:opacity-100"
+                              >
+                                <Plus size={11} /> {t("schedules.addShift")}
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                      ))}
+                    </tr>
+                  )
+                )}
               </tbody>
             </table>
           </div>
@@ -1490,42 +1716,72 @@ export default function SchedulesPage() {
                     </div>
                   )}
 
-                <label className="block text-xs font-semibold text-slate-600">
-                  {t("common.shift")} <span className="text-rose-500">*</span>
-                  <select
-                    value={form.shiftId}
-                    onChange={(event) =>
-                      setForm((value) => ({
-                        ...value,
-                        shiftId: event.target.value,
-                      }))
-                    }
-                    disabled={selectableShifts.length === 0}
-                    className={inputClassName}
-                  >
-                    <option value="">{t("schedules.chooseShift")}</option>
-                    {selectableShifts.map((shift) => (
-                      <option key={shift.id} value={shift.id}>
-                        {shift.name} ({formatClockTime(shift.start_time, "--:--")} –{" "}
-                        {formatClockTime(shift.end_time, "--:--")})
-                      </option>
-                    ))}
-                  </select>
+                <div>
+                  <p className="text-xs font-semibold text-slate-600">
+                    {t("common.shift")} <span className="text-rose-500">*</span>
+                  </p>
+
+                  {/*
+                    Opened from a ca row of the week table: that row already answered "which ca", so it is
+                    shown as a statement (with the escape hatch that lets it be changed) instead of asking
+                    the manager to pick again what they just clicked. The toolbar button keeps the picker.
+                  */}
+                  {lockedCreateShift ? (
+                    <div className="mt-1 flex items-center justify-between gap-2 rounded-lg border border-slate-200 bg-app px-3 py-2.5">
+                      <span className="min-w-0 truncate text-sm font-normal text-slate-700">
+                        {lockedCreateShift.name}
+                        <span className="ml-1 text-[11px] tabular-nums text-slate-500">
+                          ({formatClockTime(lockedCreateShift.start_time, "--:--")} –{" "}
+                          {formatClockTime(lockedCreateShift.end_time, "--:--")})
+                        </span>
+                      </span>
+                      <button
+                        type="button"
+                        onClick={unlockShift}
+                        className="shrink-0 text-[11px] font-semibold text-primary hover:underline"
+                      >
+                        {t("schedules.changeShift")}
+                      </button>
+                    </div>
+                  ) : (
+                    <select
+                      value={form.shiftId}
+                      onChange={(event) =>
+                        setForm((value) => ({
+                          ...value,
+                          shiftId: event.target.value,
+                        }))
+                      }
+                      disabled={selectableShifts.length === 0}
+                      className={inputClassName}
+                    >
+                      <option value="">{t("schedules.chooseShift")}</option>
+                      {selectableShifts.map((shift) => (
+                        <option key={shift.id} value={shift.id}>
+                          {shift.name} ({formatClockTime(shift.start_time, "--:--")} –{" "}
+                          {formatClockTime(shift.end_time, "--:--")})
+                        </option>
+                      ))}
+                    </select>
+                  )}
+
                   {/*
                     An empty picker used to be silent. The catalogue is per organization (SCRUM-53),
                     so an organization whose templates were never seeded has nothing to choose from —
                     say so rather than letting the operator guess.
                   */}
-                  {shifts.length === 0 ? (
+                  {shifts.length === 0 && !lockedCreateShift ? (
                     <span className="mt-1 block text-[11px] font-normal text-amber-600">
                       {t("schedules.noCatalogue")}
                     </span>
-                  ) : form.branchId !== "" && selectableShifts.length === 0 ? (
+                  ) : !lockedCreateShift &&
+                    form.branchId !== "" &&
+                    selectableShifts.length === 0 ? (
                     <span className="mt-1 block text-[11px] font-normal text-amber-600">
                       {t("schedules.shiftNoneForBranch")}
                     </span>
                   ) : null}
-                </label>
+                </div>
               </div>
 
               <div className="grid gap-4 sm:grid-cols-2">

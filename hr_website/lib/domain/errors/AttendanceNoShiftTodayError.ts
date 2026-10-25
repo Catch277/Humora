@@ -8,7 +8,7 @@
 export class AttendanceNoShiftTodayError extends Error {
   constructor() {
     super(
-      "You have no scheduled shift for this business day, so there is nothing to check in against.",
+      "Bạn không có ca làm việc nào được xếp cho ngày làm việc này nên không có ca để chấm công.",
     );
     this.name = "AttendanceNoShiftTodayError";
   }

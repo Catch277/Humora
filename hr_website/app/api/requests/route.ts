@@ -58,6 +58,17 @@
  *       `user_id` is not the caller), and every role holds `request:create` **except the
  *       organization's `OWNER`** (SCRUM-63): the owner sits above the approval chain and reviews the
  *       queue instead of filing into it.
+ *
+ *       SCRUM-82: a đơn that acts on a day must name it (`work_date`), and "Đổi ca" additionally names the
+ *       ca (`shift_id`) and the colleague who takes it (`target_employee_id`). The day may not be in the
+ *       past — a schedule is a statement about work still to come, exactly like `POST /api/schedules`
+ *       (`SCRUM-81`) — and the ca named must be one the caller still holds, on that day, and not already
+ *       over. `GET /api/requests/swap-candidates` is what fills the colleague picker.
+ *
+ *       SCRUM-86: a "Nghỉ phép" đơn must name a day on which the caller holds a `SCHEDULED` ca. Approval
+ *       marks those ca `LEAVE` (that is what `/schedules` draws as "Nghỉ"), so a day nobody scheduled is
+ *       answered with `400` instead of being stored and then written as a row on the zero-length "Nghỉ"
+ *       template.
  *     tags:
  *       - Requests
  *     requestBody:
@@ -88,6 +99,22 @@
  *                 maxLength: 500
  *                 nullable: true
  *                 description: "Nội dung chi tiết; bỏ trống hoặc null là đơn không có ghi chú thêm."
+ *               work_date:
+ *                 type: string
+ *                 format: date
+ *                 nullable: true
+ *                 example: "2026-10-20"
+ *                 description: "Ngày đơn hướng tới (SCRUM-82). Bắt buộc với nghỉ phép / đổi ca / điều chỉnh công, phải từ hôm nay trở đi (giờ Asia/Bangkok); bỏ trống với đơn “Khác”. Với đơn nghỉ phép, ngày đó phải có ca bạn đang được xếp (SCRUM-86)."
+ *               shift_id:
+ *                 type: string
+ *                 format: uuid
+ *                 nullable: true
+ *                 description: "Ca cần đổi (public.shifts.id). Bắt buộc với đơn “Đổi ca”, và phải là ca bạn đang được xếp trong ngày đó."
+ *               target_employee_id:
+ *                 type: string
+ *                 format: uuid
+ *                 nullable: true
+ *                 description: "Đồng nghiệp nhận ca (public.users.id). Bắt buộc với đơn “Đổi ca”; phải nằm trong danh sách GET /api/requests/swap-candidates."
  *     responses:
  *       201:
  *         description: The stored request, with its requester embedded.
@@ -96,7 +123,7 @@
  *             schema:
  *               $ref: '#/components/schemas/RequestEntity'
  *       400:
- *         description: The JSON body is invalid, request_type is unknown, or title/content is blank or too long.
+ *         description: The JSON body is invalid, request_type is unknown, title/content is blank or too long, work_date is missing or malformed for the type, shift_id/target_employee_id is missing or malformed for a "Đổi ca" request, the day is in the past, the ca is no longer the caller's own or has already ended, or a "Nghỉ phép" names a day on which the caller has no scheduled ca (SCRUM-86).
  *         content:
  *           application/json:
  *             schema:
@@ -119,6 +146,12 @@
  *           application/json:
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
+ *       409:
+ *         description: The colleague named by a "Đổi ca" request cannot take that ca (SCRUM-82) — they are not in the caller's branch, have left, or took an overlapping ca in the meantime. The screen reloads GET /api/requests/swap-candidates and the caller picks again.
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
  *       500:
  *         description: An unexpected server error occurred.
  *         content:
@@ -128,23 +161,22 @@
  */
 import { NextResponse, type NextRequest } from "next/server";
 
-import {
-  isRequestType,
-  MAX_REQUEST_CONTENT_LENGTH,
-  MAX_REQUEST_TITLE_LENGTH,
-  REQUEST_TYPES,
-} from "@/lib/domain/entities/RequestEntity";
 import { BranchForbiddenError } from "@/lib/domain/errors/BranchForbiddenError";
 import { BranchNotFoundError } from "@/lib/domain/errors/BranchNotFoundError";
 import { RequestBranchForbiddenError } from "@/lib/domain/errors/RequestBranchForbiddenError";
 import { RequestBranchNotAssignedError } from "@/lib/domain/errors/RequestBranchNotAssignedError";
 import { RequestInputError } from "@/lib/domain/errors/RequestInputError";
+import { RequestShiftDetailsError } from "@/lib/domain/errors/RequestShiftDetailsError";
+import { RequestSwapTargetNotFreeError } from "@/lib/domain/errors/RequestSwapTargetNotFreeError";
 import { SupabaseBranchRepository } from "@/lib/infrastructure/repositories/SupabaseBranchRepository";
 import { SupabaseRequestRepository } from "@/lib/infrastructure/repositories/SupabaseRequestRepository";
+import { SupabaseShiftAssignmentRepository } from "@/lib/infrastructure/repositories/SupabaseShiftAssignmentRepository";
+import { SupabaseSwapCandidateRepository } from "@/lib/infrastructure/repositories/SupabaseSwapCandidateRepository";
 import { createSupabaseServerClient } from "@/lib/infrastructure/supabaseClient";
 import { CreateRequestUseCase } from "@/lib/usecases/CreateRequestUseCase";
 import { GetFilteredRequestsUseCase } from "@/lib/usecases/GetFilteredRequestsUseCase";
 import { requireCapability } from "@/app/api/_lib/requireCaller";
+import { parseRequestPayload } from "@/app/api/requests/_lib/requestRequest";
 
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -195,66 +227,21 @@ export async function GET(request: NextRequest) {
   }
 }
 
-type CreateRequestBody = {
-  branch_id?: unknown;
-  request_type?: unknown;
-  title?: unknown;
-  content?: unknown;
-};
-
 export async function POST(request: Request) {
-  let body: CreateRequestBody;
+  let payload: unknown;
 
   try {
-    body = await request.json();
+    payload = await request.json();
   } catch {
     return NextResponse.json({ error: "Nội dung yêu cầu phải là JSON hợp lệ." }, { status: 400 });
   }
 
-  if (
-    typeof body.branch_id !== "string" ||
-    !UUID_PATTERN.test(body.branch_id)
-  ) {
-    return NextResponse.json(
-      { error: "branch_id là bắt buộc và phải là UUID." },
-      { status: 400 },
-    );
-  }
+  // The parser validates shapes only (a UUID, a calendar date, a length) and whether the request type
+  // carries the field at all (SCRUM-82); the rules that *act* on the values are the use case's.
+  const parsed = parseRequestPayload(payload);
 
-  if (!isRequestType(body.request_type)) {
-    return NextResponse.json(
-      { error: `request_type phải là một trong: ${REQUEST_TYPES.join(", ")}.` },
-      { status: 400 },
-    );
-  }
-
-  if (
-    typeof body.title !== "string" ||
-    !body.title.trim() ||
-    body.title.trim().length > MAX_REQUEST_TITLE_LENGTH
-  ) {
-    return NextResponse.json(
-      {
-        error: `title là bắt buộc và tối đa ${MAX_REQUEST_TITLE_LENGTH} ký tự.`,
-      },
-      { status: 400 },
-    );
-  }
-
-  // `content` is optional and the screen clears it with `value.trim() || null`, so an omitted field
-  // and an explicit `null` are both valid — only a wrong type or an over-long note is a `400`.
-  if (
-    body.content !== undefined &&
-    body.content !== null &&
-    (typeof body.content !== "string" ||
-      body.content.trim().length > MAX_REQUEST_CONTENT_LENGTH)
-  ) {
-    return NextResponse.json(
-      {
-        error: `content tối đa ${MAX_REQUEST_CONTENT_LENGTH} ký tự.`,
-      },
-      { status: 400 },
-    );
+  if (!parsed.ok) {
+    return NextResponse.json({ error: parsed.error }, { status: 400 });
   }
 
   try {
@@ -269,12 +256,13 @@ export async function POST(request: Request) {
     const createRequest = new CreateRequestUseCase(
       new SupabaseRequestRepository(),
       new SupabaseBranchRepository(),
+      // SCRUM-82: a "Đổi ca" đơn is checked against the caller's own schedule and against the colleague
+      // picker's rule before it is stored.
+      new SupabaseShiftAssignmentRepository(),
+      new SupabaseSwapCandidateRepository(),
     );
     const created = await createRequest.execute({
-      branchId: body.branch_id,
-      requestType: body.request_type,
-      title: body.title,
-      content: typeof body.content === "string" ? body.content : null,
+      ...parsed.input,
       // The requester is the session, never the body — and so are the role and the branch they
       // belong to, which SCRUM-63 compares against the branch the đơn names.
       requesterId: caller.userId,
@@ -290,6 +278,19 @@ export async function POST(request: Request) {
 
     if (error instanceof RequestInputError) {
       return NextResponse.json({ error: error.message }, { status: 400 });
+    }
+
+    // SCRUM-82: the day is in the past, the ca is not the caller's, or an id of the "Đổi ca" pair is
+    // missing — all of them are the caller's payload being wrong, so `400` with the sentence that says
+    // which one.
+    if (error instanceof RequestShiftDetailsError) {
+      return NextResponse.json({ error: error.message }, { status: 400 });
+    }
+
+    // SCRUM-82: the colleague the đơn names cannot take that ca. A business conflict with the schedule,
+    // not a malformed payload — the screen reloads the candidate list and the caller picks again.
+    if (error instanceof RequestSwapTargetNotFreeError) {
+      return NextResponse.json({ error: error.message }, { status: 409 });
     }
 
     // SCRUM-63: an employee files for their own branch, an unassigned account files nothing, and a

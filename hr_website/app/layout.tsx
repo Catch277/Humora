@@ -3,6 +3,7 @@ import LocaleProvider from "@/components/LocaleProvider";
 import ProfileProvider from "@/components/ProfileProvider";
 import Sidebar from "@/components/Sidebar";
 import { DEFAULT_LOCALE, LOCALE_COOKIE, isLocale } from "@/lib/i18n/locales";
+import { SIDEBAR_COOKIE, isSidebarCollapsed } from "@/lib/sidebarPreference";
 import type { Metadata } from "next";
 import { Be_Vietnam_Pro } from "next/font/google";
 import { cookies } from "next/headers";
@@ -55,6 +56,9 @@ const THEME_INIT_SCRIPT = `
  *
  * The language is read from the `humora-locale` cookie here — on the server — so `<html lang>` is already
  * right in the first byte of HTML that a browser, a screen reader or a translation prompt sees.
+ *
+ * The sidebar's width preference is read here for the same reason (`humora-sidebar`): a width the server
+ * render does not know would snap from 224px to 64px the moment React hydrates.
  */
 export default async function RootLayout({
   children,
@@ -64,6 +68,9 @@ export default async function RootLayout({
   const cookieStore = await cookies();
   const storedLocale = cookieStore.get(LOCALE_COOKIE)?.value;
   const locale = isLocale(storedLocale) ? storedLocale : DEFAULT_LOCALE;
+  const sidebarCollapsed = isSidebarCollapsed(
+    cookieStore.get(SIDEBAR_COOKIE)?.value,
+  );
 
   return (
     // `suppressHydrationWarning`: lớp `.dark` do script trên gắn trước khi React hydrate.
@@ -76,7 +83,7 @@ export default async function RootLayout({
       >
         <ProfileProvider>
           <LocaleProvider initialLocale={locale}>
-            <Sidebar />
+            <Sidebar initialCollapsed={sidebarCollapsed} />
             <div className="flex min-w-0 flex-1 flex-col md:overflow-hidden">
               <Header />
               <main className="min-h-0 flex-1 bg-app p-4 md:overflow-y-auto md:p-6">

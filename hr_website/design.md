@@ -153,8 +153,10 @@ is the workhorse for labels and buttons.
   the keyboard without resizing the layout viewport, so a field at the bottom of a modal would otherwise
   stay hidden behind it. See §4.4.
 - Content is capped at `max-w-[1440px]` and centred; gutters `p-4` → `md:p-6`.
-- Sidebar `w-56`, hidden below `md` (the phone gets the drawer of §4.4 instead). Header `h-16`,
-  `sticky top-0 z-10`, `border-b border-slate-200/80`.
+- Sidebar `w-56`, hidden below `md` (the phone gets the drawer of §4.4 instead). It collapses to an
+  icon-only rail (`w-16`) from a toggle at its foot; the choice is the `humora-sidebar` cookie, read by
+  `app/layout.tsx` so the first paint already has the right width, and written by `Sidebar` itself. Header
+  `h-16`, `sticky top-0 z-10`, `border-b border-slate-200/80`.
 - The header row shrinks on a phone: hamburger + `min-w-0 flex-1` search + one theme button + bell +
   sign-out. The three-way theme group and the `⌘K` hint are `md`-and-up only.
 
@@ -473,6 +475,13 @@ text-slate-400`. The brand block is the accent square + two-line name; the foote
 `m-3 rounded-xl border border-blue-100 bg-[#F1F5FF] p-3` with the branch and shift summary. **Every new
 screen must be added here** (lucide icon + Vietnamese label) so navigation stays complete.
 
+Collapsed state: the same link without `gap-3 px-3`, with `justify-center px-0`, its label kept as
+`sr-only` and repeated in `title` — an icon rail whose links have no accessible name is not shippable.
+The section label becomes a `h-px bg-slate-100` rule, the footer card becomes the `OrganizationCard
+compact` chip (`h-10`, `Landmark`, name in `title`), and the toggle (`PanelLeftClose` / `PanelLeftOpen`,
+`aria-expanded` + `aria-controls`) stays in the same footer position in both states. The width is the
+only animated property (`transition-[width] duration-200 motion-reduce:transition-none`).
+
 ### 7.13 Global search (Header)
 
 Rounded search field on the header bar — `rounded-full border border-slate-200 bg-[#F8F9FF] py-2 pl-10
@@ -541,8 +550,9 @@ screen never composes a notification — it labels, groups and links what it fin
   `const { t } = useLocale()` (`components/LocaleProvider.tsx`) and `t("header.signOut")`;
   `components/navigation.ts` stores a `labelKey`, never a label. The active locale is the `humora-locale`
   cookie — `app/layout.tsx` reads it on the server so `<html lang>` and the first paint are already right —
-  and `components/LanguageToggle.tsx` switches it (both buttons from `md` up, one cycling button below
-  `md`, like the theme switch). A screen that has not been migrated yet keeps its Vietnamese literals and
+  and `components/LanguageToggle.tsx` switches it: one box on every width (globe, active code, caret) that
+  opens a menu of the languages with their flags and native names, closing on outside click / Escape like
+  the header's search dropdown. A screen that has not been migrated yet keeps its Vietnamese literals and
   renders exactly as before: migrate screen by screen, never in one sweep. A **public** screen carries the
   switch itself — `/login` and `/register` render `LanguageToggle` in their card, because `Header` returns
   `null` on a public path and a visitor who has never signed in must still be able to reach English.
@@ -760,8 +770,14 @@ Known inconsistencies to fix when the relevant screen is next touched (do not ma
    characters and a click on "Tìm", and could not tell an employee who had quit from one who still works. Its
    "Ca làm việc" `<select>` reads the per-organization catalogue, so an unseeded organization gets a hint
    naming `supabase/sql/SCRUM-58_shift_catalogue.sql` instead of an unexplained empty list. The week is a
-   table now (§7.7): one row per ca with `Nghỉ` last, seven day columns, one block per assignment, and the
-   picker ordered by the same `compareShiftsByStartTime`. The `MockShift`
+   table now (§7.7): one row per *working* ca, seven day columns, one block per assignment, and the picker
+   ordered by the same `compareShiftsByStartTime`. Since SCRUM-84 the timetable is fixed — Ca sáng
+   08:30–12:30, Ca chiều 13:30–17:30, Tăng ca 18:00–22:00 — and each gap between two ca is a blank "Nghỉ
+   giữa ca" row the screen derives from the hours (`withRestRows`); it has no cells to click, because a
+   break is not a template and nothing can be scheduled onto it. `Ca tối` is retired (SCRUM-85,
+   `shifts.is_active`), and the zero-length `Nghỉ` template is not a row either: a "Nghỉ phép" đơn covers a
+   ca the employee holds (SCRUM-86), so the day off is drawn as "Nghỉ" inside that ca's block, and a cell
+   with nothing in it means the person has no ca that day. The `MockShift`
    helpers mentioned here are gone: SCRUM-22 deleted `lib/mock/adminStore.ts`.
 8. `/facilities` and `/schedules` are the first screens with **pills for one dimension + `<select>`s for
    another** (facilities: condition pills + branch/category selects; schedules: status pills + branch

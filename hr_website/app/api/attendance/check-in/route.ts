@@ -19,6 +19,11 @@
  *       The point is recorded, not judged: an arrival outside the branch geofence is stored like any
  *       other and the reviewer reads the verdict on `/attendance`.
  *
+ *       A ca is clocked in **inside its working time**: the window is `[start − 5', end − 5']`, the same
+ *       grace that decides Đi muộn and that governs "Vào ca lại". An arrival before it opens answers
+ *       `409` with its own sentence, one after it has closed answers `409` as well. An unscheduled
+ *       arrival (a manager who named no ca) and a template without hours have no window and stay allowed.
+ *
  *       Sending the same ca again is **"Vào ca lại"** while that ca is still running: an employee who
  *       closed it by mistake gets the same row back, re-opened (`200`), with the giờ vào they reported
  *       still in place — a second tap is not a second record. The status is re-derived from that giờ vào
@@ -97,7 +102,7 @@
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  *       409:
- *         description: This ca is already open for today (or its working time is over, so the check-out stands), or the caller has no ca scheduled for this business day.
+ *         description: This ca is already open for today (or its working time is over, so the check-out stands), the arrival is outside the ca's working time, or the caller has no ca scheduled for this business day.
  *         content:
  *           application/json:
  *             schema:
@@ -118,6 +123,8 @@ import { AttendanceBranchNotAssignedError } from "@/lib/domain/errors/Attendance
 import { AttendanceBranchRequiredError } from "@/lib/domain/errors/AttendanceBranchRequiredError";
 import { AttendanceCheckInForbiddenError } from "@/lib/domain/errors/AttendanceCheckInForbiddenError";
 import { AttendanceNoShiftTodayError } from "@/lib/domain/errors/AttendanceNoShiftTodayError";
+import { AttendanceShiftEndedError } from "@/lib/domain/errors/AttendanceShiftEndedError";
+import { AttendanceShiftNotStartedError } from "@/lib/domain/errors/AttendanceShiftNotStartedError";
 import { BranchForbiddenError } from "@/lib/domain/errors/BranchForbiddenError";
 import { BranchNotFoundError } from "@/lib/domain/errors/BranchNotFoundError";
 import { ShiftNotFoundError } from "@/lib/domain/errors/ShiftNotFoundError";
@@ -195,9 +202,13 @@ export async function POST(request: Request) {
     }
 
     // `schedule:view` lets an employee read today's plan, so "no ca today" is a state, not a permission.
+    // The window refusals are the same shape: the ca exists and was named correctly, the clock is what
+    // says no, and each carries its own sentence.
     if (
       error instanceof AttendanceAlreadyCheckedInError ||
-      error instanceof AttendanceNoShiftTodayError
+      error instanceof AttendanceNoShiftTodayError ||
+      error instanceof AttendanceShiftNotStartedError ||
+      error instanceof AttendanceShiftEndedError
     ) {
       return NextResponse.json({ error: error.message }, { status: 409 });
     }

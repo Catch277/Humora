@@ -1,3 +1,4 @@
+import { PastShiftAssignmentError } from "@/lib/domain/errors/PastShiftAssignmentError";
 import { ShiftWorkflowConflictError } from "@/lib/domain/errors/ShiftWorkflowConflictError";
 import { ShiftWorkflowForbiddenError } from "@/lib/domain/errors/ShiftWorkflowForbiddenError";
 import { ShiftWorkflowInputError } from "@/lib/domain/errors/ShiftWorkflowInputError";
@@ -7,11 +8,13 @@ type PostgrestLikeError = { code?: string; message: string };
 
 /**
  * Turns what Postgres / PostgREST answered into the domain's own errors. The codes are the ones
- * raised by `SCRUM-23_shift_registration_swap.sql`:
+ * raised by `SCRUM-23_shift_registration_swap.sql` and the table guards:
  *
  *   P0002 not found          42501 not allowed         22023 wrong state / bad input
  *   23P01 clashes with the schedule                    23505 duplicate (unique index)
  *   23503 a referenced row (shift, branch) does not exist
+ *   23P02 the ca has already ended (`shift_assignments_block_past`, SCRUM-81) — what approving a
+ *         registration for a past day now answers
  *
  * `notFound` is supplied by the caller because "not found" means a different resource for each
  * repository. Anything unrecognised becomes a plain `Error` that the route logs and answers `500`.
@@ -31,6 +34,9 @@ export function throwShiftWorkflowError(
     case "23P01":
     case "23505":
       throw new ShiftWorkflowConflictError(error.message);
+    case "23P02":
+      // The trigger's sentence already names the ca, its date and its end hour.
+      throw new PastShiftAssignmentError(error.message);
     case "23503":
       throw new ShiftWorkflowInputError(
         "The shift or the branch in the request does not exist.",

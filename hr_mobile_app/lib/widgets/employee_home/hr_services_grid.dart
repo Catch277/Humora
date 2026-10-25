@@ -115,7 +115,9 @@ class HrServicesGrid extends StatelessWidget {
                   icon: Icons.favorite_border_outlined,
                   iconColor: const Color(0xFFEC4899),
                   bgColor: const Color(0xFFFCE7F3),
-                  onTap: () {},
+                  onTap: () {
+                    Navigator.pushNamed(context, AppRoutes.policy_benefits);
+                  },
                 ),
               ],
             ),

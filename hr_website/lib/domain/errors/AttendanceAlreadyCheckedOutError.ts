@@ -5,7 +5,7 @@
  */
 export class AttendanceAlreadyCheckedOutError extends Error {
   /** The message stays optional so a caller may explain the case; the default is the plain duplicate. */
-  constructor(message = "This shift has already been checked out.") {
+  constructor(message = "Ca này đã được ghi nhận ra ca rồi.") {
     super(message);
     this.name = "AttendanceAlreadyCheckedOutError";
   }

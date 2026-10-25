@@ -5,6 +5,7 @@ import type {
   ShiftAssignmentStatus,
   UpdateShiftAssignmentInput,
 } from "@/lib/domain/entities/Shift";
+import { PastShiftAssignmentError } from "@/lib/domain/errors/PastShiftAssignmentError";
 import { ShiftAssignmentNotFoundError } from "@/lib/domain/errors/ShiftAssignmentNotFoundError";
 import { ShiftOverlapError } from "@/lib/domain/errors/ShiftOverlapError";
 import type { IShiftAssignmentRepository } from "@/lib/domain/repositories/IShiftAssignmentRepository";
@@ -164,6 +165,13 @@ export class SupabaseShiftAssignmentRepository
       // case's overlap check cannot see.
       if (error.code === "23505") {
         throw new ShiftOverlapError(input.workDate);
+      }
+
+      // `shift_assignments_block_past` (SCRUM-81) refuses a new row on a ca that has already ended. The use
+      // case checks it first, so this catches what that check cannot see — a clock that moved between the
+      // read and the write — and answers the trigger's own Vietnamese sentence instead of a `500`.
+      if (error.code === "23P02") {
+        throw new PastShiftAssignmentError(error.message);
       }
 
       throw new Error(`Unable to create shift assignment: ${error.message}`);

@@ -52,6 +52,10 @@ export class ReviewRequestUseCase {
       role: input.approverRole,
     });
 
+    // SCRUM-83: approving now *applies* the đơn — the trigger moves the ca, writes the `Nghỉ` day or
+    // refuses outright (23P04 → `RequestApprovalConflictError`). The repository translates and this use
+    // case deliberately lets it travel: the conflict is not a rule this layer can re-check (only the
+    // database knows whether the colleague is still free at this instant), and the route maps it to 409.
     return this.requestRepository.review(input.requestId, input);
   }
 }

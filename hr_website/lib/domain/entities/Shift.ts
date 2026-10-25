@@ -19,6 +19,13 @@ export interface Shift {
   branch_id: string | null;
   start_time: string | null;
   end_time: string | null;
+  /**
+   * SCRUM-85: `false` marks a retired template (`Ca tối` 14:00–23:00). A row that already points at it
+   * keeps its link — the schedule of a past week still renders it — but it is never offered for a new
+   * assignment, which is what "removing" a ca means when history must survive. A database where
+   * `SCRUM-85_retire_ca_toi.sql` has not been applied has no column, and reads every template as active.
+   */
+  is_active: boolean;
 }
 
 export interface ShiftAssignment {

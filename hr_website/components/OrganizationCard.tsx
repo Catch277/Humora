@@ -19,6 +19,20 @@ const CARD_CLASS =
   "m-3 block rounded-xl border border-blue-100 bg-surface-accent p-3 transition-colors hover:border-blue-200 hover:bg-surface-accent-strong";
 
 /**
+ * The collapsed desktop rail's version of the card: the same tint and radius reduced to a 40px chip.
+ *
+ * It exists so that collapsing the sidebar does not cost the owner their only route to `/organization` —
+ * the name and the member count are the full card's extra detail, the link is the part that matters.
+ */
+const COMPACT_CARD_CLASS =
+  "mx-3 mb-3 flex h-10 items-center justify-center rounded-xl border border-blue-100 bg-surface-accent text-primary transition-colors hover:border-blue-200 hover:bg-surface-accent-strong";
+
+type OrganizationCardProps = {
+  /** Icon-only mode for the collapsed sidebar; the phone drawer and the expanded rail keep the full card. */
+  compact?: boolean;
+};
+
+/**
  * The organization card at the foot of both navigations (SCRUM-51).
  *
  * The organization screen is deliberately not a navigation tab: setup happens once, right after login, and
@@ -32,7 +46,9 @@ const CARD_CLASS =
  * (no session, a SQL script that has not been applied yet) simply leaves the card empty instead of breaking
  * the navigation around it.
  */
-export default function OrganizationCard() {
+export default function OrganizationCard({
+  compact = false,
+}: OrganizationCardProps) {
   const pathname = usePathname();
   const { can } = useProfile();
   const { t } = useLocale();
@@ -62,6 +78,27 @@ export default function OrganizationCard() {
       cancelled = true;
     };
   }, [pathname]);
+
+  if (compact) {
+    // The name is the tooltip and the accessible name; the visible chip is only the glyph.
+    const name = summary?.organization?.name ?? t("organization.heading");
+    const content = (
+      <>
+        <Landmark size={16} className="shrink-0" />
+        <span className="sr-only">{name}</span>
+      </>
+    );
+
+    return can("organization:manage") ? (
+      <Link href="/organization" title={name} className={COMPACT_CARD_CLASS}>
+        {content}
+      </Link>
+    ) : (
+      <div title={name} className={COMPACT_CARD_CLASS}>
+        {content}
+      </div>
+    );
+  }
 
   const card = (
     <>

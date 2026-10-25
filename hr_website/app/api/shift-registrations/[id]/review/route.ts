@@ -54,7 +54,7 @@
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  *       409:
- *         description: Already reviewed, or approving would clash with the person's schedule.
+ *         description: Already reviewed, approving would clash with the person's schedule, or the ca's working time has already passed on that work date (Asia/Bangkok) — approving a registration for an ended ca is refused by `shift_assignments_block_past` (SCRUM-81).
  *         content:
  *           application/json:
  *             schema:

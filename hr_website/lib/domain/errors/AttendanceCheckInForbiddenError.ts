@@ -10,7 +10,7 @@
 export class AttendanceCheckInForbiddenError extends Error {
   constructor() {
     super(
-      "The organization's owner does not clock in; only employees and managers do.",
+      "Chủ sở hữu tổ chức không chấm công; chỉ nhân viên và quản lý chấm công.",
     );
     this.name = "AttendanceCheckInForbiddenError";
   }
