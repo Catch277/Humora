@@ -87,3 +87,37 @@ String timeAgo(DateTime when, {DateTime? now}) {
   }
   return '${formatDate(when)} ${formatTime(when)}';
 }
+
+/// "08:00","17:30" -> số phút của ca (ca qua đêm được cộng thêm 24 giờ). Sai định dạng -> 0.
+int shiftMinutes(String start, String end) {
+  int? toMin(String t) {
+    final p = t.split(':');
+    if (p.length < 2) return null;
+    final h = int.tryParse(p[0]);
+    final m = int.tryParse(p[1]);
+    if (h == null || m == null) return null;
+    return h * 60 + m;
+  }
+
+  final a = toMin(start);
+  final b = toMin(end);
+  if (a == null || b == null) return 0;
+  final d = b - a;
+  return d >= 0 ? d : d + 24 * 60;
+}
+
+/// Hai khoảng giờ [aStart,aEnd) và [bStart,bEnd) trong cùng ngày có chồng nhau không.
+bool shiftsOverlap(String aStart, String aEnd, String bStart, String bEnd) {
+  int m(String t) {
+    final p = t.split(':');
+    return (int.tryParse(p[0]) ?? 0) * 60 + (p.length > 1 ? int.tryParse(p[1]) ?? 0 : 0);
+  }
+
+  var as = m(aStart), ae = m(aEnd), bs = m(bStart), be = m(bEnd);
+  if (ae <= as) ae += 24 * 60;
+  if (be <= bs) be += 24 * 60;
+  return as < be && bs < ae;
+}
+
+DateTime dateOnly(DateTime d) => DateTime(d.year, d.month, d.day);
+bool sameDay(DateTime a, DateTime b) => a.year == b.year && a.month == b.month && a.day == b.day;

@@ -8,6 +8,7 @@ import '../features/payroll/payslip_list_screen.dart';
 import '../features/timesheet/timesheet_screen.dart';
 import '../features/notifications/notifications_screen.dart';
 import '../features/schedule/schedule_screen.dart';
+import '../features/schedule/shift_register_screen.dart';
 
 class AppRoutes {
   // Tên đường dẫn
@@ -21,6 +22,7 @@ class AppRoutes {
   static const String payslips = '/employee/payslips';
   static const String timesheet = '/employee/timesheet';
   static const String notifications = '/employee/notifications';
+  static const String shift_register = '/employee/shift_register';
 
   static Map<String, WidgetBuilder> getRoutes() {
     return {
@@ -33,6 +35,7 @@ class AppRoutes {
       payslips: (context) => const PayslipListScreen(),
       timesheet: (context) => const TimesheetScreen(),
       notifications: (context) => const NotificationsScreen(),
+      shift_register: (context) => const ShiftRegisterScreen(),
     };
   }
 }

@@ -4,12 +4,15 @@ import '../../core/app_colors.dart';
 import '../../core/app_theme.dart';
 import '../../core/format.dart';
 import '../../core/widgets/app_widgets.dart';
+import '../../core/widgets/ui_kit.dart';
 import '../../data/services/schedule_service.dart';
+import '../../routes/app_routers.dart';
 import '../../widgets/bottom_nav_bar.dart';
+import 'shift_status.dart';
 
 DateTime _mondayOf(DateTime d) {
-  final day = DateTime(d.year, d.month, d.day);
-  return day.subtract(Duration(days: day.weekday - 1));
+  final day = dateOnly(d);
+  return DateTime(day.year, day.month, day.day - (day.weekday - 1));
 }
 
 class ScheduleScreen extends StatefulWidget {
@@ -22,9 +25,11 @@ class ScheduleScreen extends StatefulWidget {
 class _ScheduleScreenState extends State<ScheduleScreen> {
   final ScheduleService _service = ScheduleService();
   DateTime _monday = _mondayOf(DateTime.now());
+  DateTime _selected = dateOnly(DateTime.now());
   bool _loading = true;
   String? _error;
   List<ScheduledShift> _shifts = const [];
+  int _loadToken = 0; // bỏ kết quả của lần tải cũ khi người dùng đổi tuần nhanh
 
   @override
   void initState() {
@@ -33,19 +38,20 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
   }
 
   Future<void> _load() async {
+    final token = ++_loadToken;
     setState(() {
       _loading = true;
       _error = null;
     });
     try {
       final list = await _service.week(_monday);
-      if (!mounted) return;
+      if (!mounted || token != _loadToken) return;
       setState(() {
         _shifts = list;
         _loading = false;
       });
     } catch (e) {
-      if (!mounted) return;
+      if (!mounted || token != _loadToken) return;
       setState(() {
         _error = e.toString();
         _loading = false;
@@ -54,297 +60,277 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
   }
 
   void _moveWeek(int delta) {
-    setState(() => _monday = _monday.add(Duration(days: 7 * delta)));
+    final next = DateTime(_monday.year, _monday.month, _monday.day + 7 * delta);
+    final today = dateOnly(DateTime.now());
+    setState(() {
+      _monday = next;
+      final inWeek = !today.isBefore(next) && !today.isAfter(DateTime(next.year, next.month, next.day + 6));
+      _selected = inWeek ? today : next;
+    });
+    _load();
+  }
+
+  void _goThisWeek() {
+    final today = dateOnly(DateTime.now());
+    setState(() {
+      _monday = _mondayOf(today);
+      _selected = today;
+    });
     _load();
   }
 
   Future<void> _openRegister() async {
-    final done = await showModalBottomSheet<bool>(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (_) => _RegisterSheet(service: _service),
-    );
-    if (done == true && mounted) {
+    final done = await Navigator.pushNamed(context, AppRoutes.shift_register);
+    if (!mounted) return;
+    if (done == true) {
       showAppSnack(context, 'Đã gửi đăng ký ca, chờ quản lý duyệt.');
-      _load();
     }
+    _load(); // luôn đồng bộ lại: có thể đã đăng ký một phần
+  }
+
+  Future<void> _requestLeave() async {
+    await Navigator.pushNamed(context, AppRoutes.leave_request_employee);
+    if (mounted) _load();
+  }
+
+  List<DateTime> get _days => List.generate(7, (i) => DateTime(_monday.year, _monday.month, _monday.day + i));
+
+  List<ScheduledShift> _on(DateTime day) => _shifts.where((s) => sameDay(s.workDate, day)).toList();
+
+  Map<DateTime, DayMark> _marks() {
+    final m = <DateTime, DayMark>{};
+    for (final d in _days) {
+      final items = _on(d);
+      if (items.isEmpty) continue;
+      if (items.any(countsAsWorkShift)) {
+        m[d] = const DayMark(Icons.event_available_rounded, AppColors.primary, 'có ca');
+      } else if (items.any((s) => s.isRegistration && s.status != 'REJECTED')) {
+        m[d] = const DayMark(Icons.hourglass_top_rounded, AppColors.warning, 'chờ duyệt');
+      } else if (items.any((s) => s.status == 'LEAVE')) {
+        m[d] = const DayMark(Icons.beach_access_outlined, AppColors.textSecondary, 'nghỉ phép');
+      }
+    }
+    return m;
   }
 
   @override
   Widget build(BuildContext context) {
     return AppPage(
-      title: 'Lịch làm việc',
+      title: 'Lịch làm việc của tôi',
       showBack: false,
-      onRefresh: _load,
-      bottomNavigationBar: const BottomNavBar(currentIndex: 1),
-      child: AsyncBody(
-        loading: _loading,
-        error: _error,
-        onRetry: _load,
-        builder: (_) => _buildBody(),
+      bottomNavigationBar: const BottomNavBar(currentIndex: 2),
+      child: Column(
+        children: [
+          _weekSwitcher(),
+          const SizedBox(height: 4),
+          DayStrip(
+            days: _days,
+            selected: _selected,
+            marks: _marks(),
+            onSelect: (d) => setState(() => _selected = d),
+          ),
+          const SizedBox(height: 4),
+          Expanded(
+            child: AsyncBody(
+              loading: _loading,
+              error: _error,
+              onRetry: _load,
+              builder: (_) => RefreshIndicator(onRefresh: _load, child: _body()),
+            ),
+          ),
+          BottomActionBar(
+            child: PrimaryButton(
+              label: 'Đăng ký ca mới',
+              icon: Icons.add_rounded,
+              onPressed: _openRegister,
+            ),
+          ),
+        ],
       ),
     );
   }
 
-  Widget _buildBody() {
-    final sunday = _monday.add(const Duration(days: 6));
-    final today = DateTime.now();
-    final todayKey = DateTime(today.year, today.month, today.day);
+  Widget _weekSwitcher() {
+    final sunday = DateTime(_monday.year, _monday.month, _monday.day + 6);
+    final isCurrent = sameDay(_monday, _mondayOf(DateTime.now()));
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
+      child: AppCard(
+        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+        child: Row(
+          children: [
+            IconButton(
+              onPressed: () => _moveWeek(-1),
+              icon: const Icon(Icons.chevron_left_rounded),
+              tooltip: 'Tuần trước',
+            ),
+            Expanded(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    '${formatDayMonth(_monday)} - ${formatDayMonth(sunday)}/${sunday.year}',
+                    style: AppText.title,
+                  ),
+                  const SizedBox(height: 2),
+                  if (isCurrent)
+                    const Text('Tuần này', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.primary))
+                  else
+                    GestureDetector(
+                      onTap: _goThisWeek,
+                      child: const Padding(
+                        padding: EdgeInsets.symmetric(vertical: 2),
+                        child: Text('Về tuần này',
+                            style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.primary)),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+            IconButton(
+              onPressed: () => _moveWeek(1),
+              icon: const Icon(Icons.chevron_right_rounded),
+              tooltip: 'Tuần sau',
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _body() {
+    final work = _shifts.where(countsAsWorkShift).toList();
+    final minutes = work.fold<int>(0, (s, x) => s + shiftMinutes(x.start, x.end));
+    final pending = _shifts.where((s) => s.isRegistration && s.status == 'PENDING').length;
+    final items = _on(_selected);
 
     return ListView(
       physics: const AlwaysScrollableScrollPhysics(),
-      padding: const EdgeInsets.fromLTRB(16, 4, 16, 28),
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 20),
       children: [
-        AppCard(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-          child: Row(
-            children: [
-              IconButton(onPressed: () => _moveWeek(-1), icon: const Icon(Icons.chevron_left_rounded), tooltip: 'Tuần trước'),
-              Expanded(
-                child: Text(
-                  '${formatDayMonth(_monday)} - ${formatDayMonth(sunday)}/${sunday.year}',
-                  textAlign: TextAlign.center,
-                  style: AppText.title,
-                ),
+        Row(
+          children: [
+            Expanded(child: StatCard(label: 'Tổng số ca', value: '${work.length}', icon: Icons.event_available_outlined)),
+            const SizedBox(width: 10),
+            Expanded(child: StatCard(label: 'Tổng số giờ', value: formatMinutes(minutes), icon: Icons.schedule_outlined)),
+            const SizedBox(width: 10),
+            Expanded(
+              child: StatCard(
+                label: 'Chờ duyệt',
+                value: '$pending',
+                icon: Icons.hourglass_top_rounded,
+                color: AppColors.warning,
+                background: AppColors.warningSoft,
               ),
-              IconButton(onPressed: () => _moveWeek(1), icon: const Icon(Icons.chevron_right_rounded), tooltip: 'Tuần sau'),
-            ],
-          ),
-        ),
-        const SizedBox(height: 12),
-        SizedBox(
-          width: double.infinity,
-          height: 48,
-          child: OutlinedButton.icon(
-            onPressed: _openRegister,
-            icon: const Icon(Icons.person_add_alt_1_outlined, size: 18),
-            label: const Text('Đăng ký ca làm'),
-            style: OutlinedButton.styleFrom(
-              foregroundColor: AppColors.primary,
-              side: const BorderSide(color: AppColors.primary),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
             ),
-          ),
+          ],
         ),
-        const SizedBox(height: 16),
-        ...List.generate(7, (i) {
-          final day = _monday.add(Duration(days: i));
-          final items = _shifts
-              .where((s) => s.workDate.year == day.year && s.workDate.month == day.month && s.workDate.day == day.day)
-              .toList();
-          return _dayCard(day, items, day == todayKey);
-        }),
+        const SizedBox(height: 18),
+        SectionTitle(
+          '${weekdayName(_selected)}, ${formatDayMonth(_selected)}',
+          trailing: sameDay(_selected, DateTime.now()) ? const StatusPill('Hôm nay', tone: PillTone.info) : null,
+        ),
+        if (items.isEmpty) _emptyDay() else ...items.map(_shiftCard),
       ],
     );
   }
 
-  Widget _dayCard(DateTime day, List<ScheduledShift> items, bool isToday) {
+  Widget _emptyDay() {
     return AppCard(
-      margin: const EdgeInsets.only(bottom: 10),
-      color: isToday ? AppColors.primarySoft : AppColors.surface,
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      padding: const EdgeInsets.fromLTRB(20, 24, 20, 20),
+      child: Column(
         children: [
-          SizedBox(
-            width: 52,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(weekdayShort(day), style: AppText.caption.copyWith(color: isToday ? AppColors.primary : AppColors.textMuted)),
-                const SizedBox(height: 2),
-                Text('${day.day}', style: AppText.h2.copyWith(color: isToday ? AppColors.primary : AppColors.textPrimary)),
-              ],
-            ),
+          Container(
+            width: 56,
+            height: 56,
+            decoration: const BoxDecoration(color: AppColors.primarySoft, shape: BoxShape.circle),
+            child: const Icon(Icons.event_busy_outlined, color: AppColors.primary, size: 26),
           ),
-          Expanded(
-            child: items.isEmpty
-                ? const Padding(
-                    padding: EdgeInsets.only(top: 6),
-                    child: Text('Không có ca', style: AppText.bodyMuted),
-                  )
-                : Column(children: items.map(_shiftRow).toList()),
-          ),
+          const SizedBox(height: 12),
+          const Text('Không có ca trong ngày này', style: AppText.title),
+          const SizedBox(height: 4),
+          const Text('Bạn có thể đăng ký thêm ca làm cho ngày sắp tới.',
+              style: AppText.bodyMuted, textAlign: TextAlign.center),
+          const SizedBox(height: 14),
+          SecondaryButton(label: 'Đăng ký ca', icon: Icons.add_rounded, onPressed: _openRegister),
         ],
       ),
     );
   }
 
-  Widget _shiftRow(ScheduledShift s) {
-    String label;
-    PillTone tone;
-    if (s.isRegistration) {
-      label = s.status == 'REJECTED' ? 'Bị từ chối' : 'Chờ duyệt';
-      tone = s.status == 'REJECTED' ? PillTone.danger : PillTone.warning;
-    } else if (s.status == 'LEAVE') {
-      label = 'Nghỉ phép';
-      tone = PillTone.neutral;
-    } else if (s.status == 'CANCELLED') {
-      label = 'Đã huỷ';
-      tone = PillTone.neutral;
-    } else {
-      label = 'Đã phân ca';
-      tone = PillTone.success;
-    }
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
-      child: Row(
+  Widget _shiftCard(ScheduledShift s) {
+    final canLeave = countsAsWorkShift(s) && !s.workDate.isBefore(dateOnly(DateTime.now()));
+    return ShiftCard(
+      name: s.name,
+      start: s.start,
+      end: s.end,
+      badge: shiftStatusPill(s),
+      onTap: () => _showDetail(s),
+      footer: Row(
         children: [
           Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(s.name, style: AppText.title),
-                Text('${s.start} - ${s.end}', style: AppText.caption),
-              ],
+            child: TextButton.icon(
+              onPressed: () => _showDetail(s),
+              icon: const Icon(Icons.info_outline_rounded, size: 16),
+              label: const Text('Chi tiết'),
             ),
           ),
-          StatusPill(label, tone: tone),
+          if (canLeave)
+            Expanded(
+              child: TextButton.icon(
+                onPressed: _requestLeave,
+                icon: const Icon(Icons.event_busy_outlined, size: 16),
+                label: const Text('Xin nghỉ'),
+                style: TextButton.styleFrom(foregroundColor: AppColors.danger),
+              ),
+            ),
         ],
       ),
     );
   }
-}
 
-class _RegisterSheet extends StatefulWidget {
-  const _RegisterSheet({required this.service});
-  final ScheduleService service;
+  void _showDetail(ScheduledShift s) {
+    final info = shiftStatusInfo(s);
+    Widget row(String k, String v) => Padding(
+          padding: const EdgeInsets.symmetric(vertical: 7),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              SizedBox(width: 104, child: Text(k, style: AppText.bodyMuted)),
+              Expanded(child: Text(v, style: AppText.body.copyWith(fontWeight: FontWeight.w600))),
+            ],
+          ),
+        );
 
-  @override
-  State<_RegisterSheet> createState() => _RegisterSheetState();
-}
-
-class _RegisterSheetState extends State<_RegisterSheet> {
-  List<ShiftTemplate> _templates = const [];
-  bool _loading = true;
-  bool _busy = false;
-  String? _error;
-  String? _shiftId;
-  late DateTime _date;
-  late final List<DateTime> _dates;
-
-  @override
-  void initState() {
-    super.initState();
-    final now = DateTime.now();
-    final today = DateTime(now.year, now.month, now.day);
-    _dates = List.generate(14, (i) => today.add(Duration(days: i + 1)));
-    _date = _dates.first;
-    _load();
-  }
-
-  Future<void> _load() async {
-    try {
-      final t = await widget.service.templates();
-      if (!mounted) return;
-      setState(() {
-        _templates = t;
-        _shiftId = t.isEmpty ? null : t.first.id;
-        _loading = false;
-      });
-    } catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _error = e.toString();
-        _loading = false;
-      });
-    }
-  }
-
-  Future<void> _submit() async {
-    if (_shiftId == null) return;
-    setState(() {
-      _busy = true;
-      _error = null;
-    });
-    try {
-      await widget.service.register(shiftId: _shiftId!, date: _date);
-      if (mounted) Navigator.pop(context, true);
-    } catch (e) {
-      if (mounted) setState(() => _error = e.toString());
-    } finally {
-      if (mounted) setState(() => _busy = false);
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      decoration: const BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
-      ),
-      padding: const EdgeInsets.fromLTRB(24, 20, 24, 24),
-      child: SafeArea(
-        top: false,
-        child: _loading
-            ? const SizedBox(height: 160, child: Center(child: CircularProgressIndicator()))
-            : Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (_) => Container(
+        decoration: const BoxDecoration(
+          color: AppColors.surface,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+        ),
+        padding: const EdgeInsets.fromLTRB(24, 20, 24, 20),
+        child: SafeArea(
+          top: false,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
                 children: [
-                  const Text('Đăng ký ca làm', style: AppText.h2),
-                  const SizedBox(height: 4),
-                  const Text('Quản lý sẽ duyệt đăng ký của bạn.', style: AppText.bodyMuted),
-                  const SizedBox(height: 16),
-                  const Text('NGÀY', style: AppText.label),
-                  const SizedBox(height: 8),
-                  SizedBox(
-                    height: 64,
-                    child: ListView.separated(
-                      scrollDirection: Axis.horizontal,
-                      itemCount: _dates.length,
-                      separatorBuilder: (_, __) => const SizedBox(width: 8),
-                      itemBuilder: (_, i) {
-                        final d = _dates[i];
-                        final sel = d == _date;
-                        return InkWell(
-                          onTap: () => setState(() => _date = d),
-                          borderRadius: BorderRadius.circular(14),
-                          child: Container(
-                            width: 56,
-                            decoration: BoxDecoration(
-                              color: sel ? AppColors.primary : AppColors.surfaceMuted,
-                              borderRadius: BorderRadius.circular(14),
-                            ),
-                            child: Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Text(weekdayShort(d),
-                                    style: TextStyle(fontSize: 11, color: sel ? Colors.white70 : AppColors.textMuted)),
-                                Text('${d.day}/${d.month}',
-                                    style: TextStyle(
-                                        fontWeight: FontWeight.w700,
-                                        color: sel ? Colors.white : AppColors.textPrimary)),
-                              ],
-                            ),
-                          ),
-                        );
-                      },
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  const Text('CA', style: AppText.label),
-                  const SizedBox(height: 8),
-                  if (_templates.isEmpty)
-                    const Text('Chưa có ca nào để đăng ký.', style: AppText.bodyMuted)
-                  else
-                    ..._templates.map((t) => RadioListTile<String>(
-                          value: t.id,
-                          groupValue: _shiftId,
-                          onChanged: (v) => setState(() => _shiftId = v),
-                          title: Text(t.label),
-                          contentPadding: EdgeInsets.zero,
-                          dense: true,
-                        )),
-                  if (_error != null) ...[
-                    const SizedBox(height: 8),
-                    Text(_error!, style: const TextStyle(color: AppColors.danger, fontSize: 13)),
-                  ],
-                  const SizedBox(height: 14),
-                  PrimaryButton(label: 'Gửi đăng ký', busy: _busy, onPressed: _templates.isEmpty ? null : _submit),
+                  Expanded(child: Text(s.name, style: AppText.h2)),
+                  StatusPill(info.label, tone: info.tone, icon: info.icon),
                 ],
               ),
+              const SizedBox(height: 10),
+              row('Ngày', '${weekdayName(s.workDate)}, ${formatDate(s.workDate)}'),
+              row('Giờ làm', '${s.start} - ${s.end}'),
+              row('Thời lượng', formatMinutes(shiftMinutes(s.start, s.end))),
+              row('Loại', s.isRegistration ? 'Đăng ký ca (chờ quản lý xử lý)' : 'Ca do quản lý phân'),
+            ],
+          ),
+        ),
       ),
     );
   }

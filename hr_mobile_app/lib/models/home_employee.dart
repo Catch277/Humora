@@ -10,6 +10,8 @@ import '../widgets/employee_home/home_header.dart';
 import '../widgets/employee_home/checkin_card.dart';
 import '../widgets/employee_home/performance_card.dart';
 import '../widgets/employee_home/hr_services_grid.dart';
+import '../widgets/employee_home/gps_status_card.dart';
+import '../widgets/employee_home/week_status_card.dart';
 import 'camera_checkin.dart'; // Import màn hình camera
 
 class _LocationException implements Exception {
@@ -24,7 +26,7 @@ class HomeEmployeeScreen extends StatefulWidget {
   State<HomeEmployeeScreen> createState() => _HomeEmployeeScreenState();
 }
 
-class _HomeEmployeeScreenState extends State<HomeEmployeeScreen> {
+class _HomeEmployeeScreenState extends State<HomeEmployeeScreen> with WidgetsBindingObserver {
   int _selectedIndex = 0;
   int _refreshTick = 0;
   String _shiftLabel = 'Ca làm việc';
@@ -39,12 +41,18 @@ class _HomeEmployeeScreenState extends State<HomeEmployeeScreen> {
   String _checkInTime = '--:--';
   String? _shiftId; // ca đang chờ chấm vào, hoặc ca đang mở
   bool _busy = false;
+  bool _completedToday = false; // đã vào và ra hết các ca hôm nay
+  bool _success = false; // bật vài giây để hiện dấu tích sau khi chấm công thành công
+  GpsState _gps = GpsState.checking;
+  Timer? _successTimer;
 
   TimeOfDay _shiftStart = const TimeOfDay(hour: 8, minute: 30);
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _checkGps();
     _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
       if (mounted) {
         setState(() {
@@ -57,8 +65,54 @@ class _HomeEmployeeScreenState extends State<HomeEmployeeScreen> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _timer?.cancel();
+    _successTimer?.cancel();
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // Người dùng vừa quay lại từ màn hình cài đặt: kiểm tra lại GPS/quyền.
+    if (state == AppLifecycleState.resumed) _checkGps();
+  }
+
+  // ---------- Định vị ----------
+
+  Future<void> _checkGps() async {
+    try {
+      if (!await Geolocator.isLocationServiceEnabled()) {
+        if (mounted) setState(() => _gps = GpsState.serviceOff);
+        return;
+      }
+      final perm = await Geolocator.checkPermission();
+      final next = switch (perm) {
+        LocationPermission.denied => GpsState.denied,
+        LocationPermission.deniedForever => GpsState.deniedForever,
+        _ => GpsState.ready,
+      };
+      if (mounted) setState(() => _gps = next);
+    } catch (_) {
+      // Nền tảng không hỗ trợ kiểm tra: để nút chấm công tự xử lý khi bấm.
+      if (mounted) setState(() => _gps = GpsState.ready);
+    }
+  }
+
+  Future<void> _fixGps() async {
+    switch (_gps) {
+      case GpsState.serviceOff:
+        await Geolocator.openLocationSettings();
+        break;
+      case GpsState.denied:
+        await Geolocator.requestPermission();
+        break;
+      case GpsState.deniedForever:
+        await Geolocator.openAppSettings();
+        break;
+      default:
+        break;
+    }
+    await _checkGps();
   }
 
   // ---------- Gọi API ----------
@@ -97,6 +151,7 @@ class _HomeEmployeeScreenState extends State<HomeEmployeeScreen> {
 
       if (!mounted) return;
       setState(() {
+        _completedToday = open == null && target == null && attendance.isNotEmpty;
         _isCheckedIn = open != null;
         _checkInTime = open != null ? _fmtTime(open['check_in_at']) : '--:--';
         _shiftId = (open ?? target)?['shift_id'] as String?;
@@ -106,7 +161,9 @@ class _HomeEmployeeScreenState extends State<HomeEmployeeScreen> {
         final st = target?['start_time']?.toString();
         final en = target?['end_time']?.toString();
         String hm(String? t) => (t != null && t.length >= 5) ? t.substring(0, 5) : '';
-        if (name != null && name.isNotEmpty) {
+        if (target == null && open == null) {
+          _shiftLabel = _completedToday ? 'Đã hoàn tất các ca hôm nay' : 'Hôm nay không có ca';
+        } else if (name != null && name.isNotEmpty) {
           _shiftLabel = (st != null && en != null) ? '$name (${hm(st)} - ${hm(en)})' : name;
         } else if (st != null && en != null) {
           _shiftLabel = 'Ca ${hm(st)} - ${hm(en)}';
@@ -253,11 +310,32 @@ class _HomeEmployeeScreenState extends State<HomeEmployeeScreen> {
         );
       }
       await _loadToday();
+      if (mounted) {
+        setState(() => _success = true);
+        _successTimer?.cancel();
+        _successTimer = Timer(const Duration(milliseconds: 1600), () {
+          if (mounted) setState(() => _success = false);
+        });
+      }
     } catch (e) {
       _showError(e);
     } finally {
       if (mounted) setState(() => _busy = false);
     }
+  }
+
+  CheckInPhase get _phase {
+    if (_isCheckedIn) return CheckInPhase.working;
+    if (_shiftId != null) return CheckInPhase.ready;
+    return _completedToday ? CheckInPhase.done : CheckInPhase.noShift;
+  }
+
+  String _timezoneLabel() {
+    final off = _currentTime.timeZoneOffset;
+    final sign = off.isNegative ? '-' : '+';
+    final h = off.inHours.abs();
+    final m = off.inMinutes.abs().remainder(60);
+    return 'GMT$sign$h${m == 0 ? '' : ':${m.toString().padLeft(2, '0')}'}';
   }
 
   String _getGreeting() {
@@ -282,35 +360,46 @@ class _HomeEmployeeScreenState extends State<HomeEmployeeScreen> {
       backgroundColor: AppColors.background,
       body: RefreshIndicator(
         onRefresh: () async {
-          await _loadToday();
+          await Future.wait([_loadToday(), _checkGps()]);
           if (mounted) setState(() => _refreshTick++);
         },
         child: SingleChildScrollView(
           physics: const AlwaysScrollableScrollPhysics(),
           child: Column(
             children: [
-              SafeArea(
-                bottom: false,
-                child: HomeHeader(
-                  formattedDate: _getFormattedDate(),
-                  greeting: _getGreeting(),
-                ),
+              HomeHeader(
+                formattedDate: _getFormattedDate(),
+                greeting: _getGreeting(),
               ),
-              Transform.translate(
-                offset: const Offset(0, -24),
-                child: CheckInCard(
-                  timeFormat: timeFormat,
-                  period: period,
-                  countdownText: _getCountdownToShiftStart(),
-                  onCheckIn: _handleCheckIn,
-                  isCheckedIn: _isCheckedIn,
-                  checkInTime: _checkInTime,
-                  shiftLabel: _shiftLabel,
-                ),
+              const SizedBox(height: 8),
+              ClockCard(
+                timeFormat: timeFormat,
+                period: period,
+                dateText: _getFormattedDate(),
+                timezone: _timezoneLabel(),
               ),
-              PerformanceCard(refreshTick: _refreshTick),
-              const SizedBox(height: 16),
+              const SizedBox(height: 12),
+              GpsStatusCard(state: _gps, onAction: _gps == GpsState.ready || _gps == GpsState.checking ? _checkGps : _fixGps),
+              const SizedBox(height: 12),
+              TodayShiftCard(
+                phase: _phase,
+                shiftLabel: _shiftLabel,
+                countdownText: _getCountdownToShiftStart(),
+                checkInTime: _checkInTime,
+              ),
+              const SizedBox(height: 12),
+              CheckInAction(
+                phase: _phase,
+                busy: _busy,
+                success: _success,
+                onPressed: _handleCheckIn,
+              ),
+              const SizedBox(height: 12),
+              WeekStatusCard(refreshTick: _refreshTick),
+              const SizedBox(height: 12),
               const HrServicesGrid(),
+              const SizedBox(height: 12),
+              PerformanceCard(refreshTick: _refreshTick),
               const SizedBox(height: 28),
             ],
           ),

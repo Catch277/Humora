@@ -11,8 +11,8 @@ class HrServicesGrid extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final items = <_Service>[
-      _Service('Lịch làm việc', Icons.calendar_month_outlined, AppColors.primary, AppColors.primarySoft,
-          AppRoutes.work_schedule_employee),
+      _Service('Đăng ký ca', Icons.edit_calendar_outlined, AppColors.primary, AppColors.primarySoft,
+          AppRoutes.shift_register),
       _Service('Nghỉ phép', Icons.event_busy_outlined, AppColors.success, AppColors.successSoft,
           AppRoutes.leave_request_employee),
       _Service('Phiếu lương', Icons.receipt_long_outlined, AppColors.warning, AppColors.warningSoft,
@@ -32,7 +32,7 @@ class HrServicesGrid extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text('Dịch vụ nhân sự', style: AppText.h2),
+            const Text('Tiện ích nhanh', style: AppText.h2),
             const SizedBox(height: 14),
             GridView.count(
               shrinkWrap: true,
@@ -50,7 +50,10 @@ class HrServicesGrid extends StatelessWidget {
   }
 
   Widget _tile(BuildContext context, _Service s) {
-    return InkWell(
+    return Semantics(
+      button: true,
+      label: s.title,
+      child: InkWell(
       onTap: () => Navigator.pushNamed(context, s.route),
       borderRadius: BorderRadius.circular(16),
       child: Column(
@@ -71,6 +74,7 @@ class HrServicesGrid extends StatelessWidget {
             overflow: TextOverflow.ellipsis,
           ),
         ],
+      ),
       ),
     );
   }

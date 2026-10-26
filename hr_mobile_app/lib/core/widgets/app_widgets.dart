@@ -35,6 +35,13 @@ class AppCard extends StatelessWidget {
             decoration: BoxDecoration(
               borderRadius: radius,
               border: Border.all(color: AppColors.border),
+              boxShadow: [
+                BoxShadow(
+                  color: const Color(0xFF0C2A5E).withValues(alpha: 0.035),
+                  blurRadius: 14,
+                  offset: const Offset(0, 5),
+                ),
+              ],
             ),
             child: child,
           ),
@@ -160,11 +167,21 @@ class AppPage extends StatelessWidget {
               child: Row(
                 children: [
                   if (showBack)
-                    IconButton(
-                      onPressed: () => Navigator.maybePop(context),
-                      icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20),
-                      color: AppColors.textPrimary,
-                      tooltip: 'Quay lại',
+                    Padding(
+                      padding: const EdgeInsets.only(right: 8),
+                      child: Material(
+                        color: AppColors.surface,
+                        shape: const CircleBorder(side: BorderSide(color: AppColors.border)),
+                        child: InkWell(
+                          customBorder: const CircleBorder(),
+                          onTap: () => Navigator.maybePop(context),
+                          child: const SizedBox(
+                            width: 40,
+                            height: 40,
+                            child: Icon(Icons.arrow_back_ios_new_rounded, size: 17, color: AppColors.textPrimary),
+                          ),
+                        ),
+                      ),
                     )
                   else
                     const SizedBox(width: 12),
@@ -172,7 +189,7 @@ class AppPage extends StatelessWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(title, style: AppText.h1.copyWith(fontSize: 22)),
+                        Text(title, style: AppText.h1.copyWith(fontSize: 24, letterSpacing: -0.3)),
                         if (subtitle != null)
                           Padding(
                             padding: const EdgeInsets.only(top: 2),

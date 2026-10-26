@@ -149,7 +149,7 @@ class _AccountEmployeeScreenState extends State<AccountEmployeeScreen> {
     return AppPage(
       title: 'Tài khoản',
       showBack: false,
-      bottomNavigationBar: const BottomNavBar(currentIndex: 3),
+      bottomNavigationBar: const BottomNavBar(currentIndex: 4),
       onRefresh: _load,
       child: ListView(
         physics: const AlwaysScrollableScrollPhysics(),

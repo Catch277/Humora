@@ -1,9 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../../core/app_colors.dart';
+import '../../core/app_theme.dart';
 import '../../data/services/notification_service.dart';
 import '../../routes/app_routers.dart';
 
+/// Đầu trang chủ: avatar, lời chào, tên nhân viên và chuông thông báo.
+/// Nền sáng, không gradient; chạm vào avatar để mở trang cá nhân.
 class HomeHeader extends StatefulWidget {
   final String formattedDate;
   final String greeting;
@@ -58,68 +62,69 @@ class _HomeHeaderState extends State<HomeHeader> {
   Widget build(BuildContext context) {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.fromLTRB(20, 14, 20, 40),
-      decoration: const BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [Color(0xFF0C66E4), Color(0xFF1D4ED8)],
-        ),
-        borderRadius: BorderRadius.vertical(bottom: Radius.circular(32)),
-      ),
+      padding: EdgeInsets.fromLTRB(16, MediaQuery.of(context).padding.top + 12, 16, 8),
       child: Row(
         children: [
-          Container(
-            width: 48,
-            height: 48,
-            decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.2),
-              shape: BoxShape.circle,
-              border: Border.all(color: Colors.white.withValues(alpha: 0.4)),
-            ),
-            alignment: Alignment.center,
-            child: Text(
-              _initial,
-              style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w800),
+          Semantics(
+            button: true,
+            label: 'Trang cá nhân',
+            child: InkWell(
+              customBorder: const CircleBorder(),
+              onTap: () => Navigator.pushNamedAndRemoveUntil(context, AppRoutes.account_employee, (r) => false),
+              child: Container(
+                width: 48,
+                height: 48,
+                decoration: const BoxDecoration(color: AppColors.primarySoft, shape: BoxShape.circle),
+                alignment: Alignment.center,
+                child: Text(
+                  _initial,
+                  style: const TextStyle(color: AppColors.primary, fontSize: 20, fontWeight: FontWeight.w800),
+                ),
+              ),
             ),
           ),
-          const SizedBox(width: 14),
+          const SizedBox(width: 12),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  '${widget.greeting} • ${widget.formattedDate}',
-                  style: TextStyle(color: Colors.white.withValues(alpha: 0.85), fontSize: 12.5),
+                  widget.greeting,
+                  style: AppText.caption,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
-                const SizedBox(height: 3),
+                const SizedBox(height: 2),
                 Text(
                   _employeeName.isEmpty ? '...' : _employeeName,
-                  style: const TextStyle(color: Colors.white, fontSize: 21, fontWeight: FontWeight.w800),
+                  style: AppText.h2.copyWith(fontSize: 20, fontWeight: FontWeight.w800),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
               ],
             ),
           ),
-          InkWell(
-            onTap: () => Navigator.pushNamed(context, AppRoutes.notifications),
-            customBorder: const CircleBorder(),
-            child: Container(
-              width: 44,
-              height: 44,
-              decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.18),
-                shape: BoxShape.circle,
-              ),
-              child: ValueListenableBuilder<int>(
-                valueListenable: NotificationService.unreadCount,
-                builder: (_, n, __) => Badge(
-                  isLabelVisible: n > 0,
-                  label: Text(n > 99 ? '99+' : '$n'),
-                  child: const Icon(Icons.notifications_none_rounded, color: Colors.white),
+          Semantics(
+            button: true,
+            label: 'Thông báo',
+            child: InkWell(
+              onTap: () => Navigator.pushNamed(context, AppRoutes.notifications),
+              customBorder: const CircleBorder(),
+              child: Container(
+                width: 46,
+                height: 46,
+                decoration: BoxDecoration(
+                  color: AppColors.surface,
+                  shape: BoxShape.circle,
+                  border: Border.all(color: AppColors.border),
+                ),
+                child: ValueListenableBuilder<int>(
+                  valueListenable: NotificationService.unreadCount,
+                  builder: (_, n, __) => Badge(
+                    isLabelVisible: n > 0,
+                    label: Text(n > 99 ? '99+' : '$n'),
+                    child: const Icon(Icons.notifications_none_rounded, color: AppColors.textPrimary),
+                  ),
                 ),
               ),
             ),

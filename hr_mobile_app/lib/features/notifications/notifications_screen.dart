@@ -102,7 +102,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
         child: const Text('Đọc tất cả'),
       ),
       onRefresh: _load,
-      bottomNavigationBar: const BottomNavBar(currentIndex: 2),
+      bottomNavigationBar: const BottomNavBar(currentIndex: 3),
       child: Column(
         children: [
           Padding(

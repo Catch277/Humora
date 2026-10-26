@@ -12,6 +12,17 @@ class ShiftTemplate {
   String get label => '$name ($start - $end)';
 }
 
+/// Kết quả đăng ký một ca trong lần gửi nhiều ca.
+class RegisterOutcome {
+  const RegisterOutcome({required this.shiftId, required this.date, this.error});
+  final String shiftId;
+  final DateTime date;
+
+  /// null = thành công.
+  final String? error;
+  bool get ok => error == null;
+}
+
 class ScheduledShift {
   const ScheduledShift({
     required this.id,
@@ -59,9 +70,14 @@ class ScheduleService {
     return null;
   }
 
-  Future<List<ScheduledShift>> week(DateTime monday) async {
-    final from = toSqlDate(monday);
-    final to = toSqlDate(monday.add(const Duration(days: 6)));
+  Future<List<ScheduledShift>> week(DateTime monday) =>
+      range(monday, monday.add(const Duration(days: 6)));
+
+  /// Ca đã phân + đăng ký đang chờ/bị từ chối trong khoảng ngày [fromDate, toDate] (gồm cả hai đầu).
+  Future<List<ScheduledShift>> range(DateTime fromDate, DateTime toDate) async {
+    final monday = fromDate;
+    final from = toSqlDate(fromDate);
+    final to = toSqlDate(toDate);
     try {
       final assigned = await _client
           .from('shift_assignments')
@@ -157,5 +173,49 @@ class ScheduleService {
     } catch (e) {
       throw toAppException(e);
     }
+  }
+
+  Future<String> _branchId() async {
+    try {
+      final profile = await _client
+          .from('users')
+          .select('branch_id')
+          .eq('id', _uid)
+          .maybeSingle()
+          .timeout(_timeout);
+      final b = profile?['branch_id']?.toString();
+      if (b == null) {
+        throw AppException('Bạn chưa được gán chi nhánh nên chưa đăng ký ca được. Hãy liên hệ quản lý.');
+      }
+      return b;
+    } catch (e) {
+      throw toAppException(e);
+    }
+  }
+
+  /// Đăng ký nhiều ca. Mỗi ca được gửi riêng; ca nào lỗi thì ghi lại lý do và vẫn gửi tiếp các ca còn lại,
+  /// để người dùng giữ được những lựa chọn hợp lệ.
+  Future<List<RegisterOutcome>> registerMany(List<({String shiftId, DateTime date})> items) async {
+    final branchId = await _branchId();
+
+    final out = <RegisterOutcome>[];
+    for (final it in items) {
+      try {
+        await _client.from('shift_registrations').insert({
+          'employee_id': _uid,
+          'branch_id': branchId,
+          'shift_id': it.shiftId,
+          'work_date': toSqlDate(it.date),
+          'status': 'PENDING',
+        }).timeout(_timeout);
+        out.add(RegisterOutcome(shiftId: it.shiftId, date: it.date));
+      } on PostgrestException catch (e) {
+        final msg = e.code == '23505' ? 'Bạn đã đăng ký ca này rồi.' : toAppException(e).message;
+        out.add(RegisterOutcome(shiftId: it.shiftId, date: it.date, error: msg));
+      } catch (e) {
+        out.add(RegisterOutcome(shiftId: it.shiftId, date: it.date, error: toAppException(e).message));
+      }
+    }
+    return out;
   }
 }
