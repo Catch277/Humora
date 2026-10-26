@@ -1,4 +1,8 @@
 import 'package:flutter/material.dart';
+
+import '../../core/app_colors.dart';
+import '../../core/app_theme.dart';
+import '../../core/widgets/app_widgets.dart';
 import '../../routes/app_routers.dart';
 
 class HrServicesGrid extends StatelessWidget {
@@ -6,120 +10,38 @@ class HrServicesGrid extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final items = <_Service>[
+      _Service('Đăng ký ca', Icons.edit_calendar_outlined, AppColors.primary, AppColors.primarySoft,
+          AppRoutes.shift_register),
+      _Service('Nghỉ phép', Icons.event_busy_outlined, AppColors.success, AppColors.successSoft,
+          AppRoutes.leave_request_employee),
+      _Service('Phiếu lương', Icons.receipt_long_outlined, AppColors.warning, AppColors.warningSoft,
+          AppRoutes.payslips),
+      _Service('Bảng công', Icons.fact_check_outlined, const Color(0xFF4F46E5), const Color(0xFFEEF2FF),
+          AppRoutes.timesheet),
+      _Service('Thông báo', Icons.notifications_none_rounded, const Color(0xFF7C3AED), const Color(0xFFF3E8FF),
+          AppRoutes.notifications),
+      _Service('Phúc lợi', Icons.favorite_border_rounded, const Color(0xFFDB2777), const Color(0xFFFCE7F3),
+          AppRoutes.policy_benefits),
+    ];
+
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16),
-      child: Container(
-        padding: const EdgeInsets.all(16), // Padding bên trong khung trắng
-        decoration: BoxDecoration(
-          color: Colors.white, // Nền màu trắng
-          borderRadius: BorderRadius.circular(20), // Bo góc mềm mại
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.03), // Bóng mờ nhẹ
-              blurRadius: 10,
-              offset: const Offset(0, 4),
-            ),
-          ],
-        ),
+      child: AppCard(
+        padding: const EdgeInsets.all(18),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // 1. Tiêu đề danh mục Dịch Vụ Nhân Sự
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                const Text(
-                  'Dịch vụ nhân sự',
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.black87,
-                  ),
-                ),
-                GestureDetector(
-                  onTap: () {},
-                  child: Row(
-                    children: const [
-                      Text(
-                        'Tất cả (6)',
-                        style: TextStyle(
-                          color: Color(0xFF2563EB),
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                      Icon(Icons.chevron_right, size: 18, color: Color(0xFF2563EB)),
-                    ],
-                  ),
-                ),
-              ],
-            ),
+            const Text('Tiện ích nhanh', style: AppText.h2),
             const SizedBox(height: 14),
-
-            // 2. Lưới cố định 2 hàng x 3 cột
             GridView.count(
               shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(), // Cố định khung không cho cuộn
-              crossAxisCount: 3, // 3 cột
-              crossAxisSpacing: 8, // Khoảng cách giữa các cột
-              mainAxisSpacing: 10, // Khoảng cách giữa các hàng
-              childAspectRatio: 1.8, // Tỷ lệ chiều rộng/cao tối ưu hiển thị trọn vẹn chữ
-              children: [
-                _buildCircleServiceItem(
-                  context: context,
-                  title: 'Lịch làm việc',
-                  icon: Icons.calendar_today_outlined,
-                  iconColor: const Color(0xFF2563EB),
-                  bgColor: const Color(0xFFEFF6FF),
-                  onTap: () {
-                    Navigator.pushNamed(context, AppRoutes.work_schedule_employee);
-                  },
-                ),
-                _buildCircleServiceItem(
-                  context: context,
-                  title: 'Nghỉ phép',
-                  icon: Icons.assignment_turned_in_outlined,
-                  iconColor: const Color(0xFF10B981),
-                  bgColor: const Color(0xFFECFDF5),
-                  onTap: () {
-                    Navigator.pushNamed(context, AppRoutes.leave_request_employee);
-                  },
-                ),
-                _buildCircleServiceItem(
-                  context: context,
-                  title: 'Phiếu lương',
-                  icon: Icons.subtitles_outlined,
-                  iconColor: const Color(0xFFD97706),
-                  bgColor: const Color(0xFFFEF3C7),
-                  onTap: () {},
-                ),
-                _buildCircleServiceItem(
-                  context: context,
-                  title: 'Bảng công',
-                  icon: Icons.assignment_outlined,
-                  iconColor: const Color(0xFF6366F1),
-                  bgColor: const Color(0xFFEEF2FF),
-                  onTap: () {},
-                ),
-                _buildCircleServiceItem(
-                  context: context,
-                  title: 'Đăng ký OT',
-                  icon: Icons.more_time_outlined,
-                  iconColor: const Color(0xFFA855F7),
-                  bgColor: const Color(0xFFF3E8FF),
-                  onTap: () {},
-                ),
-                _buildCircleServiceItem(
-                  context: context,
-                  title: 'Phúc lợi',
-                  icon: Icons.favorite_border_outlined,
-                  iconColor: const Color(0xFFEC4899),
-                  bgColor: const Color(0xFFFCE7F3),
-                  onTap: () {
-                    Navigator.pushNamed(context, AppRoutes.policy_benefits);
-                  },
-                ),
-              ],
+              physics: const NeverScrollableScrollPhysics(),
+              crossAxisCount: 3,
+              mainAxisSpacing: 12,
+              crossAxisSpacing: 8,
+              childAspectRatio: 1.05,
+              children: items.map((s) => _tile(context, s)).toList(),
             ),
           ],
         ),
@@ -127,51 +49,26 @@ class HrServicesGrid extends StatelessWidget {
     );
   }
 
-  // Widget ô khung hình tròn + nét icon mảnh & mịn
-  Widget _buildCircleServiceItem({
-    required BuildContext context,
-    required String title,
-    required IconData icon,
-    required Color iconColor,
-    required Color bgColor,
-    required VoidCallback onTap,
-  }) {
-    return Material(
-      color: Colors.transparent,
+  Widget _tile(BuildContext context, _Service s) {
+    return Semantics(
+      button: true,
+      label: s.title,
       child: InkWell(
-        onTap: onTap,
+        onTap: () => Navigator.pushNamed(context, s.route),
         borderRadius: BorderRadius.circular(16),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            // Khung tròn chứa Icon nét mảnh
             Container(
-              width: 48,
-              height: 48,
-              decoration: BoxDecoration(
-                color: bgColor,
-                shape: BoxShape.circle,
-                border: Border.all(
-                  color: iconColor.withOpacity(0.18),
-                  width: 1,
-                ),
-              ),
-              child: Icon(
-                icon,
-                color: iconColor,
-                size: 22,
-              ),
+              width: 50,
+              height: 50,
+              decoration: BoxDecoration(color: s.bg, borderRadius: BorderRadius.circular(16)),
+              child: Icon(s.icon, color: s.color, size: 24),
             ),
-            const SizedBox(height: 6),
-
-            // Tên dịch vụ hiển thị trọn vẹn
+            const SizedBox(height: 7),
             Text(
-              title,
-              style: const TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w500,
-                color: Colors.black87,
-              ),
+              s.title,
+              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.textPrimary),
               textAlign: TextAlign.center,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
@@ -181,4 +78,13 @@ class HrServicesGrid extends StatelessWidget {
       ),
     );
   }
+}
+
+class _Service {
+  _Service(this.title, this.icon, this.color, this.bg, this.route);
+  final String title;
+  final IconData icon;
+  final Color color;
+  final Color bg;
+  final String route;
 }

@@ -1,277 +1,409 @@
+import 'dart:ui' show FontFeature;
 import 'package:flutter/material.dart';
 
-class CheckInCard extends StatelessWidget {
-  final String timeFormat;
-  final String period;
-  final String countdownText;
-  final VoidCallback onCheckIn;
-  final bool isCheckedIn;
-  final String checkInTime;
+import '../../core/app_colors.dart';
+import '../../core/app_theme.dart';
+import '../../core/widgets/app_widgets.dart';
+import '../../core/widgets/ui_kit.dart';
 
-  const CheckInCard({
+/// Trạng thái chấm công hiện tại của nhân viên trong ngày.
+enum CheckInPhase {
+  /// Hôm nay không có ca nào để chấm công.
+  noShift,
+
+  /// Có ca, chưa vào ca.
+  ready,
+
+  /// Đang trong ca (đã vào, chưa ra).
+  working,
+
+  /// Đã vào và ra hết các ca hôm nay.
+  done,
+}
+
+/// Thẻ đồng hồ: giờ hiện tại, thứ, ngày tháng, múi giờ.
+/// Không chứa dữ liệu cố định: mọi chữ hiển thị đều do màn hình cha truyền vào.
+class ClockCard extends StatelessWidget {
+  const ClockCard({
     super.key,
     required this.timeFormat,
     required this.period,
-    required this.countdownText,
-    required this.onCheckIn,
-    required this.isCheckedIn,
-    required this.checkInTime,
+    required this.dateText,
+    required this.timezone,
   });
+
+  final String timeFormat;
+  final String period;
+  final String dateText;
+  final String timezone;
 
   @override
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16),
-      child: Container(
-        padding: const EdgeInsets.all(20),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(24),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.04),
-              blurRadius: 16,
-              offset: const Offset(0, 4),
+      child: AppCard(
+        padding: const EdgeInsets.fromLTRB(20, 18, 20, 18),
+        child: Row(
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      Text(
+                        timeFormat,
+                        style: const TextStyle(
+                          fontSize: 40,
+                          height: 1,
+                          fontWeight: FontWeight.w800,
+                          color: AppColors.textPrimary,
+                          letterSpacing: -1,
+                          fontFeatures: [FontFeature.tabularFigures()],
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 4),
+                        child: Text(
+                          period,
+                          style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: AppColors.textSecondary),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Text(dateText, style: AppText.bodyMuted.copyWith(fontWeight: FontWeight.w600)),
+                ],
+              ),
             ),
+            StatusPill(timezone, tone: PillTone.info, icon: Icons.public_rounded),
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// Thẻ ca làm hôm nay: tên ca, giờ, trạng thái, giờ vào thực tế.
+class TodayShiftCard extends StatelessWidget {
+  const TodayShiftCard({
+    super.key,
+    required this.phase,
+    required this.shiftLabel,
+    required this.countdownText,
+    required this.checkInTime,
+  });
+
+  final CheckInPhase phase;
+  final String shiftLabel;
+  final String countdownText;
+  final String checkInTime;
+
+  @override
+  Widget build(BuildContext context) {
+    late final String status;
+    late final PillTone tone;
+    late final IconData icon;
+    switch (phase) {
+      case CheckInPhase.noShift:
+        status = 'Không có ca';
+        tone = PillTone.neutral;
+        icon = Icons.event_busy_outlined;
+        break;
+      case CheckInPhase.ready:
+        status = 'Chưa vào ca';
+        tone = PillTone.info;
+        icon = Icons.hourglass_empty_rounded;
+        break;
+      case CheckInPhase.working:
+        status = 'Đang trong ca';
+        tone = PillTone.success;
+        icon = Icons.play_circle_outline_rounded;
+        break;
+      case CheckInPhase.done:
+        status = 'Đã hoàn tất';
+        tone = PillTone.success;
+        icon = Icons.check_circle_outline_rounded;
+        break;
+    }
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: AppCard(
+        padding: const EdgeInsets.all(16),
         child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
               children: [
+                const Expanded(child: Text('CA LÀM HÔM NAY', style: AppText.label)),
+                StatusPill(status, tone: tone, icon: icon),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
                 Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFE8EFFE),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: const Icon(
-                    Icons.access_time_rounded,
-                    color: Color(0xFF3B82F6),
-                    size: 20,
-                  ),
+                  width: 40,
+                  height: 40,
+                  decoration: BoxDecoration(color: AppColors.primarySoft, borderRadius: BorderRadius.circular(12)),
+                  child: const Icon(Icons.work_history_outlined, color: AppColors.primary, size: 22),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text(
-                        'CA LÀM VIỆC HÔM NAY',
-                        style: TextStyle(
-                          fontSize: 11,
-                          color: Colors.grey,
-                          fontWeight: FontWeight.bold,
-                          letterSpacing: 0.5,
+                      Text(shiftLabel, style: AppText.title, maxLines: 2, overflow: TextOverflow.ellipsis),
+                      if (phase == CheckInPhase.ready || phase == CheckInPhase.noShift)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 2),
+                          child: Text(countdownText, style: AppText.caption.copyWith(color: AppColors.primary)),
                         ),
-                      ),
-                      const SizedBox(height: 2),
-                      RichText(
-                        text: const TextSpan(
-                          style: TextStyle(fontSize: 14, color: Colors.black87),
-                          children: [
-                            TextSpan(
-                              text: 'Ca hành chính ',
-                              style: TextStyle(fontWeight: FontWeight.bold),
-                            ),
-                            TextSpan(text: '(08:30 - 17:30)'),
-                          ],
-                        ),
-                      ),
                     ],
                   ),
                 ),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: isCheckedIn ? const Color(0xFFD1FAE5) : const Color(0xFFFEF3C7),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Text(
-                    isCheckedIn ? 'Đã trong ca' : '8h00 tiêu chuẩn ($countdownText)',
-                    style: TextStyle(
-                      color: isCheckedIn ? const Color(0xFF10B981) : const Color(0xFFD97706),
-                      fontSize: 12,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ),
               ],
             ),
-            const SizedBox(height: 20),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              crossAxisAlignment: CrossAxisAlignment.baseline,
-              textBaseline: TextBaseline.alphabetic,
-              children: [
-                Text(
-                  timeFormat,
-                  style: const TextStyle(
-                    fontSize: 36,
-                    fontWeight: FontWeight.bold,
-                    letterSpacing: 1,
-                    color: Colors.black,
-                  ),
-                ),
-                const SizedBox(width: 6),
-                Text(
-                  period,
-                  style: const TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.grey,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: const [
-                Icon(Icons.location_on, color: Color(0xFF10B981), size: 16),
-                SizedBox(width: 4),
-                Text(
-                  'Hợp lệ: WiFi Corp_HQ_Floor6 (GPS 5m)',
-                  style: TextStyle(
-                    color: Color(0xFF10B981),
-                    fontSize: 12,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 20),
-
-            // NÚT VÀO CA / RA CA
+            const SizedBox(height: 12),
             Container(
-              width: double.infinity,
-              height: 52,
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  colors: isCheckedIn
-                      ? [const Color(0xFFEF4444), const Color(0xFFDC2626)] // Đỏ khi Ra Ca
-                      : [const Color(0xFF3B82F6), const Color(0xFF4F46E5)], // Xanh khi Vào Ca
-                ),
-                borderRadius: BorderRadius.circular(16),
-                boxShadow: [
-                  BoxShadow(
-                    color: (isCheckedIn ? Colors.red : const Color(0xFF4F46E5)).withOpacity(0.3),
-                    blurRadius: 12,
-                    offset: const Offset(0, 6),
-                  ),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              decoration: BoxDecoration(color: AppColors.surfaceMuted, borderRadius: BorderRadius.circular(12)),
+              child: Row(
+                children: [
+                  Icon(Icons.login_rounded, size: 18, color: phase == CheckInPhase.working ? AppColors.success : AppColors.textMuted),
+                  const SizedBox(width: 8),
+                  const Text('Giờ vào thực tế', style: AppText.bodyMuted),
+                  const Spacer(),
+                  Text(checkInTime, style: AppText.money.copyWith(fontSize: 14)),
                 ],
               ),
-              child: ElevatedButton(
-                onPressed: onCheckIn,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.transparent,
-                  shadowColor: Colors.transparent,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(
-                      isCheckedIn ? Icons.logout_rounded : Icons.camera_alt_outlined,
-                      color: Colors.white,
-                      size: 24,
-                    ),
-                    const SizedBox(width: 8),
-                    Text(
-                      isCheckedIn ? 'RA CA (CHECK-OUT)' : 'VÀO CA (CHECK-IN)',
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                        letterSpacing: 0.5,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-            const SizedBox(height: 16),
-            Row(
-              children: [
-                Expanded(
-                  child: _buildTimeStatCard(
-                    title: 'GIỜ VÀO',
-                    time: checkInTime,
-                    icon: Icons.check,
-                    iconColor: isCheckedIn ? const Color(0xFF10B981) : Colors.grey,
-                    iconBgColor: isCheckedIn ? const Color(0xFFD1FAE5) : const Color(0xFFF3F4F6),
-                    timeColor: isCheckedIn ? const Color(0xFF10B981) : Colors.black54,
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: _buildTimeStatCard(
-                    title: 'GIỜ RA DỰ KIẾN',
-                    time: '17:30 PM',
-                    icon: Icons.hourglass_empty,
-                    iconColor: const Color(0xFFF59E0B),
-                    iconBgColor: const Color(0xFFFEF3C7),
-                    timeColor: Colors.black87,
-                  ),
-                ),
-              ],
             ),
           ],
         ),
       ),
     );
   }
+}
 
-  Widget _buildTimeStatCard({
-    required String title,
-    required String time,
-    required IconData icon,
-    required Color iconColor,
-    required Color iconBgColor,
-    required Color timeColor,
-  }) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-      decoration: BoxDecoration(
-        color: const Color(0xFFF9FAFB),
-        borderRadius: BorderRadius.circular(16),
-      ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                title,
-                style: const TextStyle(
-                  fontSize: 10,
-                  color: Colors.grey,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                time,
-                style: TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.bold,
-                  color: timeColor,
-                ),
-              ),
-            ],
-          ),
-          Container(
-            padding: const EdgeInsets.all(6),
-            decoration: BoxDecoration(
-              color: iconBgColor,
-              shape: BoxShape.circle,
+/// Khu vực chấm công trung tâm: nút tròn lớn + nhãn hành động + hướng dẫn.
+class CheckInAction extends StatelessWidget {
+  const CheckInAction({
+    super.key,
+    required this.phase,
+    required this.busy,
+    required this.success,
+    required this.onPressed,
+  });
+
+  final CheckInPhase phase;
+  final bool busy;
+
+  /// Bật trong ít giây sau khi chấm công thành công để hiện dấu tích.
+  final bool success;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final enabled = (phase == CheckInPhase.ready || phase == CheckInPhase.working) && !busy;
+    final checkingOut = phase == CheckInPhase.working;
+
+    final String label;
+    switch (phase) {
+      case CheckInPhase.noShift:
+        label = 'Hôm nay không có ca';
+        break;
+      case CheckInPhase.ready:
+        label = 'Chạm để chấm công vào';
+        break;
+      case CheckInPhase.working:
+        label = 'Chạm để chấm công ra';
+        break;
+      case CheckInPhase.done:
+        label = 'Đã hoàn tất chấm công hôm nay';
+        break;
+    }
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: AppCard(
+        padding: const EdgeInsets.fromLTRB(20, 24, 20, 18),
+        child: Column(
+          children: [
+            _RoundButton(
+              phase: phase,
+              enabled: enabled,
+              busy: busy,
+              success: success,
+              checkingOut: checkingOut,
+              onPressed: onPressed,
             ),
-            child: Icon(icon, color: iconColor, size: 16),
-          )
-        ],
+            const SizedBox(height: 16),
+            Text(label, style: AppText.title, textAlign: TextAlign.center),
+            const SizedBox(height: 14),
+            const _Hint(Icons.location_on_outlined, 'Bật GPS và cho phép ứng dụng truy cập vị trí.'),
+            const SizedBox(height: 6),
+            const _Hint(Icons.photo_camera_outlined, 'Hệ thống sẽ chụp ảnh xác thực khi chấm công.'),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _Hint extends StatelessWidget {
+  const _Hint(this.icon, this.text);
+  final IconData icon;
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(icon, size: 16, color: AppColors.textMuted),
+        const SizedBox(width: 8),
+        Expanded(child: Text(text, style: AppText.caption)),
+      ],
+    );
+  }
+}
+
+class _RoundButton extends StatefulWidget {
+  const _RoundButton({
+    required this.phase,
+    required this.enabled,
+    required this.busy,
+    required this.success,
+    required this.checkingOut,
+    required this.onPressed,
+  });
+
+  final CheckInPhase phase;
+  final bool enabled;
+  final bool busy;
+  final bool success;
+  final bool checkingOut;
+  final VoidCallback onPressed;
+
+  @override
+  State<_RoundButton> createState() => _RoundButtonState();
+}
+
+class _RoundButtonState extends State<_RoundButton> with SingleTickerProviderStateMixin {
+  late final AnimationController _pulse = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 1800),
+  );
+  bool _pressed = false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _syncPulse();
+  }
+
+  @override
+  void didUpdateWidget(covariant _RoundButton old) {
+    super.didUpdateWidget(old);
+    _syncPulse();
+  }
+
+  /// Chỉ nhấp nháy nhẹ khi sẵn sàng; tắt khi đang xử lý hoặc người dùng bật "giảm chuyển động".
+  void _syncPulse() {
+    final shouldPulse = widget.enabled && !widget.success && !reduceMotion(context);
+    if (shouldPulse && !_pulse.isAnimating) {
+      _pulse.repeat();
+    } else if (!shouldPulse && _pulse.isAnimating) {
+      _pulse.stop();
+      _pulse.value = 0;
+    }
+  }
+
+  @override
+  void dispose() {
+    _pulse.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final Color base = !widget.enabled && !widget.busy
+        ? (widget.phase == CheckInPhase.done ? AppColors.success : AppColors.border)
+        : (widget.checkingOut ? AppColors.danger : AppColors.primary);
+
+    final IconData icon = widget.success
+        ? Icons.check_rounded
+        : widget.phase == CheckInPhase.done
+            ? Icons.check_rounded
+            : widget.phase == CheckInPhase.noShift
+                ? Icons.event_busy_outlined
+                : widget.checkingOut
+                    ? Icons.logout_rounded
+                    : Icons.fingerprint_rounded;
+
+    final fgColor = (widget.phase == CheckInPhase.noShift) ? AppColors.textMuted : Colors.white;
+
+    return Semantics(
+      button: true,
+      enabled: widget.enabled,
+      label: widget.checkingOut ? 'Chấm công ra' : 'Chấm công vào',
+      child: SizedBox(
+        width: 190,
+        height: 190,
+        child: Stack(
+          alignment: Alignment.center,
+          children: [
+            if (widget.enabled)
+              AnimatedBuilder(
+                animation: _pulse,
+                builder: (_, __) {
+                  final t = _pulse.value;
+                  return Container(
+                    width: 150 + 40 * t,
+                    height: 150 + 40 * t,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: base.withValues(alpha: 0.16 * (1 - t)),
+                    ),
+                  );
+                },
+              ),
+            AnimatedScale(
+              scale: _pressed ? 0.94 : 1,
+              duration: const Duration(milliseconds: 100),
+              child: Material(
+                color: base,
+                shape: const CircleBorder(),
+                elevation: widget.enabled ? 6 : 0,
+                shadowColor: base.withValues(alpha: 0.5),
+                child: InkWell(
+                  customBorder: const CircleBorder(),
+                  onTap: widget.enabled ? widget.onPressed : null,
+                  onHighlightChanged: (v) => setState(() => _pressed = v && widget.enabled),
+                  child: SizedBox(
+                    width: 144,
+                    height: 144,
+                    child: Center(
+                      child: widget.busy
+                          ? const SizedBox(
+                              width: 44,
+                              height: 44,
+                              child: CircularProgressIndicator(strokeWidth: 3.4, color: Colors.white),
+                            )
+                          : AnimatedSwitcher(
+                              duration: const Duration(milliseconds: 200),
+                              child: Icon(icon, key: ValueKey(icon), size: 64, color: fgColor),
+                            ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

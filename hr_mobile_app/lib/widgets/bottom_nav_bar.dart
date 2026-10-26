@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
+import '../core/app_colors.dart';
+import '../data/services/notification_service.dart';
 import '../routes/app_routers.dart';
 
+/// Thanh điều hướng chính: Trang chủ • Chấm công • Lịch làm • Thông báo • Cá nhân.
 class BottomNavBar extends StatelessWidget {
   final int currentIndex;
-  final ValueChanged<int>? onTap; // Cho phép truyền callback hoặc null
+  final ValueChanged<int>? onTap;
 
   const BottomNavBar({
     super.key,
@@ -11,57 +14,114 @@ class BottomNavBar extends StatelessWidget {
     this.onTap,
   });
 
+  static const List<String> _routes = [
+    AppRoutes.home_employee,
+    AppRoutes.timesheet,
+    AppRoutes.work_schedule_employee,
+    AppRoutes.notifications,
+    AppRoutes.account_employee,
+  ];
+
   void _handleTap(BuildContext context, int index) {
-    // 1. Gọi callback onTap từ màn hình cha nếu có truyền vào
-    if (onTap != null) {
-      onTap!(index);
-    }
-
-    // 2. Chuyển trang qua Route Name nếu chọn tab khác với tab hiện tại
+    onTap?.call(index);
     if (index == currentIndex) return;
-
-    switch (index) {
-      case 0: // Tab Trang chủ
-        Navigator.pushReplacementNamed(context, AppRoutes.home_employee);
-        break;
-      case 1: // Tab Bản tin (Nếu có route)
-        break;
-      case 2: // Tab Tin nhắn (Nếu có route)
-        break;
-      case 3: // Tab Tài khoản
-        Navigator.pushReplacementNamed(context, AppRoutes.account_employee);
-        break;
-    }
+    Navigator.pushNamedAndRemoveUntil(context, _routes[index], (route) => false);
   }
 
   @override
   Widget build(BuildContext context) {
-    return BottomNavigationBar(
-      currentIndex: currentIndex,
-      selectedItemColor: const Color(0xFF3860F4),
-      unselectedItemColor: Colors.grey,
-      selectedFontSize: 14,
-      unselectedFontSize: 13,
-      type: BottomNavigationBarType.fixed,
-      onTap: (index) => _handleTap(context, index),
-      items: const [
-        BottomNavigationBarItem(
-          icon: Icon(Icons.home_outlined, size: 26),
-          label: 'Trang chủ',
+    return Container(
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFF0C2A5E).withValues(alpha: 0.08),
+            blurRadius: 24,
+            offset: const Offset(0, -6),
+          ),
+        ],
+      ),
+      child: SafeArea(
+        top: false,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(8, 8, 8, 6),
+          child: Row(
+            children: [
+              _item(context, 0, Icons.home_outlined, Icons.home_rounded, 'Trang chủ'),
+              _item(context, 1, Icons.fact_check_outlined, Icons.fact_check_rounded, 'Chấm công'),
+              _item(context, 2, Icons.calendar_month_outlined, Icons.calendar_month_rounded, 'Lịch làm'),
+              _item(context, 3, Icons.notifications_none_rounded, Icons.notifications_rounded, 'Thông báo',
+                  badge: true),
+              _item(context, 4, Icons.person_outline_rounded, Icons.person_rounded, 'Cá nhân'),
+            ],
+          ),
         ),
-        BottomNavigationBarItem(
-          icon: Icon(Icons.newspaper_outlined, size: 26),
-          label: 'Bản tin',
+      ),
+    );
+  }
+
+  Widget _item(
+    BuildContext context,
+    int index,
+    IconData icon,
+    IconData selectedIcon,
+    String label, {
+    bool badge = false,
+  }) {
+    final selected = index == currentIndex;
+    final color = selected ? AppColors.primary : AppColors.textMuted;
+
+    Widget iconWidget = Icon(selected ? selectedIcon : icon, size: 24, color: color);
+    if (badge) {
+      iconWidget = ValueListenableBuilder<int>(
+        valueListenable: NotificationService.unreadCount,
+        builder: (_, n, __) => Badge(
+          isLabelVisible: n > 0,
+          label: Text(n > 99 ? '99+' : '$n'),
+          child: Icon(selected ? selectedIcon : icon, size: 24, color: color),
         ),
-        BottomNavigationBarItem(
-          icon: Icon(Icons.chat_bubble_outline, size: 26),
-          label: 'Tin nhắn',
+      );
+    }
+
+    return Expanded(
+      child: Semantics(
+        button: true,
+        selected: selected,
+        label: label,
+        child: InkWell(
+        onTap: () => _handleTap(context, index),
+        borderRadius: BorderRadius.circular(16),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            AnimatedContainer(
+              duration: const Duration(milliseconds: 220),
+              curve: Curves.easeOut,
+              width: 48,
+              height: 30,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: selected ? AppColors.primarySoft : Colors.transparent,
+                borderRadius: BorderRadius.circular(15),
+              ),
+              child: iconWidget,
+            ),
+            const SizedBox(height: 3),
+            Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: selected ? FontWeight.w800 : FontWeight.w600,
+                color: color,
+              ),
+            ),
+          ],
         ),
-        BottomNavigationBarItem(
-          icon: Icon(Icons.person_outline, size: 26),
-          label: 'Tài khoản',
-        ),
-      ],
+      ),
+      ),
     );
   }
 }
