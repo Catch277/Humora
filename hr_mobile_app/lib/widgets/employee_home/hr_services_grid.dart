@@ -54,27 +54,27 @@ class HrServicesGrid extends StatelessWidget {
       button: true,
       label: s.title,
       child: InkWell(
-      onTap: () => Navigator.pushNamed(context, s.route),
-      borderRadius: BorderRadius.circular(16),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Container(
-            width: 50,
-            height: 50,
-            decoration: BoxDecoration(color: s.bg, borderRadius: BorderRadius.circular(16)),
-            child: Icon(s.icon, color: s.color, size: 24),
-          ),
-          const SizedBox(height: 7),
-          Text(
-            s.title,
-            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.textPrimary),
-            textAlign: TextAlign.center,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-          ),
-        ],
-      ),
+        onTap: () => Navigator.pushNamed(context, s.route),
+        borderRadius: BorderRadius.circular(16),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Container(
+              width: 50,
+              height: 50,
+              decoration: BoxDecoration(color: s.bg, borderRadius: BorderRadius.circular(16)),
+              child: Icon(s.icon, color: s.color, size: 24),
+            ),
+            const SizedBox(height: 7),
+            Text(
+              s.title,
+              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.textPrimary),
+              textAlign: TextAlign.center,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ],
+        ),
       ),
     );
   }
