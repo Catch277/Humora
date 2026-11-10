@@ -19,6 +19,10 @@ import {
 import { useEffect, useMemo, useState } from "react";
 
 import { useLocale } from "@/components/LocaleProvider";
+import PayRateDialog, {
+  type PayRateSavedEvent,
+  type PayRateTarget,
+} from "@/components/PayRateDialog";
 import { useProfile } from "@/components/ProfileProvider";
 import type { PayEstimate } from "@/lib/domain/entities/PayEstimate";
 import type { PayProfile } from "@/lib/domain/entities/PayProfile";
@@ -72,16 +76,6 @@ type RequestFailure = { status: number; message?: string };
 
 type Notice = { key: MessageKey; params?: TranslationParams };
 
-type RateDraft = {
-  employeeId: string;
-  fullName: string;
-  hourlyRate: string;
-  overtimeMultiplier: string;
-  fixedAllowance: string;
-  effectiveFrom: string;
-  note: string;
-};
-
 type ItemDraft = {
   kind: PayslipItemKind;
   code: string;
@@ -108,11 +102,6 @@ function payslipStatusLabel(status: PayslipStatus, t: Translate): string {
 /** `minutes` as the hours a reader expects, one decimal at most (`4,5 giờ`) — the API speaks minutes. */
 function hoursValue(minutes: number): number {
   return Math.round((minutes / 60) * 10) / 10;
-}
-
-/** Today in Asia/Bangkok as `YYYY-MM-DD`, the default `effectiveFrom` of a new rate. */
-function businessToday(): string {
-  return new Date(Date.now() + 7 * 60 * 60 * 1000).toISOString().slice(0, 10);
 }
 
 async function failureOf(response: Response): Promise<RequestFailure> {
@@ -158,7 +147,7 @@ export default function PayrollPage() {
   const [tab, setTab] = useState<"payslips" | "rates">("payslips");
   const [detailId, setDetailId] = useState<string | null>(null);
   const [detail, setDetail] = useState<PayslipDetail | null>(null);
-  const [rateDraft, setRateDraft] = useState<RateDraft | null>(null);
+  const [rateTarget, setRateTarget] = useState<PayRateTarget | null>(null);
   const [itemDraft, setItemDraft] = useState<ItemDraft>(EMPTY_ITEM);
   const [voidReason, setVoidReason] = useState("");
   const [disputeNote, setDisputeNote] = useState("");
@@ -434,73 +423,28 @@ export default function PayrollPage() {
     setDisputeNote("");
   }
 
-  function startRate(member: StaffMember, rate: PayProfile | null) {
+  /**
+   * SCRUM-92: the rate dialog is shared with `/staff`, so the page only says *whose* rates to show. It opens
+   * on the history when the employee already has a rate and on the form when they have none — which is the
+   * one thing the old in-page modal could not do.
+   */
+  function openRates(member: StaffMember) {
     resetMessages();
-    setRateDraft({
-      employeeId: member.id,
-      fullName: member.full_name,
-      hourlyRate: rate ? String(rate.hourly_rate) : "",
-      overtimeMultiplier: String(rate?.overtime_multiplier ?? 1.5),
-      fixedAllowance: String(rate?.fixed_allowance ?? 0),
-      // A raise is a NEW row, so the dialog starts from today rather than from the stored effective date.
-      effectiveFrom: businessToday(),
-      note: "",
-    });
+    setRateTarget({ employeeId: member.id, fullName: member.full_name });
   }
 
-  async function handleSaveRate() {
-    if (!rateDraft) {
-      return;
-    }
-
-    const hourlyRate = Number(rateDraft.hourlyRate);
-    const multiplier = Number(rateDraft.overtimeMultiplier);
-    const allowance = Number(rateDraft.fixedAllowance || "0");
-
-    if (!Number.isInteger(hourlyRate) || hourlyRate < 0) {
-      setActionFailure({ status: 400, message: t("payroll.error.rateValue") });
-      return;
-    }
-
-    if (!rateDraft.effectiveFrom) {
-      setActionFailure({
-        status: 400,
-        message: t("payroll.error.effectiveFrom"),
-      });
-      return;
-    }
-
-    setBusy(true);
-    resetMessages();
-
-    try {
-      const response = await fetch("/api/payroll/profiles", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          employeeId: rateDraft.employeeId,
-          hourlyRate,
-          effectiveFrom: rateDraft.effectiveFrom,
-          overtimeMultiplier:
-            Number.isFinite(multiplier) && multiplier >= 1 ? multiplier : 1.5,
-          fixedAllowance: Number.isFinite(allowance) ? allowance : 0,
-          note: rateDraft.note.trim() || null,
-        }),
-      });
-
-      if (!response.ok) {
-        setActionFailure(await failureOf(response));
-        return;
-      }
-
-      setRateDraft(null);
-      setNotices([{ key: "payroll.notice.rateSaved" }]);
-      refresh();
-    } catch {
-      setActionFailure({ status: 500 });
-    } finally {
-      setBusy(false);
-    }
+  function handleRateSaved(event: PayRateSavedEvent) {
+    setNotices([
+      {
+        key:
+          event === "created"
+            ? "payroll.notice.rateSaved"
+            : event === "updated"
+              ? "payroll.notice.rateUpdated"
+              : "payroll.notice.rateRemoved",
+      },
+    ]);
+    refresh();
   }
 
   async function handleAddItem() {
@@ -1179,7 +1123,7 @@ export default function PayrollPage() {
                       <td className="px-4 py-3 text-right">
                         <button
                           type="button"
-                          onClick={() => startRate(member, rate)}
+                          onClick={() => openRates(member)}
                           className="min-h-10 whitespace-nowrap rounded-lg border border-slate-200/80 px-3 text-xs font-medium text-slate-600 hover:bg-surface-muted"
                         >
                           {rate ? t("payroll.rates.edit") : t("payroll.rates.add")}
@@ -1194,123 +1138,15 @@ export default function PayrollPage() {
         </section>
       )}
 
-      {rateDraft && (
-        <div className="fixed inset-0 z-40 flex items-end justify-center bg-slate-900/40 p-4 sm:items-center sm:p-6">
-          <div
-            role="dialog"
-            aria-modal="true"
-            aria-label={t("payroll.rates.edit")}
-            className="flex max-h-[85dvh] w-full max-w-md flex-col overflow-hidden rounded-2xl border border-slate-200/80 bg-surface shadow-xl"
-          >
-            <header className="flex items-start justify-between gap-3 border-b border-slate-200/80 px-4 py-3">
-              <div>
-                <p className="text-sm font-semibold text-slate-900">
-                  {t("payroll.rates.edit")}
-                </p>
-                <p className="mt-0.5 text-xs text-slate-500">
-                  {rateDraft.fullName}
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={() => setRateDraft(null)}
-                aria-label={t("payroll.detail.close")}
-                className="rounded-lg p-2 text-slate-500 hover:bg-surface-muted"
-              >
-                <X className="h-4 w-4" />
-              </button>
-            </header>
-
-            <div className="flex flex-col gap-3 overflow-y-auto px-4 py-4">
-              <label className="flex flex-col gap-1 text-xs font-medium text-slate-600">
-                {t("payroll.rates.hourly")}
-                <input
-                  value={rateDraft.hourlyRate}
-                  onChange={(event) =>
-                    setRateDraft({
-                      ...rateDraft,
-                      hourlyRate: event.target.value,
-                    })
-                  }
-                  inputMode="numeric"
-                  className="rounded-lg border border-slate-200 bg-surface px-2 py-2 text-sm text-slate-800"
-                />
-              </label>
-              <label className="flex flex-col gap-1 text-xs font-medium text-slate-600">
-                {t("payroll.rates.multiplier")}
-                <input
-                  value={rateDraft.overtimeMultiplier}
-                  onChange={(event) =>
-                    setRateDraft({
-                      ...rateDraft,
-                      overtimeMultiplier: event.target.value,
-                    })
-                  }
-                  inputMode="decimal"
-                  className="rounded-lg border border-slate-200 bg-surface px-2 py-2 text-sm text-slate-800"
-                />
-              </label>
-              <label className="flex flex-col gap-1 text-xs font-medium text-slate-600">
-                {t("payroll.rates.allowance")}
-                <input
-                  value={rateDraft.fixedAllowance}
-                  onChange={(event) =>
-                    setRateDraft({
-                      ...rateDraft,
-                      fixedAllowance: event.target.value,
-                    })
-                  }
-                  inputMode="numeric"
-                  className="rounded-lg border border-slate-200 bg-surface px-2 py-2 text-sm text-slate-800"
-                />
-              </label>
-              <label className="flex flex-col gap-1 text-xs font-medium text-slate-600">
-                {t("payroll.rates.effectiveFrom")}
-                <input
-                  type="date"
-                  value={rateDraft.effectiveFrom}
-                  onChange={(event) =>
-                    setRateDraft({
-                      ...rateDraft,
-                      effectiveFrom: event.target.value,
-                    })
-                  }
-                  className="rounded-lg border border-slate-200 bg-surface px-2 py-2 text-sm text-slate-800"
-                />
-              </label>
-              <label className="flex flex-col gap-1 text-xs font-medium text-slate-600">
-                {t("payroll.rates.note")}
-                <textarea
-                  value={rateDraft.note}
-                  onChange={(event) =>
-                    setRateDraft({ ...rateDraft, note: event.target.value })
-                  }
-                  rows={2}
-                  maxLength={500}
-                  className="rounded-lg border border-slate-200 bg-surface px-2 py-2 text-sm text-slate-800"
-                />
-              </label>
-            </div>
-
-            <footer className="flex justify-end gap-2 border-t border-slate-200/80 px-4 py-3">
-              <button
-                type="button"
-                onClick={() => setRateDraft(null)}
-                className="inline-flex min-h-10 items-center rounded-lg border border-slate-200/80 px-3 text-sm font-medium text-slate-600 hover:bg-surface-muted"
-              >
-                {t("payroll.detail.close")}
-              </button>
-              <button
-                type="button"
-                onClick={handleSaveRate}
-                disabled={busy}
-                className="inline-flex min-h-10 items-center rounded-lg bg-primary px-3 text-sm font-semibold text-white hover:bg-primary-strong disabled:opacity-60"
-              >
-                {t("payroll.rates.save")}
-              </button>
-            </footer>
-          </div>
-        </div>
+      {rateTarget && (
+        <PayRateDialog
+          target={rateTarget}
+          profiles={(data?.profiles ?? []).filter(
+            (profile) => profile.employee_id === rateTarget.employeeId,
+          )}
+          onClose={() => setRateTarget(null)}
+          onSaved={handleRateSaved}
+        />
       )}
 
       {detailId && (

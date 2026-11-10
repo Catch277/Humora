@@ -372,6 +372,40 @@ schema, RPCs and RLS are **one script both clients share**: `supabase/sql/SCRUM-
   MANUAL deductions rather than computed), and any audit-log view in the app — `payroll_audit_log` is
   owner-readable in SQL only.
 
+### Đơn giá giờ: create / read / edit / delete (SCRUM-92)
+
+`SCRUM-90` shipped create (an upsert on `(employee_id, effective_from)`) and read. `SCRUM-92_pay_profile_crud.sql`
+adds the missing half, so a rate is now a row the owner can correct or remove — and it is one row the screen
+edits, not a salary column anywhere:
+
+- **Why a new RPC instead of a `UPDATE` policy**: `pay_profiles` still carries a SELECT policy only and
+  `INSERT/UPDATE/DELETE` stay revoked, so `update_pay_profile(id, …)` and `delete_pay_profile(id)` are
+  `security definer` functions that begin with `payroll_require_owner()` and scope the row by
+  `organization_id = current_organization_id()`. A client cannot reach the money any other way.
+- **What an edit may change**: all five stored values, **including `effective_from`** — that is the case the
+  upsert cannot express (a row saved with the wrong effective day). Moving the day onto another row of the same
+  employee answers `PAY_PROFILE_DUPLICATE` (`409`) instead of a bare `23505`. `employee_id` is never editable:
+  a rate belongs to one person, so moving it is delete + create.
+- **What a delete does not do**: it never touches a payslip. Amounts are snapshots
+  (`payslip_work_lines.hourly_rate`), so a published month keeps its figures and only the *next* `generate`
+  changes — deleting somebody's last rate simply makes the generator skip them, which `/payroll` already counts
+  under "chưa có đơn giá giờ". The removed row is copied into `payroll_audit_log` (`DELETE_PAY_PROFILE`) first.
+- **`updated_at`**: the table had only `created_at`, so the script adds `updated_at … default now()`. The app
+  deliberately does **not** select it (`PAY_PROFILE_COLUMNS` is unchanged) — reading a column a database may not
+  have would turn `GET /api/payroll/profiles` into a `42703` and take `/payroll` and `/staff` down with it.
+- **Two entry points, one dialog**: `components/PayRateDialog.tsx` owns the form, the validation, the history
+  list and the three calls (`PUT` create, `PATCH /api/payroll/profiles/{id}`, `DELETE …/{id}`). `/payroll` opens
+  it from the rates tab; `/staff` opens it from a new **Đơn giá giờ** column, because "the employee record" is
+  where an owner looks for somebody's salary. Both pages read the same `GET /api/payroll/profiles` list, so the
+  two screens cannot disagree.
+- **`/staff` specifics**: the column is rendered only for a caller holding `payroll:manage` (the screen is
+  already owner-only through `staff:manage`, so nobody gains access), a failed profiles read shows
+  `payroll.rates.loadFailed` in the cell instead of blanking the table, and the organization's **owner** row
+  shows a statement rather than a button — `set_pay_profile` refuses an `OWNER` as the target employee, so a
+  button there could only answer `404`.
+- **Deploy order**: `SCRUM-90` → `SCRUM-92` → the build. The script is additive (one column with a default and
+  two new functions), and no existing select changes, so app and SQL can ship together.
+
 ## Password reset by email (forgot password)
 
 `/login` has a "Quên mật khẩu?" panel and `/reset-password` is where the emailed link lands. The flow
@@ -1169,6 +1203,18 @@ screen that talks to Supabase Auth directly instead of through `app/api/**`.
   (viết thường, khác mã của SCRUM-71/72) nằm ở nhóm `payroll` mới trong `notificationCatalog.ts`. Chạy
   `SCRUM-90` (sau `SCRUM-69`) **trước** khi deploy build này; ca tăng ca cần `shifts.is_overtime = true`
   (hoặc tên bắt đầu bằng "Tăng ca") thì hệ số 1.5 mới áp dụng.
+
+- Sửa/xoá đơn giá giờ (SCRUM-92): `SCRUM-92_pay_profile_crud.sql` thêm hai hàm `security definer`
+  `update_pay_profile` và `delete_pay_profile` (vẫn bắt đầu bằng `payroll_require_owner()`, vẫn lọc theo tổ
+  chức trong phiên) và cột `updated_at` — app **không** đọc cột này để một CSDL chưa chạy script không làm
+  hỏng `GET /api/payroll/profiles`. Sửa được **cả** `effective_from` (đó là trường hợp `set_pay_profile` chịu
+  thua); dời ngày trùng dòng khác của cùng người trả `409 PAY_PROFILE_DUPLICATE`; `employee_id` không sửa
+  được. Xoá không đụng tới phiếu lương (số tiền là ảnh chụp) — chỉ lần `generate_payslips` sau đó thay đổi,
+  dòng bị xoá được ghi vào `payroll_audit_log` trước. API mới: `PATCH`/`DELETE /api/payroll/profiles/{id}`
+  (`payroll:manage`). Giao diện dùng chung `components/PayRateDialog.tsx` (lịch sử + sửa + xoá + thêm) cho
+  tab "Đơn giá giờ" của `/payroll` **và** cho cột "Đơn giá giờ" mới trên `/staff` — chủ sở hữu sửa lương ngay
+  trên hồ sơ nhân viên; dòng của chính chủ sở hữu chỉ hiện câu giải thích vì `set_pay_profile` từ chối
+  `OWNER` làm nhân viên được trả lương. Chạy `SCRUM-92` sau `SCRUM-90`, cùng lúc với build.
 
 - Giao diện điện thoại: `md` (768px) là mốc duy nhất. Danh sách điều hướng chỉ nằm ở
   `components/navigation.ts` — `Sidebar` cho màn hình rộng, `MobileNav` là ngăn kéo trượt cho điện thoại (mở

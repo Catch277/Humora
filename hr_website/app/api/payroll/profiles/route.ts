@@ -9,6 +9,9 @@
  *
  *       Một lần tăng lương là một dòng mới (`effective_from`), không phải sửa dòng cũ, nên lịch sử — và con
  *       số mà một phiếu lương đã phát hành được tính từ đó — vẫn còn nguyên.
+ *
+ *       Sửa hoặc xoá một dòng đã lưu thì dùng `PATCH` / `DELETE /api/payroll/profiles/{id}` (SCRUM-92): `PUT`
+ *       vẫn là đường tạo mới (hoặc ghi đè đúng cặp `employeeId` + `effectiveFrom` đó).
  *     tags:
  *       - Payroll
  *     responses:

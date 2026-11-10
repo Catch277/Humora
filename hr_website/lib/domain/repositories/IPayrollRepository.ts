@@ -1,6 +1,10 @@
 import type { AddPayslipItemInput } from "@/lib/domain/entities/PayslipItem";
 import type { PayEstimate } from "@/lib/domain/entities/PayEstimate";
-import type { PayProfile, SetPayProfileInput } from "@/lib/domain/entities/PayProfile";
+import type {
+  PayProfile,
+  SetPayProfileInput,
+  UpdatePayProfileInput,
+} from "@/lib/domain/entities/PayProfile";
 import type { PayslipDetail } from "@/lib/domain/entities/PayslipDetail";
 import type {
   Payslip,
@@ -28,6 +32,13 @@ export interface IPayrollRepository {
   findProfiles(): Promise<PayProfile[]>;
   /** Stores one rate (a new `effectiveFrom` = a new row) and answers its id. */
   setProfile(input: SetPayProfileInput): Promise<string>;
+  /** Rewrites an existing rate in place (SCRUM-92) and answers its id; `404` when the row is gone. */
+  updateProfile(input: UpdatePayProfileInput): Promise<string>;
+  /**
+   * Removes one rate (SCRUM-92). Published payslips keep their snapshotted amounts, so this only changes
+   * what the generator will do next; the row is written to `payroll_audit_log` first.
+   */
+  deleteProfile(id: string): Promise<void>;
 
   /** The payslips of one month; RLS narrows the answer to the caller's own PUBLISHED rows. */
   findPayslips(filters: PayslipFilters): Promise<Payslip[]>;

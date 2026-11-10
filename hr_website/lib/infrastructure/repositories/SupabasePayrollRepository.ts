@@ -1,5 +1,9 @@
 import type { PayEstimate } from "@/lib/domain/entities/PayEstimate";
-import type { PayProfile, SetPayProfileInput } from "@/lib/domain/entities/PayProfile";
+import type {
+  PayProfile,
+  SetPayProfileInput,
+  UpdatePayProfileInput,
+} from "@/lib/domain/entities/PayProfile";
 import type { PayslipDetail } from "@/lib/domain/entities/PayslipDetail";
 import type { AddPayslipItemInput, PayslipItem } from "@/lib/domain/entities/PayslipItem";
 import type { PayslipWorkLine } from "@/lib/domain/entities/PayslipWorkLine";
@@ -346,6 +350,39 @@ export class SupabasePayrollRepository implements IPayrollRepository {
     }
 
     return String(data);
+  }
+
+  async updateProfile(input: UpdatePayProfileInput): Promise<string> {
+    const supabase = await createSupabaseServerClient();
+    // SCRUM-92: the row is named by id, and `update_pay_profile` re-reads its organization from the session,
+    // so an id from another tenant matches no row and answers `PAY_PROFILE_NOT_FOUND` rather than editing it.
+    const { data, error } = await supabase.rpc("update_pay_profile", {
+      p_id: input.id,
+      p_hourly_rate: input.hourlyRate,
+      p_effective_from: input.effectiveFrom,
+      p_overtime_multiplier: input.overtimeMultiplier,
+      p_fixed_allowance: input.fixedAllowance,
+      p_note: input.note,
+    });
+
+    if (error) {
+      throwPayrollError(error, "update the pay profile");
+    }
+
+    if (!data) {
+      throw new Error("update_pay_profile answered no id.");
+    }
+
+    return String(data);
+  }
+
+  async deleteProfile(id: string): Promise<void> {
+    const supabase = await createSupabaseServerClient();
+    const { error } = await supabase.rpc("delete_pay_profile", { p_id: id });
+
+    if (error) {
+      throwPayrollError(error, "delete the pay profile");
+    }
   }
 
   async generate(periodStart: string, employeeId?: string): Promise<number> {

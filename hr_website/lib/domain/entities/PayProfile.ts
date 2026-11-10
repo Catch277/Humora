@@ -42,3 +42,20 @@ export interface SetPayProfileInput {
   fixedAllowance: number;
   note: string | null;
 }
+
+/**
+ * Correcting a rate that is already stored (SCRUM-92).
+ *
+ * `id` — not `employeeId` — is what names the row: a rate belongs to one employee for good, so moving it to
+ * somebody else would be a delete plus a create, and pretending otherwise in the payload would let a screen
+ * silently rewrite a colleague's history. `effectiveFrom` stays editable on purpose: a row saved with the
+ * wrong effective day is exactly what `set_pay_profile` (an upsert keyed by that date) cannot repair.
+ */
+export interface UpdatePayProfileInput {
+  id: string;
+  hourlyRate: number;
+  effectiveFrom: string;
+  overtimeMultiplier: number;
+  fixedAllowance: number;
+  note: string | null;
+}

@@ -4753,7 +4753,7 @@
     "/api/payroll/profiles": {
       "get": {
         "summary": "List the hourly rates",
-        "description": "Đơn giá giờ của nhân viên (SCRUM-90), mới nhất trước. Chủ sở hữu đọc được toàn bộ tổ chức; mọi vai\ntrò khác chỉ đọc được đơn giá của chính mình (RLS `pay_profiles_select`).\n\nMột lần tăng lương là một dòng mới (`effective_from`), không phải sửa dòng cũ, nên lịch sử — và con\nsố mà một phiếu lương đã phát hành được tính từ đó — vẫn còn nguyên.\n",
+        "description": "Đơn giá giờ của nhân viên (SCRUM-90), mới nhất trước. Chủ sở hữu đọc được toàn bộ tổ chức; mọi vai\ntrò khác chỉ đọc được đơn giá của chính mình (RLS `pay_profiles_select`).\n\nMột lần tăng lương là một dòng mới (`effective_from`), không phải sửa dòng cũ, nên lịch sử — và con\nsố mà một phiếu lương đã phát hành được tính từ đó — vẫn còn nguyên.\n\nSửa hoặc xoá một dòng đã lưu thì dùng `PATCH` / `DELETE /api/payroll/profiles/{id}` (SCRUM-92): `PUT`\nvẫn là đường tạo mới (hoặc ghi đè đúng cặp `employeeId` + `effectiveFrom` đó).\n",
         "tags": [
           "Payroll"
         ],
@@ -4914,6 +4914,220 @@
           },
           "500": {
             "description": "Không thể lưu đơn giá giờ.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/payroll/profiles/{id}": {
+      "patch": {
+        "summary": "Correct one stored hourly rate",
+        "description": "Sửa một đơn giá giờ đã lưu (SCRUM-92). Chỉ chủ sở hữu tổ chức (`payroll:manage`);\n`update_pay_profile` đọc tổ chức và người thao tác từ phiên đăng nhập nên một `id` của tổ chức khác\nkhông sửa được gì.\n\n`effectiveFrom` sửa được ở đây — đó chính là trường hợp `PUT` không xử lý nổi: `set_pay_profile`\nghi theo cặp `(employeeId, effectiveFrom)` nên một dòng lỡ lưu sai ngày hiệu lực chỉ sửa được bằng\n`PATCH`. Dời ngày sang trùng một dòng khác của cùng nhân viên trả `409` (`PAY_PROFILE_DUPLICATE`).\n\nKhông có `employeeId` trong body: một đơn giá thuộc về đúng một người, muốn chuyển người thì xoá rồi\ntạo lại, nhờ vậy không ai âm thầm viết lại lịch sử lương của người khác.\n",
+        "tags": [
+          "Payroll"
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "description": "Id của dòng `pay_profiles`."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "hourlyRate",
+                  "effectiveFrom"
+                ],
+                "properties": {
+                  "hourlyRate": {
+                    "type": "integer",
+                    "description": "VND cho một giờ, 0..10.000.000."
+                  },
+                  "effectiveFrom": {
+                    "type": "string",
+                    "format": "date",
+                    "description": "Ngày bắt đầu áp dụng (YYYY-MM-DD)."
+                  },
+                  "overtimeMultiplier": {
+                    "type": "number",
+                    "description": "Hệ số ca tăng ca, 1..5, tối đa 2 chữ số thập phân (mặc định 1.5)."
+                  },
+                  "fixedAllowance": {
+                    "type": "integer",
+                    "description": "Phụ cấp cố định mỗi tháng, 0..1.000.000.000 (mặc định 0)."
+                  },
+                  "note": {
+                    "type": "string",
+                    "nullable": true,
+                    "description": "Ghi chú của người nhập (tối đa 500 ký tự)."
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The corrected rate.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "id"
+                  ],
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "format": "uuid"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Một trường không hợp lệ (UUID, số nguyên trong khoảng, ngày, ghi chú quá dài).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Bạn cần đăng nhập để thực hiện thao tác này.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Chỉ chủ sở hữu tổ chức mới được quản lý bảng lương.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Không tìm thấy đơn giá giờ trong tổ chức.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Nhân viên này đã có một đơn giá bắt đầu từ ngày đó.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Không thể cập nhật đơn giá giờ.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "summary": "Remove one stored hourly rate",
+        "description": "Xoá một đơn giá giờ (SCRUM-92). Chỉ chủ sở hữu tổ chức.\n\nPhiếu lương đã phát hành **không** đổi: số tiền của phiếu là ảnh chụp\n(`payslip_work_lines.hourly_rate`). Việc xoá chỉ ảnh hưởng lần tạo phiếu kế tiếp — nếu đó là đơn giá\nduy nhất của người này thì `generate_payslips` sẽ bỏ qua họ và màn hình liệt kê họ vào nhóm \"chưa có\nđơn giá giờ\". Dòng bị xoá được ghi vào `payroll_audit_log` trước khi xoá.\n",
+        "tags": [
+          "Payroll"
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "description": "Id của dòng `pay_profiles`."
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "The rate is gone."
+          },
+          "400": {
+            "description": "id không phải UUID.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Bạn cần đăng nhập để thực hiện thao tác này.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Chỉ chủ sở hữu tổ chức mới được quản lý bảng lương.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Không tìm thấy đơn giá giờ trong tổ chức.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Không thể xoá đơn giá giờ.",
             "content": {
               "application/json": {
                 "schema": {

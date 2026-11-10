@@ -21,6 +21,7 @@ const PAYROLL_MESSAGE_KEYS: Readonly<Record<string, MessageKey>> = {
   PAYROLL_AUDIT_APPEND_ONLY: "payrollError.auditAppendOnly",
 
   PAYROLL_EMPLOYEE_NOT_FOUND: "payrollError.employeeNotFound",
+  PAY_PROFILE_NOT_FOUND: "payrollError.payProfileNotFound",
   PAYSLIP_NOT_FOUND: "payrollError.payslipNotFound",
   PAYSLIP_NOT_FOUND_OR_NOT_DRAFT: "payrollError.payslipNotFoundOrNotDraft",
   PAYSLIP_ITEM_NOT_FOUND: "payrollError.itemNotFound",
@@ -29,6 +30,7 @@ const PAYROLL_MESSAGE_KEYS: Readonly<Record<string, MessageKey>> = {
   PAYSLIP_BAD_STATUS: "payrollError.badStatus",
   PAYSLIP_NO_OPEN_DISPUTE: "payrollError.noOpenDispute",
   PAYSLIP_NOT_FOUND_OR_DISPUTE_OPEN: "payrollError.alreadyDisputed",
+  PAY_PROFILE_DUPLICATE: "payrollError.payProfileDuplicate",
 
   PAYROLL_FUTURE_PERIOD: "payrollError.futurePeriod",
   PAYROLL_PERIOD_NOT_FINISHED: "payrollError.periodNotFinished",
@@ -63,6 +65,7 @@ export const PAYROLL_TOKENS = {
   noOrganization: "PAYROLL_NO_ORGANIZATION",
   auditAppendOnly: "PAYROLL_AUDIT_APPEND_ONLY",
   employeeNotFound: "PAYROLL_EMPLOYEE_NOT_FOUND",
+  payProfileNotFound: "PAY_PROFILE_NOT_FOUND",
   payslipNotFound: "PAYSLIP_NOT_FOUND",
   payslipNotFoundOrNotDraft: "PAYSLIP_NOT_FOUND_OR_NOT_DRAFT",
   itemNotFound: "PAYSLIP_ITEM_NOT_FOUND",
@@ -70,6 +73,7 @@ export const PAYROLL_TOKENS = {
   badStatus: "PAYSLIP_BAD_STATUS",
   noOpenDispute: "PAYSLIP_NO_OPEN_DISPUTE",
   alreadyDisputed: "PAYSLIP_NOT_FOUND_OR_DISPUTE_OPEN",
+  payProfileDuplicate: "PAY_PROFILE_DUPLICATE",
   futurePeriod: "PAYROLL_FUTURE_PERIOD",
   periodNotFinished: "PAYROLL_PERIOD_NOT_FINISHED",
   voidReasonRequired: "PAYSLIP_VOID_REASON_REQUIRED",

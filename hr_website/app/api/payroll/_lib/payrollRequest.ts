@@ -12,6 +12,7 @@ import {
 import {
   PAY_PROFILE_LIMITS,
   type SetPayProfileInput,
+  type UpdatePayProfileInput,
 } from "@/lib/domain/entities/PayProfile";
 
 /**
@@ -84,14 +85,57 @@ export function parsePayProfileBody(
   body: Record<string, unknown>,
 ): ParseResult<SetPayProfileInput> {
   const employeeId = body.employeeId;
-  const effectiveFrom = body.effectiveFrom;
-  const rawMultiplier = body.overtimeMultiplier;
-  const rawAllowance = body.fixedAllowance;
-  const note = body.note;
 
   if (typeof employeeId !== "string" || !UUID_PATTERN.test(employeeId)) {
     return { ok: false, error: "employeeId phải là UUID." };
   }
+
+  const fields = parseRateFields(body);
+
+  if (!fields.ok) {
+    return fields;
+  }
+
+  return { ok: true, value: { employeeId, ...fields.value } };
+}
+
+/**
+ * The `body` of `PATCH /api/payroll/profiles/[id]` — the same five numbers as a new rate, minus the
+ * employee: a rate belongs to one person for good (SCRUM-92), so moving it is a delete plus a create.
+ *
+ * `id` comes from the path and every field is required-ish in the same way as `PUT` (an absent multiplier or
+ * allowance falls back to the column default, an absent rate or date is refused), so the two handlers cannot
+ * disagree about what a valid rate looks like.
+ */
+export function parsePayProfilePatchBody(
+  id: string,
+  body: Record<string, unknown>,
+): ParseResult<UpdatePayProfileInput> {
+  if (!UUID_PATTERN.test(id)) {
+    return { ok: false, error: "id phải là UUID." };
+  }
+
+  const fields = parseRateFields(body);
+
+  if (!fields.ok) {
+    return fields;
+  }
+
+  return { ok: true, value: { id, ...fields.value } };
+}
+
+/**
+ * The five editable values of a rate, validated against the CHECK constraints of
+ * `supabase/sql/SCRUM-90_payroll.sql` so the route answers `400` naming the field instead of letting the RPC
+ * fail with a `23514` the caller would read as a server bug.
+ */
+function parseRateFields(
+  body: Record<string, unknown>,
+): ParseResult<Omit<SetPayProfileInput, "employeeId">> {
+  const effectiveFrom = body.effectiveFrom;
+  const rawMultiplier = body.overtimeMultiplier;
+  const rawAllowance = body.fixedAllowance;
+  const note = body.note;
 
   const hourlyRate = readInteger(
     body.hourlyRate,
@@ -164,7 +208,6 @@ export function parsePayProfileBody(
   return {
     ok: true,
     value: {
-      employeeId,
       hourlyRate,
       effectiveFrom,
       overtimeMultiplier,

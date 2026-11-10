@@ -33,6 +33,7 @@ const FORBIDDEN_TOKENS: ReadonlySet<string> = new Set([
 /** `404`: the row is not there, or RLS hides it (an id from another organization). */
 const NOT_FOUND_TOKENS: ReadonlySet<string> = new Set([
   PAYROLL_TOKENS.employeeNotFound,
+  PAYROLL_TOKENS.payProfileNotFound,
   PAYROLL_TOKENS.payslipNotFound,
   PAYROLL_TOKENS.payslipNotFoundOrNotDraft,
   PAYROLL_TOKENS.itemNotFound,
@@ -44,6 +45,7 @@ const CONFLICT_TOKENS: ReadonlySet<string> = new Set([
   PAYROLL_TOKENS.badStatus,
   PAYROLL_TOKENS.noOpenDispute,
   PAYROLL_TOKENS.alreadyDisputed,
+  PAYROLL_TOKENS.payProfileDuplicate,
 ]);
 
 /** `400`: the payload breaks a rule only the database can judge (today in Bangkok, the running sums). */
