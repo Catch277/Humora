@@ -406,6 +406,34 @@ edits, not a salary column anywhere:
 - **Deploy order**: `SCRUM-90` → `SCRUM-92` → the build. The script is additive (one column with a default and
   two new functions), and no existing select changes, so app and SQL can ship together.
 
+### Chốt lương thực nhận: an exact final salary on one payslip (SCRUM-93)
+
+The hourly money is the base, and the owner can still decide **what this employee actually receives this
+month**. `SCRUM-93_final_salary.sql` adds `set_payslip_net(payslip, target, note)`; the difference is stored as
+**one** `ADJUSTMENT` item, never as an override column:
+
+- **Why an item and not a `net_amount` column**: the CHECK keeps `gross = work + other_earnings` and
+  `net = gross − deduction`, so the payslip cannot contradict its own parts, the employee reads *why* the number
+  differs from the hours worked, and every existing reader (`/payroll`, the drawer, the mobile app) keeps
+  working unchanged.
+- **Set, not add**: the function deletes the previous manual `ADJUSTMENT` first, so the control behaves like a
+  field. `delta > 0` → `EARNING`, `delta < 0` → `DEDUCTION` (refused with `PAYSLIP_DEDUCTIONS_EXCEED_GROSS`
+  when it would exceed the gross), `delta = 0` → nothing stored.
+- **DRAFT only**: a published payslip is the record of money already paid, so it answers `PAYSLIP_IMMUTABLE`
+  (`409`) — the same sentence the void flow uses. An unknown id is `PAYSLIP_NOT_FOUND` (`404`).
+- **The figure is the answer**: after `payroll_recalc` the function asserts `net_amount = target` and raises
+  `PAYSLIP_NET_MISMATCH` otherwise, so a stored number can never quietly mean something else.
+- **`generate_payslips` is re-created** (verbatim from SCRUM-90 plus one `delete`) so regenerating a month drops
+  the manual `ADJUSTMENT`: its delta was measured against the hours that just changed. The owner re-enters the
+  figure, and `payroll_audit_log` (`SET_PAYSLIP_NET`) keeps both attempts. A standing monthly adjustment is
+  deliberately **not** shipped — it would have to change `my_pay_estimate()`, the function the mobile app reads.
+- **Routes**: `POST /api/payroll/payslips/{id}/net` (`payroll:manage`, body `{ targetNet, note? }`, answers
+  `{ net_amount }`), parser `parsePayslipNetBody` (0…1.000.000.000, mirroring `payslip_items.amount`).
+- **Screens**: the drawer on `/payroll` gains a **Lương thực nhận** card (input seeded with the current net, a
+  live `±` chip, disabled unless `DRAFT`), and `/staff` gains a **Lương thực nhận** column showing this month's
+  net + its status (`GET /api/payroll/payslips?month=…`). The write stays on `/payroll` because an exact figure
+  only means something against a month, and the payslip is the only object that has one.
+
 ## Password reset by email (forgot password)
 
 `/login` has a "Quên mật khẩu?" panel and `/reset-password` is where the emailed link lands. The flow
@@ -1215,6 +1243,20 @@ screen that talks to Supabase Auth directly instead of through `app/api/**`.
   tab "Đơn giá giờ" của `/payroll` **và** cho cột "Đơn giá giờ" mới trên `/staff` — chủ sở hữu sửa lương ngay
   trên hồ sơ nhân viên; dòng của chính chủ sở hữu chỉ hiện câu giải thích vì `set_pay_profile` từ chối
   `OWNER` làm nhân viên được trả lương. Chạy `SCRUM-92` sau `SCRUM-90`, cùng lúc với build.
+
+- Chốt lương thực nhận (SCRUM-93): `SCRUM-93_final_salary.sql` thêm hàm `security definer`
+  `set_payslip_net(payslip, target, note)` — chủ sở hữu nhập **đúng số tiền nhân viên sẽ nhận trong tháng**,
+  phần chênh lệch so với lương theo giờ công được lưu thành **một** khoản mục `ADJUSTMENT` (`EARNING` nếu cao
+  hơn, `DEDUCTION` nếu thấp hơn) rồi `payroll_recalc` tính lại. Nhờ vậy không có cột `net_amount` ghi đè, phiếu
+  vẫn giữ `gross = work + other_earnings` / `net = gross − deduction`, và nhân viên đọc được vì sao con số khác
+  giờ công. Gọi lại sẽ **thay** khoản điều chỉnh cũ (không cộng dồn). Chỉ phiếu `DRAFT`: phiếu đã phát hành trả
+  `409 PAYSLIP_IMMUTABLE`; id lạ trả `404`. Hàm còn tự kiểm `net_amount = target` sau khi tính lại. Script tạo
+  lại `generate_payslips` (y hệt SCRUM-90, thêm một câu `delete`) để lần tạo lại phiếu **xoá khoản điều chỉnh
+  cũ** — số chênh lệch đó được tính trên số giờ công vừa thay đổi. Chưa làm điều chỉnh lặp hằng tháng vì phải
+  sửa `my_pay_estimate()` (hàm app mobile đang đọc) — để vé sau. API: `POST /api/payroll/payslips/{id}/net`
+  (`payroll:manage`). Giao diện: thẻ "Lương thực nhận" trong ngăn chi tiết của `/payroll` (ô nhập điền sẵn số
+  hiện tại, hiện chênh lệch ±, chỉ bật với phiếu nháp) và cột "Lương thực nhận" mới trên `/staff` (số thực nhận
+  tháng này + trạng thái phiếu). Chạy `SCRUM-93` sau `SCRUM-90` và `SCRUM-92`, cùng lúc với build.
 
 - Giao diện điện thoại: `md` (768px) là mốc duy nhất. Danh sách điều hướng chỉ nằm ở
   `components/navigation.ts` — `Sidebar` cho màn hình rộng, `MobileNav` là ngăn kéo trượt cho điện thoại (mở

@@ -1067,6 +1067,7 @@ export const en: Translations = {
   "payrollError.voidReasonRequired": "Enter a reason for voiding the payslip (5-300 characters).",
   "payrollError.disputeNoteLength": "The dispute note must be 5-500 characters.",
   "payrollError.deductionsExceedGross": "The deductions exceed the payslip's earnings.",
+  "payrollError.targetInvalid": "The final amount must be between 0 and 1,000,000,000 ₫.",
   "payrollError.fallback": "The payroll action could not be completed. Please try again.",
 
   "payroll.eyebrow": "Payroll / SCRUM-90",
@@ -1181,6 +1182,17 @@ export const en: Translations = {
   "payroll.rates.removeNote": "Published payslips keep their figures. If this is the employee's only rate, the next generation skips them.",
   "payroll.rates.removeConfirm": "Delete the rate",
   "payroll.rates.cancel": "Cancel",
+
+  "payroll.final.title": "Final salary",
+  "payroll.final.column": "Final salary",
+  "payroll.final.hint": "Enter exactly what the employee receives this month. The difference against the hours worked is stored as one adjustment; no timesheet figure is rewritten.",
+  "payroll.final.input": "Final amount (VND)",
+  "payroll.final.submit": "Set the final salary",
+  "payroll.final.current": "Current net pay: {amount}.",
+  "payroll.final.draftOnly": "This payslip is published, so its amount is final. Void it and generate again to change it.",
+  "payroll.final.none": "No payslip yet",
+  "payroll.final.saved": "The final salary was set.",
+  "payroll.final.invalid": "The amount must be a whole number from 0 to 1,000,000,000 ₫.",
 
   "payroll.detail.title": "Payslip",
   "payroll.detail.period": "Period {from} – {to}",

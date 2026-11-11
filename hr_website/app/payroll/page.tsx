@@ -31,7 +31,11 @@ import {
   PAYSLIP_ITEM_CODE_PRESETS,
   type PayslipItemKind,
 } from "@/lib/domain/entities/PayslipItem";
-import type { Payslip, PayslipStatus } from "@/lib/domain/entities/Payslip";
+import {
+  PAYSLIP_NET_MAX,
+  type Payslip,
+  type PayslipStatus,
+} from "@/lib/domain/entities/Payslip";
 import {
   formatCurrency,
   formatDate,
@@ -151,6 +155,8 @@ export default function PayrollPage() {
   const [itemDraft, setItemDraft] = useState<ItemDraft>(EMPTY_ITEM);
   const [voidReason, setVoidReason] = useState("");
   const [disputeNote, setDisputeNote] = useState("");
+  /** SCRUM-93: what the owner typed into "Lương thực nhận"; seeded from the payslip's current net. */
+  const [netDraft, setNetDraft] = useState("");
 
   /**
    * One request per thing the month needs, all at once so the table, the KPIs and the estimate describe the
@@ -399,7 +405,11 @@ export default function PayrollPage() {
         return;
       }
 
-      setDetail((await response.json()) as PayslipDetail);
+      const loaded = (await response.json()) as PayslipDetail;
+
+      setDetail(loaded);
+      // The field starts at the figure the payslip carries, so "chốt" without editing changes nothing.
+      setNetDraft(String(loaded.payslip.net_amount));
     } catch {
       setActionFailure({ status: 500 });
     }
@@ -412,6 +422,7 @@ export default function PayrollPage() {
     setItemDraft(EMPTY_ITEM);
     setVoidReason("");
     setDisputeNote("");
+    setNetDraft("");
     void loadDetail(id);
   }
 
@@ -421,6 +432,7 @@ export default function PayrollPage() {
     setItemDraft(EMPTY_ITEM);
     setVoidReason("");
     setDisputeNote("");
+    setNetDraft("");
   }
 
   /**
@@ -445,6 +457,54 @@ export default function PayrollPage() {
       },
     ]);
     refresh();
+  }
+
+  /**
+   * Chốt lương thực nhận (SCRUM-93): the owner types the exact figure, the endpoint stores the difference as
+   * one ADJUSTMENT item and recalculates. Reloading the detail is what shows that item to the reader.
+   */
+  async function handleSetNet() {
+    if (!detail) {
+      return;
+    }
+
+    const targetNet = Number(netDraft);
+
+    if (
+      !Number.isInteger(targetNet) ||
+      targetNet < 0 ||
+      targetNet > PAYSLIP_NET_MAX
+    ) {
+      setActionFailure({ status: 400, message: t("payroll.final.invalid") });
+      return;
+    }
+
+    setBusy(true);
+    resetMessages();
+
+    try {
+      const response = await fetch(
+        `/api/payroll/payslips/${detail.payslip.id}/net`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ targetNet, note: null }),
+        },
+      );
+
+      if (!response.ok) {
+        setActionFailure(await failureOf(response));
+        return;
+      }
+
+      setNotices([{ key: "payroll.final.saved" }]);
+      await loadDetail(detail.payslip.id);
+      refresh();
+    } catch {
+      setActionFailure({ status: 500 });
+    } finally {
+      setBusy(false);
+    }
   }
 
   async function handleAddItem() {
@@ -1244,6 +1304,77 @@ export default function PayrollPage() {
                       emphasis
                     />
                   </div>
+
+                  {/*
+                    SCRUM-93: the base stays the hours; this control only records the difference as one
+                    ADJUSTMENT item, which is why the note under it can promise the published figure never
+                    changes silently.
+                  */}
+                  <section className="rounded-xl border border-slate-200/80 p-3">
+                    <h3 className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
+                      {t("payroll.final.title")}
+                    </h3>
+                    {detailPayslip.status === "DRAFT" ? (
+                      <>
+                        <p className="mt-1 text-xs text-slate-500">
+                          {t("payroll.final.hint")}
+                        </p>
+                        <div className="mt-2 flex flex-col gap-2 sm:flex-row sm:items-end">
+                          <label className="flex flex-1 flex-col gap-1 text-xs font-medium text-slate-600">
+                            {t("payroll.final.input")}
+                            <input
+                              value={netDraft}
+                              onChange={(event) => setNetDraft(event.target.value)}
+                              inputMode="numeric"
+                              className="rounded-lg border border-slate-200 bg-surface px-2 py-2 text-sm text-slate-800"
+                            />
+                          </label>
+                          <button
+                            type="button"
+                            onClick={() => void handleSetNet()}
+                            disabled={busy || netDraft.trim() === ""}
+                            className="inline-flex min-h-10 items-center justify-center gap-2 whitespace-nowrap rounded-lg bg-primary px-3 text-sm font-semibold text-white hover:bg-primary-strong disabled:opacity-60"
+                          >
+                            {busy ? (
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                            ) : (
+                              <Banknote className="h-4 w-4" />
+                            )}
+                            {t("payroll.final.submit")}
+                          </button>
+                        </div>
+                        <p className="mt-2 text-xs text-slate-500">
+                          {t("payroll.final.current", {
+                            amount: formatCurrency(
+                              detailPayslip.net_amount,
+                              locale,
+                            ),
+                          })}
+                          {Number.isInteger(Number(netDraft)) &&
+                            netDraft.trim() !== "" &&
+                            Number(netDraft) !== detailPayslip.net_amount && (
+                              <span className="ml-1 font-medium text-slate-700">
+                                ·{" "}
+                                {Number(netDraft) > detailPayslip.net_amount
+                                  ? "+"
+                                  : "−"}
+                                {formatCurrency(
+                                  Math.abs(
+                                    Number(netDraft) -
+                                      detailPayslip.net_amount,
+                                  ),
+                                  locale,
+                                )}
+                              </span>
+                            )}
+                        </p>
+                      </>
+                    ) : (
+                      <p className="mt-1 text-xs text-slate-500">
+                        {t("payroll.final.draftOnly")}
+                      </p>
+                    )}
+                  </section>
 
                   <section>
                     <h3 className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">

@@ -7,7 +7,9 @@ import {
 } from "@/lib/domain/entities/PayslipItem";
 import {
   PAYSLIP_DISPUTE_NOTE_LENGTH,
+  PAYSLIP_NET_MAX,
   PAYSLIP_VOID_REASON_LENGTH,
+  type SetPayslipNetInput,
 } from "@/lib/domain/entities/Payslip";
 import {
   PAY_PROFILE_LIMITS,
@@ -257,6 +259,39 @@ export function parsePayslipItemBody(
   }
 
   return { ok: true, value: { kind, code, label, amount } };
+}
+
+/**
+ * The `body` of `POST /api/payroll/payslips/[id]/net` (SCRUM-93).
+ *
+ * `targetNet` is the exact figure the employee should receive, so `0` is a valid answer (a month with no pay)
+ * and the bound mirrors `payslip_items.amount` — an adjustment the API accepts must not be refused by a CHECK.
+ */
+export function parsePayslipNetBody(
+  body: Record<string, unknown>,
+): ParseResult<SetPayslipNetInput> {
+  const targetNet = readInteger(body.targetNet, 0, PAYSLIP_NET_MAX);
+  const note = body.note;
+
+  if (targetNet === null) {
+    return {
+      ok: false,
+      error: `targetNet phải là số nguyên từ 0 đến ${PAYSLIP_NET_MAX}.`,
+    };
+  }
+
+  if (!isOptionalString(note)) {
+    return { ok: false, error: "note phải là chuỗi." };
+  }
+
+  if (note && note.length > PAY_PROFILE_LIMITS.noteLength) {
+    return {
+      ok: false,
+      error: `note tối đa ${PAY_PROFILE_LIMITS.noteLength} ký tự.`,
+    };
+  }
+
+  return { ok: true, value: { targetNet, note: note ?? null } };
 }
 
 /** The `body` of `POST /api/payroll/payslips/[id]/void`. */

@@ -12,6 +12,7 @@ import type {
   PayslipFilters,
   PayslipStatus,
   PublishPayslipsResult,
+  SetPayslipNetInput,
 } from "@/lib/domain/entities/Payslip";
 import type { IPayrollRepository } from "@/lib/domain/repositories/IPayrollRepository";
 import { throwPayrollError } from "@/lib/infrastructure/repositories/payrollErrors";
@@ -383,6 +384,24 @@ export class SupabasePayrollRepository implements IPayrollRepository {
     if (error) {
       throwPayrollError(error, "delete the pay profile");
     }
+  }
+
+  async setNet(payslipId: string, input: SetPayslipNetInput): Promise<number> {
+    const supabase = await createSupabaseServerClient();
+    // SCRUM-93: the RPC keeps the payslip's arithmetic honest — it stores the difference as one ADJUSTMENT
+    // item and recalculates — so the answer is the figure the row now carries, not the one we asked for. A
+    // published payslip is refused there (`PAYSLIP_IMMUTABLE` → 409), which is why nothing is checked here.
+    const { data, error } = await supabase.rpc("set_payslip_net", {
+      p_payslip_id: payslipId,
+      p_target_net: input.targetNet,
+      p_note: input.note,
+    });
+
+    if (error) {
+      throwPayrollError(error, "set the payslip net");
+    }
+
+    return Number((data as number | string | null) ?? 0);
   }
 
   async generate(periodStart: string, employeeId?: string): Promise<number> {

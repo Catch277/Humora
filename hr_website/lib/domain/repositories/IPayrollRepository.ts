@@ -10,6 +10,7 @@ import type {
   Payslip,
   PayslipFilters,
   PublishPayslipsResult,
+  SetPayslipNetInput,
 } from "@/lib/domain/entities/Payslip";
 
 /**
@@ -52,6 +53,11 @@ export interface IPayrollRepository {
 
   /** Adds a MANUAL phụ cấp/thưởng/khấu trừ to a DRAFT and answers its id. */
   addItem(payslipId: string, item: AddPayslipItemInput): Promise<string>;
+  /**
+   * Chốt lương thực nhận (SCRUM-93): makes a DRAFT pay exactly `targetNet` by one `ADJUSTMENT` item, and
+   * answers the figure the payslip now carries. Replaces a previous adjustment instead of stacking one.
+   */
+  setNet(payslipId: string, input: SetPayslipNetInput): Promise<number>;
   /** Removes a MANUAL item of a DRAFT (an AUTO one — the fixed allowance — stays). */
   removeItem(itemId: string): Promise<void>;
   /** Withdraws a DRAFT or a PUBLISHED payslip; the reason is stored for the audit trail. */

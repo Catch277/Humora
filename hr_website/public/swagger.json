@@ -5529,6 +5529,131 @@
         }
       }
     },
+    "/api/payroll/payslips/{id}/net": {
+      "post": {
+        "summary": "Set the exact final salary of a DRAFT payslip",
+        "description": "Chốt lương thực nhận của **một** phiếu lương nháp (SCRUM-93): nhập đúng số tiền nhân viên sẽ nhận trong\ntháng, hệ thống lưu phần chênh lệch so với lương theo giờ công thành **một** khoản mục `ADJUSTMENT`\n(`EARNING` nếu cao hơn, `DEDUCTION` nếu thấp hơn) rồi tính lại tổng.\n\nNhờ vậy phiếu vẫn giữ nguyên phép tính của nó — `gross = work + other_earnings`,\n`net = gross − deduction` — và nhân viên đọc được vì sao con số khác với giờ công. Gọi lại API này sẽ\n**thay** khoản điều chỉnh cũ chứ không cộng dồn, nên ô nhập hành xử như một trường, không phải một nút\nthêm tiền.\n\nChỉ chủ sở hữu tổ chức (`payroll:manage`) và chỉ với phiếu `DRAFT`: phiếu đã phát hành là bản ghi số\ntiền đã trả nên trả `409`, muốn sửa thì huỷ phiếu rồi tạo lại. Tạo lại phiếu của tháng cũng xoá khoản\nđiều chỉnh này, vì nó được tính trên số giờ công vừa thay đổi.\n",
+        "tags": [
+          "Payroll"
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "targetNet"
+                ],
+                "properties": {
+                  "targetNet": {
+                    "type": "integer",
+                    "description": "Số tiền thực nhận mong muốn, VND, 0..1.000.000.000."
+                  },
+                  "note": {
+                    "type": "string",
+                    "nullable": true,
+                    "description": "Ghi chú của người chốt lương (tối đa 500 ký tự), lưu vào nhật ký thao tác."
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The figure the payslip now carries.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "net_amount"
+                  ],
+                  "properties": {
+                    "net_amount": {
+                      "type": "integer",
+                      "description": "`payslips.net_amount` sau khi tính lại, bằng `targetNet`."
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "targetNet/note không hợp lệ, hoặc khấu trừ vượt quá thu nhập của phiếu.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Bạn cần đăng nhập để thực hiện thao tác này.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Chỉ chủ sở hữu tổ chức mới được quản lý bảng lương.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Không tìm thấy phiếu lương trong tổ chức.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Phiếu đã phát hành hoặc đã huỷ nên không sửa được số tiền.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Không thể chốt lương thực nhận.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/payroll/payslips/{id}/items": {
       "post": {
         "summary": "Add a phụ cấp / thưởng / khấu trừ to a DRAFT",

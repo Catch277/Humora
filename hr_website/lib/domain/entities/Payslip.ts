@@ -65,6 +65,21 @@ export const PAYSLIP_VOID_REASON_LENGTH = { min: 5, max: 300 } as const;
 /** `dispute_payslip` (the employee's khiếu nại) demands `5..500` characters. */
 export const PAYSLIP_DISPUTE_NOTE_LENGTH = { min: 5, max: 500 } as const;
 
+/**
+ * "Chốt lương thực nhận" (SCRUM-93): the exact figure the owner wants this employee to receive for the month.
+ *
+ * The hourly money stays the base; the difference is stored as one `ADJUSTMENT` item (`EARNING` when the
+ * target is higher, `DEDUCTION` when lower), so `gross = work + other_earnings` and `net = gross − deduction`
+ * keep holding and the employee can read why the number differs from the hours worked.
+ */
+export interface SetPayslipNetInput {
+  targetNet: number;
+  note: string | null;
+}
+
+/** The same bound `payslip_items.amount` enforces, so a target the API accepts cannot be refused by a CHECK. */
+export const PAYSLIP_NET_MAX = 1_000_000_000;
+
 export function isPayslipStatus(value: unknown): value is PayslipStatus {
   return (
     typeof value === "string" &&

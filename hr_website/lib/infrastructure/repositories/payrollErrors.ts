@@ -55,6 +55,7 @@ const INPUT_TOKENS: ReadonlySet<string> = new Set([
   PAYROLL_TOKENS.voidReasonRequired,
   PAYROLL_TOKENS.disputeNoteLength,
   PAYROLL_TOKENS.deductionsExceedGross,
+  PAYROLL_TOKENS.targetInvalid,
 ]);
 
 /**

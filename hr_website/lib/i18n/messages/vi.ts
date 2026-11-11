@@ -1068,6 +1068,7 @@ export const vi = {
   "payrollError.voidReasonRequired": "Vui lòng nhập lý do huỷ phiếu (5-300 ký tự).",
   "payrollError.disputeNoteLength": "Nội dung thắc mắc phải từ 5 đến 500 ký tự.",
   "payrollError.deductionsExceedGross": "Tổng khấu trừ vượt quá thu nhập của phiếu lương.",
+  "payrollError.targetInvalid": "Số tiền thực nhận phải từ 0 đến 1.000.000.000 ₫.",
   "payrollError.fallback": "Không thể hoàn tất thao tác với bảng lương. Vui lòng thử lại.",
 
   "payroll.eyebrow": "Tiền lương / SCRUM-90",
@@ -1182,6 +1183,17 @@ export const vi = {
   "payroll.rates.removeNote": "Phiếu lương đã phát hành giữ nguyên con số cũ. Nếu đây là đơn giá duy nhất của nhân viên, lần tạo phiếu tới sẽ bỏ qua họ.",
   "payroll.rates.removeConfirm": "Xác nhận xoá",
   "payroll.rates.cancel": "Huỷ",
+
+  "payroll.final.title": "Lương thực nhận",
+  "payroll.final.column": "Lương thực nhận",
+  "payroll.final.hint": "Nhập đúng số tiền nhân viên sẽ nhận trong tháng. Phần chênh lệch so với giờ công được ghi thành một khoản điều chỉnh, không sửa con số nào của bảng công.",
+  "payroll.final.input": "Số tiền thực nhận (VND)",
+  "payroll.final.submit": "Chốt lương thực nhận",
+  "payroll.final.current": "Thực nhận hiện tại: {amount}.",
+  "payroll.final.draftOnly": "Phiếu đã phát hành nên số tiền đã chốt. Muốn sửa thì huỷ phiếu rồi tạo lại.",
+  "payroll.final.none": "Chưa có phiếu",
+  "payroll.final.saved": "Đã chốt lương thực nhận.",
+  "payroll.final.invalid": "Số tiền phải là số nguyên từ 0 đến 1.000.000.000 ₫.",
 
   "payroll.detail.title": "Phiếu lương",
   "payroll.detail.period": "Kỳ lương {from} – {to}",

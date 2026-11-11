@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import {
   AlertTriangle,
@@ -19,6 +20,7 @@ import PayRateDialog, { type PayRateTarget } from "@/components/PayRateDialog";
 import { useProfile } from "@/components/ProfileProvider";
 import { roleLabel } from "@/lib/accessPolicy";
 import type { PayProfile } from "@/lib/domain/entities/PayProfile";
+import type { Payslip, PayslipStatus } from "@/lib/domain/entities/Payslip";
 import {
   APP_ROLES,
   isBranchHeadRole,
@@ -26,6 +28,15 @@ import {
   type AppRole,
 } from "@/lib/domain/roles";
 import { formatCurrency, formatDate } from "@/lib/i18n/format";
+import type { MessageKey } from "@/lib/i18n/translate";
+import { businessMonth } from "@/lib/usecases/payrollPeriod";
+
+/** The status pill of the final-salary cell; the labels are the payroll screen's own dictionary keys. */
+const PAYSLIP_STATUS_KEYS = {
+  DRAFT: "payroll.status.DRAFT",
+  PUBLISHED: "payroll.status.PUBLISHED",
+  VOID: "payroll.status.VOID",
+} as const satisfies Record<PayslipStatus, MessageKey>;
 
 type StaffMemberRow = {
   id: string;
@@ -160,6 +171,8 @@ export default function StaffPage() {
   const [rates, setRates] = useState<PayProfile[]>([]);
   const [ratesUnavailable, setRatesUnavailable] = useState(false);
   const [rateTarget, setRateTarget] = useState<PayRateTarget | null>(null);
+  /** SCRUM-93: this month's payslips, so the final salary sits next to the rate it is built from. */
+  const [payslips, setPayslips] = useState<Payslip[]>([]);
   const [drafts, setDrafts] = useState<Record<string, StaffDraft>>({});
   const [loading, setLoading] = useState(true);
   const [pageError, setPageError] = useState("");
@@ -175,6 +188,7 @@ export default function StaffPage() {
       branches: Branch[];
       rates: PayProfile[];
       ratesUnavailable: boolean;
+      payslips: Payslip[];
       error: string | null;
     }> {
       // The branch picker needs the list, and both reads belong to the owner (`staff:manage` and
@@ -182,11 +196,15 @@ export default function StaffPage() {
       //
       // SCRUM-92 adds the pay profiles to the same batch: the salary cell below and the rates tab on
       // `/payroll` then describe one list, and the dialog this page opens writes through the same endpoints.
-      const [usersResponse, branchesResponse, ratesResponse] = await Promise.all([
-        fetch("/api/users", { cache: "no-store" }),
-        fetch("/api/branches", { cache: "no-store" }),
-        fetch("/api/payroll/profiles", { cache: "no-store" }),
-      ]);
+      // SCRUM-93 adds this month's payslips for the "Lương thực nhận" column.
+      const month = businessMonth();
+      const [usersResponse, branchesResponse, ratesResponse, payslipsResponse] =
+        await Promise.all([
+          fetch("/api/users", { cache: "no-store" }),
+          fetch("/api/branches", { cache: "no-store" }),
+          fetch("/api/payroll/profiles", { cache: "no-store" }),
+          fetch(`/api/payroll/payslips?month=${month}`, { cache: "no-store" }),
+        ]);
 
       if (!usersResponse.ok) {
         const data = (await usersResponse.json().catch(() => null)) as {
@@ -198,6 +216,7 @@ export default function StaffPage() {
           branches: [],
           rates: [],
           ratesUnavailable: false,
+          payslips: [],
           error: actionErrorMessage(usersResponse.status, data),
         };
       }
@@ -213,6 +232,9 @@ export default function StaffPage() {
         // A database without `SCRUM-90_payroll.sql` answers `500` here. That must not blank the table —
         // the owner still manages roles and branches — so the cell says the rates could not be read.
         ratesUnavailable: !ratesResponse.ok,
+        payslips: payslipsResponse.ok
+          ? ((await payslipsResponse.json()) as Payslip[])
+          : [],
         error: null,
       };
     }
@@ -227,6 +249,7 @@ export default function StaffPage() {
         setBranches(result.branches);
         setRates(result.rates);
         setRatesUnavailable(result.ratesUnavailable);
+        setPayslips(result.payslips);
         setDrafts(
           Object.fromEntries(
             result.members.map((member) => [member.id, toDraft(member)]),
@@ -244,6 +267,7 @@ export default function StaffPage() {
         setBranches([]);
         setRates([]);
         setRatesUnavailable(false);
+        setPayslips([]);
         setDrafts({});
         setPageError("Không thể kết nối tới máy chủ. Vui lòng thử lại.");
         setLoading(false);
@@ -304,6 +328,20 @@ export default function StaffPage() {
 
     return map;
   }, [rates]);
+
+  /**
+   * This month's payslip of each employee (SCRUM-93). `GET /api/payroll/payslips?month=…` answers one row per
+   * employee per month (the unique index excludes VOID), so the map is a straight lookup.
+   */
+  const payslipOf = useMemo(() => {
+    const map = new Map<string, Payslip>();
+
+    payslips.forEach((slip) => {
+      map.set(slip.employee_id, slip);
+    });
+
+    return map;
+  }, [payslips]);
 
   /**
    * The rows the table shows: the search filter (name, role label or branch name), then the order this
@@ -544,6 +582,11 @@ export default function StaffPage() {
                       {t("payroll.rates.column")}
                     </th>
                   )}
+                  {managesPayroll && (
+                    <th className="whitespace-nowrap px-4 py-3 font-semibold">
+                      {t("payroll.final.column")}
+                    </th>
+                  )}
                   <th className="px-4 py-3 font-semibold">Trạng thái</th>
                   <th className="px-4 py-3 font-semibold">Ngày tạo</th>
                   <th className="px-4 py-3 font-semibold">Hành động</th>
@@ -647,6 +690,13 @@ export default function StaffPage() {
                           />
                         </td>
                       )}
+                      {managesPayroll && (
+                        <td className="px-4 py-3">
+                          <FinalSalaryCell
+                            payslip={payslipOf.get(member.id) ?? null}
+                          />
+                        </td>
+                      )}
                       <td className="px-4 py-3">
                         <span
                           className={`rounded-full px-2.5 py-1 text-[10px] font-semibold ${
@@ -713,6 +763,39 @@ export default function StaffPage() {
         />
       )}
     </div>
+  );
+}
+
+/**
+ * The final salary of one employee for the current month (SCRUM-93): the `net_amount` of this month's
+ * payslip, with the status it is in — a DRAFT number is what the owner intends to pay, not what was paid — and
+ * the way to the screen where the figure is set (that needs the month and the draft, so it lives on
+ * `/payroll`).
+ */
+function FinalSalaryCell({ payslip }: { payslip: Payslip | null }) {
+  const { t, locale } = useLocale();
+
+  if (!payslip) {
+    return (
+      <p className="text-[10px] text-slate-400">{t("payroll.final.none")}</p>
+    );
+  }
+
+  return (
+    <>
+      <p className="whitespace-nowrap text-xs font-semibold text-slate-800">
+        {formatCurrency(payslip.net_amount, locale)}
+      </p>
+      <p className="whitespace-nowrap text-[10px] text-slate-500">
+        {t(PAYSLIP_STATUS_KEYS[payslip.status])}
+      </p>
+      <Link
+        href="/payroll"
+        className="mt-1 inline-block whitespace-nowrap text-[11px] font-semibold text-primary hover:underline"
+      >
+        {t("payroll.final.title")}
+      </Link>
+    </>
   );
 }
 

@@ -37,6 +37,7 @@ const PAYROLL_MESSAGE_KEYS: Readonly<Record<string, MessageKey>> = {
   PAYSLIP_VOID_REASON_REQUIRED: "payrollError.voidReasonRequired",
   PAYSLIP_DISPUTE_NOTE_LENGTH: "payrollError.disputeNoteLength",
   PAYSLIP_DEDUCTIONS_EXCEED_GROSS: "payrollError.deductionsExceedGross",
+  PAYSLIP_TARGET_INVALID: "payrollError.targetInvalid",
 };
 
 /**
@@ -79,4 +80,5 @@ export const PAYROLL_TOKENS = {
   voidReasonRequired: "PAYSLIP_VOID_REASON_REQUIRED",
   disputeNoteLength: "PAYSLIP_DISPUTE_NOTE_LENGTH",
   deductionsExceedGross: "PAYSLIP_DEDUCTIONS_EXCEED_GROSS",
+  targetInvalid: "PAYSLIP_TARGET_INVALID",
 } as const;
