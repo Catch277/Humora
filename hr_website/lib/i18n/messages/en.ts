@@ -37,6 +37,10 @@ export const en: Translations = {
   "header.closeNavigation": "Close navigation",
   "header.navigation": "Navigation",
   "header.signOut": "Sign out",
+  "header.signOutTitle": "Sign out of Humora?",
+  "header.signOutMessage": "Your session will end and you will need to sign in again.",
+  "header.signOutConfirm": "Sign out",
+  "header.signOutFailed": "Could not sign out. Please try again.",
   "header.notifications": "Notifications",
   "header.profile": "Profile",
   "header.language": "Language",
@@ -271,6 +275,7 @@ export const en: Translations = {
   "login.error.forgotFailed": "Could not send the reset email. Please try again.",
   "login.error.forgotRateLimited": "You have asked too many times. Please try again later.",
   "login.recoveryFailed": "That password reset link is no longer valid. Please request a new one.",
+  "login.resetSuccess": "Your new password is saved. Sign in with it now.",
 
   "common.fullName": "Full name",
   "common.fullNamePlaceholder": "Nguyen Van A",

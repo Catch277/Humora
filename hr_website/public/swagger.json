@@ -8838,7 +8838,7 @@
     "/api/auth/recovery": {
       "get": {
         "summary": "Complete a password reset link",
-        "description": "The page a Supabase Auth recovery email returns to. It exchanges the one-time `code` for a\nrecovery session and redirects to `/reset-password`, where the new password is saved through\n`POST /api/auth/change-password`. A link that is missing, expired or already used lands on\n`/login?recovery=failed` instead of a screen whose save would be refused.\n\nThe `code` is PKCE-bound (`@supabase/ssr` pins `flowType: \"pkce\"` for both of its clients), so\nthe link completes only in the browser that requested it — the code verifier is a cookie there.\n",
+        "description": "The page a Supabase Auth recovery email returns to. It turns the one-time token into a recovery\nsession and redirects to `/reset-password`, where the new password is saved through\n`POST /api/auth/change-password`. A link that is missing, expired or already used lands on\n`/login?recovery=failed` instead of a screen whose save would be refused.\n\nTwo link shapes are accepted, because the shape is decided by the Reset Password email template:\n`token_hash` (recommended — `{{ .TokenHash }}` verifies on its own, so the link works in whichever\nbrowser opens the mail) and the legacy `code` (`{{ .ConfirmationURL }}`). `@supabase/ssr` pins\n`flowType: \"pkce\"` for both of its clients, so a `code` needs the verifier cookie of the browser\nthat requested the mail and a link opened elsewhere is refused rather than half-working.\n",
         "tags": [
           "Authentication"
         ],
@@ -8846,8 +8846,26 @@
           {
             "in": "query",
             "name": "code",
-            "required": true,
-            "description": "The one-time code Supabase Auth appends to the recovery link.",
+            "required": false,
+            "description": "The one-time code Supabase Auth appends to a PKCE recovery link.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "token_hash",
+            "required": false,
+            "description": "The token hash of a `{{ .TokenHash }}` recovery link. Either this or `code` is required.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "type",
+            "required": false,
+            "description": "The token type sent beside `token_hash` (`recovery` for this flow).",
             "schema": {
               "type": "string"
             }
@@ -8872,7 +8890,7 @@
     "/api/auth/forgot-password": {
       "post": {
         "summary": "Send a password reset email",
-        "description": "Sends the Supabase Auth recovery email for the given address. The answer is identical whether\nor not that address has an account, so this endpoint cannot be used to enumerate the staff of\nan organization. The link in the email returns to `GET /api/auth/recovery`, which turns it into\na recovery session.\n",
+        "description": "Sends the Supabase Auth recovery email for the given address. The answer is identical whether\nor not that address has an account, so this endpoint cannot be used to enumerate the staff of\nan organization. The link in the email returns to `GET /api/auth/recovery`, which turns it into\na recovery session.\n\nThe return URL is built from `SITE_URL` when that variable holds an absolute http(s) URL and\nfrom the request origin otherwise, so a deployment answers with its real domain instead of the\npreview alias that happened to serve this POST.\n",
         "tags": [
           "Authentication"
         ],

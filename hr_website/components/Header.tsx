@@ -15,6 +15,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 
+import ConfirmDialog from "@/components/ConfirmDialog";
 import LanguageToggle from "@/components/LanguageToggle";
 import MobileNav from "@/components/MobileNav";
 import ThemeToggle from "@/components/ThemeToggle";
@@ -138,6 +139,11 @@ export default function Header() {
   const [searchError, setSearchError] = useState("");
   const [showDropdown, setShowDropdown] = useState(false);
   const [activeIndex, setActiveIndex] = useState(-1);
+  // Signing out ends the session, so it asks first (`components/ConfirmDialog.tsx`) — a stray click on the
+  // icon used to log the operator straight out of the screen they were working on.
+  const [signOutOpen, setSignOutOpen] = useState(false);
+  const [signingOut, setSigningOut] = useState(false);
+  const [signOutError, setSignOutError] = useState("");
   const searchContainerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -395,14 +401,36 @@ export default function Header() {
     }
   }
 
+  /**
+   * Runs from the confirmation dialog, never straight from the button — the POST is the point of no
+   * return. A refused sign-out keeps the dialog open: redirecting to `/login` while the session is still
+   * alive only bounces back through `proxy.ts`, which reads as "nothing happened".
+   */
   async function handleSignOut() {
+    if (signingOut) {
+      return;
+    }
+
+    setSignOutError("");
+    setSigningOut(true);
+
     try {
-      await fetch("/api/auth/sign-out", { method: "POST" });
-    } finally {
+      const response = await fetch("/api/auth/sign-out", { method: "POST" });
+
+      if (!response.ok) {
+        setSignOutError(t("header.signOutFailed"));
+        return;
+      }
+
+      setSignOutOpen(false);
       // `replace` keeps the authenticated page out of the history, and `refresh` drops the cached
       // server render so the shell re-renders without a session.
       router.replace("/login");
       router.refresh();
+    } catch {
+      setSignOutError(t("header.signOutFailed"));
+    } finally {
+      setSigningOut(false);
     }
   }
 
@@ -583,13 +611,31 @@ export default function Header() {
 
         <button
           type="button"
-          onClick={() => void handleSignOut()}
+          onClick={() => {
+            setSignOutError("");
+            setSignOutOpen(true);
+          }}
           title={t("header.signOut")}
+          aria-haspopup="dialog"
+          aria-expanded={signOutOpen}
           className="rounded-md p-2 text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-800"
         >
           <LogOut size={15} />
         </button>
       </div>
+
+      {signOutOpen && (
+        <ConfirmDialog
+          title={t("header.signOutTitle")}
+          description={t("header.signOutMessage")}
+          confirmLabel={t("header.signOutConfirm")}
+          error={signOutError || undefined}
+          busy={signingOut}
+          tone="danger"
+          onConfirm={() => void handleSignOut()}
+          onCancel={() => setSignOutOpen(false)}
+        />
+      )}
     </header>
   );
 }

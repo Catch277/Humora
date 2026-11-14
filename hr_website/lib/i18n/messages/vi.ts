@@ -37,6 +37,10 @@ export const vi = {
   "header.closeNavigation": "Đóng điều hướng",
   "header.navigation": "Điều hướng",
   "header.signOut": "Đăng xuất",
+  "header.signOutTitle": "Đăng xuất khỏi Humora?",
+  "header.signOutMessage": "Phiên làm việc sẽ kết thúc và bạn cần đăng nhập lại để tiếp tục.",
+  "header.signOutConfirm": "Đăng xuất",
+  "header.signOutFailed": "Không thể đăng xuất. Vui lòng thử lại.",
   "header.notifications": "Thông báo",
   "header.profile": "Hồ sơ",
   "header.language": "Ngôn ngữ",
@@ -286,6 +290,7 @@ export const vi = {
   "login.error.forgotFailed": "Không gửi được email đặt lại mật khẩu. Vui lòng thử lại.",
   "login.error.forgotRateLimited": "Bạn đã yêu cầu quá nhiều lần. Vui lòng thử lại sau.",
   "login.recoveryFailed": "Liên kết đặt lại mật khẩu không còn hiệu lực. Hãy yêu cầu một liên kết mới.",
+  "login.resetSuccess": "Đã đặt mật khẩu mới. Hãy đăng nhập bằng mật khẩu vừa tạo.",
 
   "common.fullName": "Họ và tên",
   "common.fullNamePlaceholder": "Nguyễn Văn A",

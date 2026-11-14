@@ -462,31 +462,49 @@ money — because of a real "Tạo bản nháp does nothing" bug:
 ## Password reset by email (forgot password)
 
 `/login` has a "Quên mật khẩu?" panel and `/reset-password` is where the emailed link lands. The flow
-is three route handlers plus one shell-less screen, and it is the one auth flow that needs a **Dashboard
-setting**:
+is three route handlers plus one shell-less screen, and it is the one auth flow that depends on **Dashboard
+settings**:
 
 - `POST /api/auth/forgot-password` asks Supabase Auth for the recovery mail
   (`resetPasswordForEmail`). The answer is identical whether or not the address has an account —
   Supabase behaves that way on purpose, and restating it here would make the endpoint a way to
   enumerate the organization's staff. The only failure it names is `429` (Supabase rate-limits the
   recovery mail per address).
-- The mail's link returns to `GET /api/auth/recovery`, which exchanges the one-time `code` for a
-  recovery session and redirects to `/reset-password`; an unusable link lands on
-  `/login?recovery=failed`, which explains itself.
-- **Prerequisite:** Supabase Dashboard → Authentication → URL Configuration → Redirect URLs must list
-  `{origin}/api/auth/recovery` (the deployed domain **and** `http://localhost:3000/api/auth/recovery`).
-  Without it GoTrue refuses the `redirect_to` and the endpoint answers `500` — read the dev-terminal
-  `Failed to send the password reset email` line, which carries GoTrue's own sentence.
-  Email delivery uses the project's SMTP settings (the built-in one is fine for dev).
-- **`@supabase/ssr` pins `flowType: "pkce"` for both of its clients**, so the link carries `code` (not
-  the old `#access_token` fragment) and the exchange needs the PKCE verifier — a cookie stored by the
-  browser that *asked* for the mail. The link therefore completes only in that same browser; a link
-  opened elsewhere is refused rather than half-working. The verifier is why the recovery handler builds
-  its own client and writes the session cookies onto the redirect it returns (the `proxy.ts` shape):
-  `cookies().set()` lands on the response Next would otherwise have produced.
+- The mail's link returns to `GET /api/auth/recovery`, which turns the one-time token into a recovery
+  session and redirects to `/reset-password`; an unusable link lands on `/login?recovery=failed`, which
+  explains itself. Two link shapes are accepted, and the Supabase **Reset Password email template** decides
+  which one arrives: a `token_hash` link (`{{ .TokenHash }}`, recommended) is verified by `verifyOtp()` and
+  works in whichever browser opens the mail, while the legacy `code` link (`{{ .ConfirmationURL }}`) needs
+  the PKCE verifier cookie of the browser that asked for it. Keep both branches — a project that has not
+  edited its template still sends a `code`.
+- **Three prerequisites, or the link goes nowhere useful:**
+  - Supabase Dashboard → Authentication → URL Configuration → **Redirect URLs** must list
+    `{SITE_URL}/api/auth/recovery` **and** `http://localhost:3000/api/auth/recovery`. When it does not,
+    GoTrue does not fail — it silently replaces `redirect_to` with the project's *Site URL*, so the mail
+    opens `/?code=…` and the reader only ever sees the sign-in card. That is the reported "the link just
+    shows the login page" bug, and the reason `proxy.ts` forwards any landing that carries
+    `code`/`token_hash` (including one nested in `next`) to `/api/auth/recovery`: a misconfigured allowlist
+    then degrades to one extra hop instead of a dead link.
+  - **`SITE_URL`** (server-only, deliberately not `NEXT_PUBLIC_`) pins the domain the mail returns to.
+    Without it the endpoint uses the request origin, which on Vercel is whichever alias answered — and a
+    **preview** alias sits behind Vercel Authentication, which is the "why do I have to sign in to Vercel?"
+    report. Set it to the production domain in Vercel → Settings → Environment Variables, and to
+    `http://localhost:3000` in `.env.local`. A malformed value is ignored with a `console.error`, so a
+    local run without the variable behaves as before.
+  - Vercel → Settings → **Deployment Protection** must not cover the host in the mail: *Vercel
+    Authentication* / *Password Protection* on Production makes every link ask for a Vercel login. Point
+    the mail at the production or custom domain, never at a preview URL.
+  - Email delivery uses the project's SMTP settings (the built-in one is fine for dev).
+- **`@supabase/ssr` pins `flowType: "pkce"` for both of its clients**, so a `code` link is bound to the
+  browser that requested the mail; opening it elsewhere is refused rather than half-working. The verifier
+  is why the recovery handler builds its own client and writes the session cookies onto the redirect it
+  returns (the `proxy.ts` shape): `cookies().set()` lands on the response Next would otherwise have
+  produced. A `token_hash` link carries its own proof and has no such binding.
 - `/reset-password` is in `SHELL_LESS_PATHS`, not `PUBLIC_PATHS`: by the time it renders the session
   already exists, and `proxy.ts` sends a signed-in visitor away from a public path. It saves the new
-  password through the existing `POST /api/auth/change-password`, so there is no second write path.
+  password through the existing `POST /api/auth/change-password`, so there is no second write path, and
+  then **signs the recovery session out** and lands on `/login?reset=success` — which `/login` renders as
+  the green `login.resetSuccess` notice. A recovery link is a way back in, not a way to stay signed in.
 - The show/hide toggle on every password field is `components/PasswordInput.tsx`; it flips the input's
   `type` instead of re-rendering the value as text, so a password manager and the mobile keyboard still
   see a password field. Copy is `common.showPassword` / `common.hidePassword`.
