@@ -143,6 +143,7 @@ Create `.env.local` in this folder (it is git-ignored — never commit it):
 | `NEXT_PUBLIC_SUPABASE_URL`      | Supabase project URL                                                    |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase anon (public) key — authorisation is enforced by RLS, not here |
 | `GEMINI_API_KEY`                | Gemini key used for embeddings and chat answers                         |
+| `SITE_URL`                      | Public origin used in the password-reset mail (`http://localhost:3000` in dev; the production domain on Vercel) |
 
 Missing values do not break the build: the request that needs them throws at runtime
 (`createSupabaseServerClient`, `GeminiLLMService`).
@@ -358,6 +359,30 @@ Relying Party display name and an **RP ID that is the deployed bare domain**; `l
 and **HTTPS** in production — WebAuthn has no secure-context fallback, so an IP-address host is out.
 Passkeys are **experimental** in Supabase and **per device** (enrolling a phone does not enable a laptop).
 Requiring a fresh Face ID prompt before check-in is the planned SCRUM-80; nothing enforces it yet.
+
+### Password reset by email
+
+`/login` → "Quên mật khẩu?" mails a Supabase recovery link, and `/reset-password` is the one screen it
+opens: new password + confirmation, saved through `POST /api/auth/change-password`. It then signs the
+recovery session out and lands on `/login?reset=success`, which prints the green `login.resetSuccess`
+notice — a recovery link is a way back in, not a way to stay signed in.
+
+| Piece | What it does |
+| ----- | ------------ |
+| `POST /api/auth/forgot-password` | Asks Supabase for the mail. The answer is identical whether or not the address exists, so it cannot enumerate staff. |
+| `GET /api/auth/recovery` | Turns the link into a recovery session. Accepts `token_hash` (`verifyOtp()`, works in any browser) and the legacy PKCE `code` (needs the browser that requested the mail). |
+| `proxy.ts` | Forwards a landing that carries `code`/`token_hash` to `/api/auth/recovery`, so a link GoTrue redirected to `/` still works instead of dying in `/login?next=…`. |
+
+**Dashboard checklist** — without it the mail opens `/?code=…` and the reader only sees the sign-in card:
+
+- Authentication → URL Configuration → *Site URL* = the production origin; *Redirect URLs* =
+  `{SITE_URL}/api/auth/recovery` **and** `http://localhost:3000/api/auth/recovery`. An allowlist miss does
+  not fail: GoTrue silently replaces `redirect_to` with the Site URL.
+- `SITE_URL` in the environment pins the domain the mail returns to. On Vercel use the production or custom
+  domain — a preview alias is behind **Deployment Protection** (*Vercel Authentication* / *Password
+  Protection*), which is what makes the link ask for a Vercel login instead of opening this app.
+- Optional but recommended: set the *Reset Password* email template to
+  `{{ .SiteURL }}/api/auth/recovery?token_hash={{ .TokenHash }}&type=recovery`.
 
 ## Database & Supabase
 

@@ -317,34 +317,194 @@ The inbox is a **read surface**; the database is its only producer (SCRUM-70/71/
   table the app already selects is added, so there is no `42703` risk and no app-side order dependency —
   unlike SCRUM-68/69.
 
+## Payroll: giờ công × đơn giá giờ (SCRUM-90)
+
+The mobile app shipped this first (`origin/feature/payroll-and-employee-features`, commit `7b7a018`), and the
+schema, RPCs and RLS are **one script both clients share**: `supabase/sql/SCRUM-90_payroll.sql`.
+
+- **Apply it by hand first**, after `SCRUM-21/30/51/59/63` and `SCRUM-69` (it raises if any is missing). It
+  adds `shifts.is_overtime`, five tables (`pay_profiles`, `payslips`, `payslip_work_lines`, `payslip_items`,
+  `payroll_audit_log`) and 17 functions. No existing route reads a payroll column, so a database without the
+  script cannot break today's build — unlike SCRUM-63/68.
+- **Nobody writes those tables.** Each has RLS with a SELECT policy only, and `INSERT/UPDATE/DELETE` are
+  revoked from `anon`/`authenticated`; every change goes through a `security definer` function that starts
+  with `payroll_require_owner()`. That is why `SupabasePayrollRepository` has no insert/update call at all: a
+  client that could write `net_amount` could pay itself.
+- **Money is computed in SQL only** — `payroll_work_lines` caps each ca at the scheduled template's length,
+  multiplies overtime rows, rounds once per ca; `payroll_recalc` derives the totals and the CHECK keeps
+  `gross = work + other_earnings`, `net = gross - deduction`. `my_pay_estimate` calls the same function, so a
+  mid-month number and a payslip cannot disagree. Never re-implement that arithmetic in TypeScript.
+- **Lifecycle**: `DRAFT` → `PUBLISHED` → `VOID`. A published payslip's money is frozen by `payslips_guard` /
+  `payslip_children_guard` (also against the SQL editor), so a correction is void + generate again, and
+  `payroll_audit_log` keeps who did what. `publish_payslips` **holds** a payslip whose employee still has an
+  unresolved `attendance.complaint` in that month (`held_for_complaints`) — a disputed number never goes out
+  as final.
+- **Who sees what**: the owner sees the organization (`payroll:manage` + `payroll:view`); a manager and an
+  employee see their own **PUBLISHED** payslip (`payslips_select`: `employee_id = auth.uid() and status =
+  'PUBLISHED'`) and their own rate. A DRAFT is invisible to its employee, and "not found" and "not yours" are
+  deliberately the same answer.
+- **Error vocabulary**: the RPCs raise a machine token (`PAYROLL_OWNER_ONLY`, `PAYSLIP_IMMUTABLE: …`,
+  `PAYSLIP_NOT_FOUND_OR_NOT_DRAFT`, `PAYSLIP_DEDUCTIONS_EXCEED_GROSS`, …) plus a Postgres state.
+  `lib/domain/payrollMessages.ts` turns the token into copy and
+  `lib/infrastructure/repositories/payrollErrors.ts` turns it into one of four domain errors (403/404/409/400).
+  Classification is by **token, not by `code`**: `P0002` covers both "no such payslip" (a `404`) and "that
+  payslip already has an open khiếu nại" (a `409`).
+- **Routes** (`app/api/payroll/**`): `GET|PUT /profiles`, `GET /payslips?month=YYYY-MM`, `GET /payslips/{id}`,
+  `POST /payslips/generate`, `POST /payslips/publish`, `POST /payslips/{id}/items`,
+  `DELETE /payslips/{id}/items/{itemId}`, `POST …/void`, `POST …/resolve-dispute`, `POST …/acknowledge`,
+  `POST …/dispute`, `GET /estimate`. `_lib/payrollRequest.ts` mirrors every CHECK of the script (a bad body
+  answers `400` naming the field, never `500`), and `_lib/payrollErrorResponse.ts` is the only place a payroll
+  failure picks a status.
+- **No embedded selects.** `payslips` points at `users` twice (`employee_id`, `published_by`), so an
+  unqualified `employee:users (…)` embed would answer `PGRST201`; `/payroll` resolves names from
+  `GET /api/users` and `GET /api/branches`, which it loads anyway.
+- **`/payroll`** (`payroll:view` for every role; the rates tab and every write sit behind `payroll:manage`):
+  month navigator, the caller's mid-month estimate, four KPIs over published payslips, the payslip table, a
+  rates tab that flags exactly the employees the generator will skip, and a drawer with the paid ca, the
+  items, void / resolve-dispute, and the employee's acknowledge / khiếu nại. The screen is fully i18n'd
+  (`payroll.*`, `payrollError.*`) — a new payroll string goes in both dictionaries.
+- **Notifications**: `publish_payslips` writes `payslip_published` and `dispute_payslip` writes
+  `payslip_disputed` — lowercase, unlike the SCRUM-71/72 codes, and the catalog is keyed by the stored value
+  verbatim. Both live under a new `payroll` category in `lib/domain/notificationCatalog.ts`, whose chip and
+  icon (`app/notifications/page.tsx`) changed with it. The script guards each call with `to_regprocedure`, so
+  a project without SCRUM-70 still publishes.
+- **Not shipped**: a real end-of-month job (that needs `pg_cron`), BHXH/BHYT/BHTN and thuế TNCN (entered as
+  MANUAL deductions rather than computed), and any audit-log view in the app — `payroll_audit_log` is
+  owner-readable in SQL only.
+
+### Đơn giá giờ: create / read / edit / delete (SCRUM-92)
+
+`SCRUM-90` shipped create (an upsert on `(employee_id, effective_from)`) and read. `SCRUM-92_pay_profile_crud.sql`
+adds the missing half, so a rate is now a row the owner can correct or remove — and it is one row the screen
+edits, not a salary column anywhere:
+
+- **Why a new RPC instead of a `UPDATE` policy**: `pay_profiles` still carries a SELECT policy only and
+  `INSERT/UPDATE/DELETE` stay revoked, so `update_pay_profile(id, …)` and `delete_pay_profile(id)` are
+  `security definer` functions that begin with `payroll_require_owner()` and scope the row by
+  `organization_id = current_organization_id()`. A client cannot reach the money any other way.
+- **What an edit may change**: all five stored values, **including `effective_from`** — that is the case the
+  upsert cannot express (a row saved with the wrong effective day). Moving the day onto another row of the same
+  employee answers `PAY_PROFILE_DUPLICATE` (`409`) instead of a bare `23505`. `employee_id` is never editable:
+  a rate belongs to one person, so moving it is delete + create.
+- **What a delete does not do**: it never touches a payslip. Amounts are snapshots
+  (`payslip_work_lines.hourly_rate`), so a published month keeps its figures and only the *next* `generate`
+  changes — deleting somebody's last rate simply makes the generator skip them, which `/payroll` already counts
+  under "chưa có đơn giá giờ". The removed row is copied into `payroll_audit_log` (`DELETE_PAY_PROFILE`) first.
+- **`updated_at`**: the table had only `created_at`, so the script adds `updated_at … default now()`. The app
+  deliberately does **not** select it (`PAY_PROFILE_COLUMNS` is unchanged) — reading a column a database may not
+  have would turn `GET /api/payroll/profiles` into a `42703` and take `/payroll` and `/staff` down with it.
+- **Two entry points, one dialog**: `components/PayRateDialog.tsx` owns the form, the validation, the history
+  list and the three calls (`PUT` create, `PATCH /api/payroll/profiles/{id}`, `DELETE …/{id}`). `/payroll` opens
+  it from the rates tab; `/staff` opens it from a new **Đơn giá giờ** column, because "the employee record" is
+  where an owner looks for somebody's salary. Both pages read the same `GET /api/payroll/profiles` list, so the
+  two screens cannot disagree.
+- **`/staff` specifics**: the column is rendered only for a caller holding `payroll:manage` (the screen is
+  already owner-only through `staff:manage`, so nobody gains access), a failed profiles read shows
+  `payroll.rates.loadFailed` in the cell instead of blanking the table, and the organization's **owner** row
+  shows a statement rather than a button — `set_pay_profile` refuses an `OWNER` as the target employee, so a
+  button there could only answer `404`.
+- **Deploy order**: `SCRUM-90` → `SCRUM-92` → the build. The script is additive (one column with a default and
+  two new functions), and no existing select changes, so app and SQL can ship together.
+
+### Chốt lương thực nhận: an exact final salary on one payslip (SCRUM-93)
+
+The hourly money is the base, and the owner can still decide **what this employee actually receives this
+month**. `SCRUM-93_final_salary.sql` adds `set_payslip_net(payslip, target, note)`; the difference is stored as
+**one** `ADJUSTMENT` item, never as an override column:
+
+- **Why an item and not a `net_amount` column**: the CHECK keeps `gross = work + other_earnings` and
+  `net = gross − deduction`, so the payslip cannot contradict its own parts, the employee reads *why* the number
+  differs from the hours worked, and every existing reader (`/payroll`, the drawer, the mobile app) keeps
+  working unchanged.
+- **Set, not add**: the function deletes the previous manual `ADJUSTMENT` first, so the control behaves like a
+  field. `delta > 0` → `EARNING`, `delta < 0` → `DEDUCTION` (refused with `PAYSLIP_DEDUCTIONS_EXCEED_GROSS`
+  when it would exceed the gross), `delta = 0` → nothing stored.
+- **DRAFT only**: a published payslip is the record of money already paid, so it answers `PAYSLIP_IMMUTABLE`
+  (`409`) — the same sentence the void flow uses. An unknown id is `PAYSLIP_NOT_FOUND` (`404`).
+- **The figure is the answer**: after `payroll_recalc` the function asserts `net_amount = target` and raises
+  `PAYSLIP_NET_MISMATCH` otherwise, so a stored number can never quietly mean something else.
+- **`generate_payslips` is re-created** (verbatim from SCRUM-90 plus one `delete`) so regenerating a month drops
+  the manual `ADJUSTMENT`: its delta was measured against the hours that just changed. The owner re-enters the
+  figure, and `payroll_audit_log` (`SET_PAYSLIP_NET`) keeps both attempts. A standing monthly adjustment is
+  deliberately **not** shipped — it would have to change `my_pay_estimate()`, the function the mobile app reads.
+- **Routes**: `POST /api/payroll/payslips/{id}/net` (`payroll:manage`, body `{ targetNet, note? }`, answers
+  `{ net_amount }`), parser `parsePayslipNetBody` (0…1.000.000.000, mirroring `payslip_items.amount`).
+- **Screens**: the drawer on `/payroll` gains a **Lương thực nhận** card (input seeded with the current net, a
+  live `±` chip, disabled unless `DRAFT`), and `/staff` gains a **Lương thực nhận** column showing this month's
+  net + its status (`GET /api/payroll/payslips?month=…`). The write stays on `/payroll` because an exact figure
+  only means something against a month, and the payslip is the only object that has one.
+
+### A ca nobody closed pays up to the ca's end (SCRUM-94)
+
+`SCRUM-94_payroll_open_shift.sql` re-creates `payroll_work_lines` — the one function that turns hours into
+money — because of a real "Tạo bản nháp does nothing" bug:
+
+- **The bug**: the function filtered `and a.check_out_at is not null`. An incomplete check-out was not skipped,
+  it was **invisible**, so the generator saw `counted = 0, skipped = 0`, took its "nothing worked this month"
+  branch and created no draft — while `/attendance` showed 4,8 h for the same month (that screen has applied the
+  SCRUM-75 fallback since it shipped). Two numbers disagreed about the same row.
+- **The rule now**: `effective_seconds` = `worked_seconds` when there is a real giờ ra; otherwise, once the ca's
+  `end_time` has passed and the open segment began before it, `worked_seconds + (ca end − coalesce(resumed_at,
+  check_in_at))`. That is `attendanceAutoClose.ts` expressed in SQL, so the money and the timesheet cannot
+  drift. The ca end is built as `(work_date + end_time) at time zone 'Asia/Bangkok'`, +24 h for an overnight
+  template, and `null` for the zero-length `Nghỉ` template.
+- **Nothing is written**: `check_out_at` stays null so a manager can still correct it with who and why, and no
+  scheduled job is needed — this is a read-time inference, not a close. The `Sửa giờ` dialog still pre-fills the
+  same value, so one save turns it into a recorded fact.
+- **What stays unpaid, with a reason**: `NO_SHIFT` (unscheduled "Ngoài lịch" check-in — no end to infer),
+  `OPEN_SHIFT` (the ca has not ended yet, so the employee may still press "Ra ca"), `NO_TIME` (under a minute).
+  A row re-opened *after* its ca ended keeps its banked seconds and is not invented an end — the same guard
+  `autoCheckOutAt` applies.
+- **After applying it**, press **Tạo bản nháp** again for the month: the minutes are computed at generate time.
+  An employee still needs a pay profile (`Đơn giá giờ`) or the generator skips them, which the rates tab already
+  counts.
+
 ## Password reset by email (forgot password)
 
 `/login` has a "Quên mật khẩu?" panel and `/reset-password` is where the emailed link lands. The flow
-is three route handlers plus one shell-less screen, and it is the one auth flow that needs a **Dashboard
-setting**:
+is three route handlers plus one shell-less screen, and it is the one auth flow that depends on **Dashboard
+settings**:
 
 - `POST /api/auth/forgot-password` asks Supabase Auth for the recovery mail
   (`resetPasswordForEmail`). The answer is identical whether or not the address has an account —
   Supabase behaves that way on purpose, and restating it here would make the endpoint a way to
   enumerate the organization's staff. The only failure it names is `429` (Supabase rate-limits the
   recovery mail per address).
-- The mail's link returns to `GET /api/auth/recovery`, which exchanges the one-time `code` for a
-  recovery session and redirects to `/reset-password`; an unusable link lands on
-  `/login?recovery=failed`, which explains itself.
-- **Prerequisite:** Supabase Dashboard → Authentication → URL Configuration → Redirect URLs must list
-  `{origin}/api/auth/recovery` (the deployed domain **and** `http://localhost:3000/api/auth/recovery`).
-  Without it GoTrue refuses the `redirect_to` and the endpoint answers `500` — read the dev-terminal
-  `Failed to send the password reset email` line, which carries GoTrue's own sentence.
-  Email delivery uses the project's SMTP settings (the built-in one is fine for dev).
-- **`@supabase/ssr` pins `flowType: "pkce"` for both of its clients**, so the link carries `code` (not
-  the old `#access_token` fragment) and the exchange needs the PKCE verifier — a cookie stored by the
-  browser that *asked* for the mail. The link therefore completes only in that same browser; a link
-  opened elsewhere is refused rather than half-working. The verifier is why the recovery handler builds
-  its own client and writes the session cookies onto the redirect it returns (the `proxy.ts` shape):
-  `cookies().set()` lands on the response Next would otherwise have produced.
+- The mail's link returns to `GET /api/auth/recovery`, which turns the one-time token into a recovery
+  session and redirects to `/reset-password`; an unusable link lands on `/login?recovery=failed`, which
+  explains itself. Two link shapes are accepted, and the Supabase **Reset Password email template** decides
+  which one arrives: a `token_hash` link (`{{ .TokenHash }}`, recommended) is verified by `verifyOtp()` and
+  works in whichever browser opens the mail, while the legacy `code` link (`{{ .ConfirmationURL }}`) needs
+  the PKCE verifier cookie of the browser that asked for it. Keep both branches — a project that has not
+  edited its template still sends a `code`.
+- **Three prerequisites, or the link goes nowhere useful:**
+  - Supabase Dashboard → Authentication → URL Configuration → **Redirect URLs** must list
+    `{SITE_URL}/api/auth/recovery` **and** `http://localhost:3000/api/auth/recovery`. When it does not,
+    GoTrue does not fail — it silently replaces `redirect_to` with the project's *Site URL*, so the mail
+    opens `/?code=…` and the reader only ever sees the sign-in card. That is the reported "the link just
+    shows the login page" bug, and the reason `proxy.ts` forwards any landing that carries
+    `code`/`token_hash` (including one nested in `next`) to `/api/auth/recovery`: a misconfigured allowlist
+    then degrades to one extra hop instead of a dead link.
+  - **`SITE_URL`** (server-only, deliberately not `NEXT_PUBLIC_`) pins the domain the mail returns to.
+    Without it the endpoint uses the request origin, which on Vercel is whichever alias answered — and a
+    **preview** alias sits behind Vercel Authentication, which is the "why do I have to sign in to Vercel?"
+    report. Set it to the production domain in Vercel → Settings → Environment Variables, and to
+    `http://localhost:3000` in `.env.local`. A malformed value is ignored with a `console.error`, so a
+    local run without the variable behaves as before.
+  - Vercel → Settings → **Deployment Protection** must not cover the host in the mail: *Vercel
+    Authentication* / *Password Protection* on Production makes every link ask for a Vercel login. Point
+    the mail at the production or custom domain, never at a preview URL.
+  - Email delivery uses the project's SMTP settings (the built-in one is fine for dev).
+- **`@supabase/ssr` pins `flowType: "pkce"` for both of its clients**, so a `code` link is bound to the
+  browser that requested the mail; opening it elsewhere is refused rather than half-working. The verifier
+  is why the recovery handler builds its own client and writes the session cookies onto the redirect it
+  returns (the `proxy.ts` shape): `cookies().set()` lands on the response Next would otherwise have
+  produced. A `token_hash` link carries its own proof and has no such binding.
 - `/reset-password` is in `SHELL_LESS_PATHS`, not `PUBLIC_PATHS`: by the time it renders the session
   already exists, and `proxy.ts` sends a signed-in visitor away from a public path. It saves the new
-  password through the existing `POST /api/auth/change-password`, so there is no second write path.
+  password through the existing `POST /api/auth/change-password`, so there is no second write path, and
+  then **signs the recovery session out** and lands on `/login?reset=success` — which `/login` renders as
+  the green `login.resetSuccess` notice. A recovery link is a way back in, not a way to stay signed in.
 - The show/hide toggle on every password field is `components/PasswordInput.tsx`; it flips the input's
   `type` instead of re-rendering the value as text, so a password manager and the mobile keyboard still
   see a password field. Copy is `common.showPassword` / `common.hidePassword`.
@@ -1095,6 +1255,65 @@ screen that talks to Supabase Auth directly instead of through `app/api/**`.
   Authentication → Passkeys (bật + Relying Party ID = tên miền thật, `localhost` khi dev) và **HTTPS** khi chạy
   thật — Passkey vẫn là tính năng thử nghiệm của Supabase và phải bật riêng cho từng thiết bị. Yêu cầu Face ID
   trước khi chấm công là bước tiếp theo (SCRUM-80), hiện chưa bật.
+
+- Bảng lương theo giờ (SCRUM-90): `supabase/sql/SCRUM-90_payroll.sql` (dùng chung với app mobile) tạo
+  `pay_profiles`, `payslips`, `payslip_work_lines`, `payslip_items`, `payroll_audit_log` và 17 hàm
+  `security definer`. **Không ai ghi thẳng vào bảng**: mỗi bảng chỉ có policy SELECT, quyền ghi bị thu hồi,
+  và mọi thay đổi đi qua hàm bắt đầu bằng `payroll_require_owner()` — vì thế repository không có
+  insert/update nào. Tiền được tính **chỉ trong SQL** (`payroll_work_lines` cắt theo độ dài ca, nhân hệ số
+  tăng ca, làm tròn một lần mỗi ca; `payroll_recalc` cộng tổng), nên "thu nhập tạm tính" giữa tháng của nhân
+  viên dùng đúng hàm mà phiếu lương dùng. Vòng đời `DRAFT` → `PUBLISHED` → `VOID`: phiếu đã phát hành bị
+  đóng băng (trigger chặn cả SQL editor), muốn sửa phải huỷ rồi tạo lại; `publish_payslips` **giữ lại** phiếu
+  của nhân viên còn khiếu nại bảng công chưa xử lý. Chủ sở hữu thấy toàn tổ chức (`payroll:manage`), quản lý
+  và nhân viên chỉ thấy phiếu `PUBLISHED` của mình (RLS). Mã lỗi của hàm (`PAYROLL_OWNER_ONLY`,
+  `PAYSLIP_IMMUTABLE`, …) được dịch ở `lib/domain/payrollMessages.ts` và phân loại 403/404/409/400 ở
+  `payrollErrors.ts` — phân loại theo **token**, không theo mã Postgres. Màn hình `/payroll` (i18n đầy đủ) có
+  chọn tháng, thu nhập tạm tính, 4 chỉ số (chỉ tính phiếu đã phát hành), bảng phiếu, tab "Đơn giá giờ" (cảnh
+  báo người chưa có đơn giá nên bị bỏ qua khi tạo phiếu) và ngăn chi tiết với các ca được trả, khoản mục, huỷ
+  phiếu, xử lý khiếu nại, xác nhận/khiếu nại của nhân viên. Thông báo `payslip_published` / `payslip_disputed`
+  (viết thường, khác mã của SCRUM-71/72) nằm ở nhóm `payroll` mới trong `notificationCatalog.ts`. Chạy
+  `SCRUM-90` (sau `SCRUM-69`) **trước** khi deploy build này; ca tăng ca cần `shifts.is_overtime = true`
+  (hoặc tên bắt đầu bằng "Tăng ca") thì hệ số 1.5 mới áp dụng.
+
+- Sửa/xoá đơn giá giờ (SCRUM-92): `SCRUM-92_pay_profile_crud.sql` thêm hai hàm `security definer`
+  `update_pay_profile` và `delete_pay_profile` (vẫn bắt đầu bằng `payroll_require_owner()`, vẫn lọc theo tổ
+  chức trong phiên) và cột `updated_at` — app **không** đọc cột này để một CSDL chưa chạy script không làm
+  hỏng `GET /api/payroll/profiles`. Sửa được **cả** `effective_from` (đó là trường hợp `set_pay_profile` chịu
+  thua); dời ngày trùng dòng khác của cùng người trả `409 PAY_PROFILE_DUPLICATE`; `employee_id` không sửa
+  được. Xoá không đụng tới phiếu lương (số tiền là ảnh chụp) — chỉ lần `generate_payslips` sau đó thay đổi,
+  dòng bị xoá được ghi vào `payroll_audit_log` trước. API mới: `PATCH`/`DELETE /api/payroll/profiles/{id}`
+  (`payroll:manage`). Giao diện dùng chung `components/PayRateDialog.tsx` (lịch sử + sửa + xoá + thêm) cho
+  tab "Đơn giá giờ" của `/payroll` **và** cho cột "Đơn giá giờ" mới trên `/staff` — chủ sở hữu sửa lương ngay
+  trên hồ sơ nhân viên; dòng của chính chủ sở hữu chỉ hiện câu giải thích vì `set_pay_profile` từ chối
+  `OWNER` làm nhân viên được trả lương. Chạy `SCRUM-92` sau `SCRUM-90`, cùng lúc với build.
+
+- Chốt lương thực nhận (SCRUM-93): `SCRUM-93_final_salary.sql` thêm hàm `security definer`
+  `set_payslip_net(payslip, target, note)` — chủ sở hữu nhập **đúng số tiền nhân viên sẽ nhận trong tháng**,
+  phần chênh lệch so với lương theo giờ công được lưu thành **một** khoản mục `ADJUSTMENT` (`EARNING` nếu cao
+  hơn, `DEDUCTION` nếu thấp hơn) rồi `payroll_recalc` tính lại. Nhờ vậy không có cột `net_amount` ghi đè, phiếu
+  vẫn giữ `gross = work + other_earnings` / `net = gross − deduction`, và nhân viên đọc được vì sao con số khác
+  giờ công. Gọi lại sẽ **thay** khoản điều chỉnh cũ (không cộng dồn). Chỉ phiếu `DRAFT`: phiếu đã phát hành trả
+  `409 PAYSLIP_IMMUTABLE`; id lạ trả `404`. Hàm còn tự kiểm `net_amount = target` sau khi tính lại. Script tạo
+  lại `generate_payslips` (y hệt SCRUM-90, thêm một câu `delete`) để lần tạo lại phiếu **xoá khoản điều chỉnh
+  cũ** — số chênh lệch đó được tính trên số giờ công vừa thay đổi. Chưa làm điều chỉnh lặp hằng tháng vì phải
+  sửa `my_pay_estimate()` (hàm app mobile đang đọc) — để vé sau. API: `POST /api/payroll/payslips/{id}/net`
+  (`payroll:manage`). Giao diện: thẻ "Lương thực nhận" trong ngăn chi tiết của `/payroll` (ô nhập điền sẵn số
+  hiện tại, hiện chênh lệch ±, chỉ bật với phiếu nháp) và cột "Lương thực nhận" mới trên `/staff` (số thực nhận
+  tháng này + trạng thái phiếu). Chạy `SCRUM-93` sau `SCRUM-90` và `SCRUM-92`, cùng lúc với build.
+
+- Ca quên chấm ra được trả tới giờ tan ca (SCRUM-94): `SCRUM-94_payroll_open_shift.sql` tạo lại hàm
+  `payroll_work_lines` — hàm duy nhất đổi giờ công thành tiền — vì lỗi "Tạo bản nháp không ra gì": hàm này lọc
+  `and a.check_out_at is not null`, nên ca **chưa chấm ra không bị bỏ qua mà vô hình**; bộ sinh phiếu thấy
+  `counted = 0, skipped = 0`, rơi vào nhánh "tháng này không ai làm việc" và không tạo phiếu nào — trong khi
+  `/attendance` vẫn hiện 4,8 giờ (màn hình đó đã dùng fallback SCRUM-75). Giờ công tính như sau: có giờ ra thật
+  thì dùng `worked_seconds`; nếu chưa chấm ra, khi giờ tan ca (`(work_date + end_time) at time zone
+  'Asia/Bangkok'`, ca qua đêm +24 giờ, mẫu `Nghỉ` thì không có) đã qua và đoạn đang mở bắt đầu trước mốc đó thì
+  `worked_seconds + (giờ tan ca − coalesce(resumed_at, check_in_at))` — đúng quy tắc của
+  `lib/usecases/attendanceAutoClose.ts`, nên tiền và bảng công không thể lệch nhau. **Không ghi gì vào CSDL**:
+  `check_out_at` vẫn null để quản lý sửa được kèm người sửa và lý do, và không cần job định kỳ. Vẫn không trả
+  tiền cho: `NO_SHIFT` (chấm công "Ngoài lịch", không có giờ tan ca để suy ra), `OPEN_SHIFT` (ca chưa tan),
+  `NO_TIME` (dưới một phút); ca được mở lại **sau** giờ tan ca giữ nguyên số giây đã tích luỹ. Chạy script xong
+  thì bấm **Tạo bản nháp** lại cho tháng đó; nhân viên vẫn cần có "Đơn giá giờ" mới được tính.
 
 - Giao diện điện thoại: `md` (768px) là mốc duy nhất. Danh sách điều hướng chỉ nằm ở
   `components/navigation.ts` — `Sidebar` cho màn hình rộng, `MobileNav` là ngăn kéo trượt cho điện thoại (mở

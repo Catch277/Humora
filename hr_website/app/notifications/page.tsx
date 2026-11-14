@@ -2,6 +2,7 @@
 
 import {
   AlertTriangle,
+  Banknote,
   Bell,
   Building2,
   CalendarRange,
@@ -92,6 +93,8 @@ const CATEGORY_ICONS: Record<NotificationCategory, typeof Bell> = {
   branch: Building2,
   facility: PackageSearch,
   organization: Store,
+  // SCRUM-90: the same `Banknote` the sidebar shows for `/payroll`.
+  payroll: Banknote,
 };
 
 function statusMessage(

@@ -71,8 +71,17 @@ export default function ResetPasswordPage() {
         return;
       }
 
-      // The recovery session is a normal one by now, so the gate decides where the account belongs.
-      router.replace("/");
+      // A recovery link exists to let the account back in, not to leave it signed in: the new password is
+      // saved, so close the recovery session and hand the reader the sign-in form they started from
+      // (`?reset=success` is what `/login` prints as its green notice). Best effort — a refused sign-out
+      // must not hide the fact that the password was stored.
+      try {
+        await fetch("/api/auth/sign-out", { method: "POST" });
+      } catch {
+        // Only the recovery session outlives the screen; the password itself is already saved.
+      }
+
+      router.replace("/login?reset=success");
       router.refresh();
     } catch {
       setError(t("error.network"));

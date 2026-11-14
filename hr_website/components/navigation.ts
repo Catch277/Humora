@@ -1,5 +1,6 @@
 import {
   Bell,
+  Banknote,
   Bot,
   Building2,
   CalendarRange,
@@ -44,6 +45,7 @@ export const NAV_ITEMS: readonly NavigationItem[] = [
   { labelKey: "nav.employeeStatus", href: "/employee-status", icon: UserCheck },
   { labelKey: "nav.checkIn", href: "/check-in", icon: Fingerprint },
   { labelKey: "nav.attendance", href: "/attendance", icon: ClipboardCheck },
+  { labelKey: "nav.payroll", href: "/payroll", icon: Banknote },
   { labelKey: "nav.staff", href: "/staff", icon: UsersRound },
   { labelKey: "nav.reports", href: "/reports", icon: PieChart },
   { labelKey: "nav.notifications", href: "/notifications", icon: Bell },

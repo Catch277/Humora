@@ -66,6 +66,8 @@ export default function LoginPage() {
   const [forgotSentTo, setForgotSentTo] = useState("");
   /** Set when `GET /api/auth/recovery` bounced the visitor back with an unusable link. */
   const [recoveryFailed, setRecoveryFailed] = useState(false);
+  /** Set when `/reset-password` saved a new password and signed the recovery session out. */
+  const [resetDone, setResetDone] = useState(false);
 
   useEffect(() => {
     // `window.location.search` is not readable during render (the server has no URL to read), so the
@@ -73,12 +75,18 @@ export default function LoginPage() {
     // React 19's `react-hooks/set-state-in-effect` refuses a synchronous one (`components/Sidebar.tsx`
     // is the same shape).
     const params = new URLSearchParams(window.location.search);
+    const recovery = params.get("recovery");
+    const reset = params.get("reset");
 
-    if (params.get("recovery") !== "failed") {
-      return;
+    if (recovery === "failed") {
+      void Promise.resolve().then(() => setRecoveryFailed(true));
     }
 
-    void Promise.resolve().then(() => setRecoveryFailed(true));
+    // `/reset-password` signs the recovery session out and lands here, so the reader sees where to type
+    // the password they just chose instead of being dropped on a dashboard.
+    if (reset === "success") {
+      void Promise.resolve().then(() => setResetDone(true));
+    }
   }, []);
 
   function openForgotMode() {
@@ -251,6 +259,16 @@ export default function LoginPage() {
           >
             <AlertTriangle size={14} className="mt-0.5 shrink-0" />
             {t("login.recoveryFailed")}
+          </div>
+        )}
+
+        {resetDone && (
+          <div
+            role="status"
+            className="mt-5 flex items-start gap-2 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-xs text-emerald-800"
+          >
+            <CheckCircle2 size={14} className="mt-0.5 shrink-0" />
+            {t("login.resetSuccess")}
           </div>
         )}
 

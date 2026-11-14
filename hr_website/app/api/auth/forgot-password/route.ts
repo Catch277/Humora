@@ -8,6 +8,10 @@
  *       or not that address has an account, so this endpoint cannot be used to enumerate the staff of
  *       an organization. The link in the email returns to `GET /api/auth/recovery`, which turns it into
  *       a recovery session.
+ *
+ *       The return URL is built from `SITE_URL` when that variable holds an absolute http(s) URL and
+ *       from the request origin otherwise, so a deployment answers with its real domain instead of the
+ *       preview alias that happened to serve this POST.
  *     tags:
  *       - Authentication
  *     requestBody:
@@ -55,6 +59,37 @@ const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 const FAILURE_MESSAGE = "Không gửi được email đặt lại mật khẩu. Vui lòng thử lại.";
 
+/**
+ * Where the recovery mail sends the account back to.
+ *
+ * `request.url` is whichever host answered this POST, which on a deployment platform is often an alias
+ * (`<project>-git-main-….vercel.app`) — and a preview alias sits behind the platform's own sign-in page,
+ * so the mail would ask the reader to log in to the host rather than to this app. `SITE_URL` pins the
+ * canonical origin; it is server-only on purpose (no client bundle needs it, so it is not
+ * `NEXT_PUBLIC_`). A missing or malformed value is ignored, which keeps a local run without the variable
+ * working exactly as before.
+ */
+function recoveryRedirectUrl(request: Request): string {
+  let origin = new URL(request.url).origin;
+  const configured = process.env.SITE_URL?.trim();
+
+  if (configured) {
+    try {
+      const parsed = new URL(configured);
+
+      if (parsed.protocol === "http:" || parsed.protocol === "https:") {
+        origin = parsed.origin;
+      } else {
+        console.error("SITE_URL must be an absolute http(s) URL; using the request origin instead.");
+      }
+    } catch {
+      console.error("SITE_URL is not a valid URL; using the request origin instead.");
+    }
+  }
+
+  return new URL("/api/auth/recovery", origin).toString();
+}
+
 export async function POST(request: Request) {
   let body: ForgotPasswordRequest;
 
@@ -75,11 +110,10 @@ export async function POST(request: Request) {
 
   try {
     const supabase = await createSupabaseServerClient();
-    // The email has to come back to *us*, not to Supabase's own page: the `code` it carries is
-    // exchanged for a recovery session by `/api/auth/recovery`. The PKCE verifier that exchange needs
-    // is the cookie this call just stored in the caller's browser, which is also why the link only
-    // completes in the browser that asked for it.
-    const redirectTo = new URL("/api/auth/recovery", request.url).toString();
+    // The email has to come back to *us*, not to Supabase's own page: the token it carries is turned
+    // into a recovery session by `/api/auth/recovery`. The PKCE verifier a `code` link needs is the
+    // cookie this call just stored in the caller's browser.
+    const redirectTo = recoveryRedirectUrl(request);
     const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo });
 
     if (error) {

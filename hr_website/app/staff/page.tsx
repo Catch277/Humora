@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import {
   AlertTriangle,
@@ -14,13 +15,28 @@ import {
   UserX,
 } from "lucide-react";
 
+import { useLocale } from "@/components/LocaleProvider";
+import PayRateDialog, { type PayRateTarget } from "@/components/PayRateDialog";
+import { useProfile } from "@/components/ProfileProvider";
 import { roleLabel } from "@/lib/accessPolicy";
+import type { PayProfile } from "@/lib/domain/entities/PayProfile";
+import type { Payslip, PayslipStatus } from "@/lib/domain/entities/Payslip";
 import {
   APP_ROLES,
   isBranchHeadRole,
   isOwnerRole,
   type AppRole,
 } from "@/lib/domain/roles";
+import { formatCurrency, formatDate } from "@/lib/i18n/format";
+import type { MessageKey } from "@/lib/i18n/translate";
+import { businessMonth } from "@/lib/usecases/payrollPeriod";
+
+/** The status pill of the final-salary cell; the labels are the payroll screen's own dictionary keys. */
+const PAYSLIP_STATUS_KEYS = {
+  DRAFT: "payroll.status.DRAFT",
+  PUBLISHED: "payroll.status.PUBLISHED",
+  VOID: "payroll.status.VOID",
+} as const satisfies Record<PayslipStatus, MessageKey>;
 
 type StaffMemberRow = {
   id: string;
@@ -146,8 +162,17 @@ function actionErrorMessage(status: number, data: { error?: string } | null): st
 }
 
 export default function StaffPage() {
+  const { t } = useLocale();
+  const { can } = useProfile();
+  // The rate cell is the owner's (`payroll:manage`), the same capability the rates tab on `/payroll` uses.
+  const managesPayroll = can("payroll:manage");
   const [members, setMembers] = useState<StaffMemberRow[]>([]);
   const [branches, setBranches] = useState<Branch[]>([]);
+  const [rates, setRates] = useState<PayProfile[]>([]);
+  const [ratesUnavailable, setRatesUnavailable] = useState(false);
+  const [rateTarget, setRateTarget] = useState<PayRateTarget | null>(null);
+  /** SCRUM-93: this month's payslips, so the final salary sits next to the rate it is built from. */
+  const [payslips, setPayslips] = useState<Payslip[]>([]);
   const [drafts, setDrafts] = useState<Record<string, StaffDraft>>({});
   const [loading, setLoading] = useState(true);
   const [pageError, setPageError] = useState("");
@@ -161,14 +186,25 @@ export default function StaffPage() {
     async function load(): Promise<{
       members: StaffMemberRow[];
       branches: Branch[];
+      rates: PayProfile[];
+      ratesUnavailable: boolean;
+      payslips: Payslip[];
       error: string | null;
     }> {
       // The branch picker needs the list, and both reads belong to the owner (`staff:manage` and
       // `branch:view`), so they load together (SCRUM-63).
-      const [usersResponse, branchesResponse] = await Promise.all([
-        fetch("/api/users", { cache: "no-store" }),
-        fetch("/api/branches", { cache: "no-store" }),
-      ]);
+      //
+      // SCRUM-92 adds the pay profiles to the same batch: the salary cell below and the rates tab on
+      // `/payroll` then describe one list, and the dialog this page opens writes through the same endpoints.
+      // SCRUM-93 adds this month's payslips for the "Lương thực nhận" column.
+      const month = businessMonth();
+      const [usersResponse, branchesResponse, ratesResponse, payslipsResponse] =
+        await Promise.all([
+          fetch("/api/users", { cache: "no-store" }),
+          fetch("/api/branches", { cache: "no-store" }),
+          fetch("/api/payroll/profiles", { cache: "no-store" }),
+          fetch(`/api/payroll/payslips?month=${month}`, { cache: "no-store" }),
+        ]);
 
       if (!usersResponse.ok) {
         const data = (await usersResponse.json().catch(() => null)) as {
@@ -178,6 +214,9 @@ export default function StaffPage() {
         return {
           members: [],
           branches: [],
+          rates: [],
+          ratesUnavailable: false,
+          payslips: [],
           error: actionErrorMessage(usersResponse.status, data),
         };
       }
@@ -186,6 +225,15 @@ export default function StaffPage() {
         members: (await usersResponse.json()) as StaffMemberRow[],
         branches: branchesResponse.ok
           ? ((await branchesResponse.json()) as Branch[])
+          : [],
+        rates: ratesResponse.ok
+          ? ((await ratesResponse.json()) as PayProfile[])
+          : [],
+        // A database without `SCRUM-90_payroll.sql` answers `500` here. That must not blank the table —
+        // the owner still manages roles and branches — so the cell says the rates could not be read.
+        ratesUnavailable: !ratesResponse.ok,
+        payslips: payslipsResponse.ok
+          ? ((await payslipsResponse.json()) as Payslip[])
           : [],
         error: null,
       };
@@ -199,6 +247,9 @@ export default function StaffPage() {
 
         setMembers(result.members);
         setBranches(result.branches);
+        setRates(result.rates);
+        setRatesUnavailable(result.ratesUnavailable);
+        setPayslips(result.payslips);
         setDrafts(
           Object.fromEntries(
             result.members.map((member) => [member.id, toDraft(member)]),
@@ -214,6 +265,9 @@ export default function StaffPage() {
 
         setMembers([]);
         setBranches([]);
+        setRates([]);
+        setRatesUnavailable(false);
+        setPayslips([]);
         setDrafts({});
         setPageError("Không thể kết nối tới máy chủ. Vui lòng thử lại.");
         setLoading(false);
@@ -257,6 +311,37 @@ export default function StaffPage() {
 
     return map;
   }, [branches]);
+
+  /**
+   * The newest stored rate of each employee (SCRUM-92). `GET /api/payroll/profiles` answers every row the
+   * caller may read, `effective_from` descending, so the first row seen per employee is the current one —
+   * the same rule `/payroll` applies in `latestRate`.
+   */
+  const latestRateOf = useMemo(() => {
+    const map = new Map<string, PayProfile>();
+
+    rates.forEach((rate) => {
+      if (!map.has(rate.employee_id)) {
+        map.set(rate.employee_id, rate);
+      }
+    });
+
+    return map;
+  }, [rates]);
+
+  /**
+   * This month's payslip of each employee (SCRUM-93). `GET /api/payroll/payslips?month=…` answers one row per
+   * employee per month (the unique index excludes VOID), so the map is a straight lookup.
+   */
+  const payslipOf = useMemo(() => {
+    const map = new Map<string, Payslip>();
+
+    payslips.forEach((slip) => {
+      map.set(slip.employee_id, slip);
+    });
+
+    return map;
+  }, [payslips]);
 
   /**
    * The rows the table shows: the search filter (name, role label or branch name), then the order this
@@ -492,6 +577,16 @@ export default function StaffPage() {
                   <th className="px-4 py-3 font-semibold">Nhân viên</th>
                   <th className="px-4 py-3 font-semibold">Vai trò</th>
                   <th className="px-4 py-3 font-semibold">Chi nhánh làm việc</th>
+                  {managesPayroll && (
+                    <th className="whitespace-nowrap px-4 py-3 font-semibold">
+                      {t("payroll.rates.column")}
+                    </th>
+                  )}
+                  {managesPayroll && (
+                    <th className="whitespace-nowrap px-4 py-3 font-semibold">
+                      {t("payroll.final.column")}
+                    </th>
+                  )}
                   <th className="px-4 py-3 font-semibold">Trạng thái</th>
                   <th className="px-4 py-3 font-semibold">Ngày tạo</th>
                   <th className="px-4 py-3 font-semibold">Hành động</th>
@@ -579,6 +674,29 @@ export default function StaffPage() {
                           </>
                         )}
                       </td>
+                      {managesPayroll && (
+                        <td className="px-4 py-3">
+                          <RateCell
+                            rate={latestRateOf.get(member.id) ?? null}
+                            isOwner={isOwnerRole(member.role)}
+                            unavailable={ratesUnavailable}
+                            onOpen={() => {
+                              setPageError("");
+                              setRateTarget({
+                                employeeId: member.id,
+                                fullName: member.full_name,
+                              });
+                            }}
+                          />
+                        </td>
+                      )}
+                      {managesPayroll && (
+                        <td className="px-4 py-3">
+                          <FinalSalaryCell
+                            payslip={payslipOf.get(member.id) ?? null}
+                          />
+                        </td>
+                      )}
                       <td className="px-4 py-3">
                         <span
                           className={`rounded-full px-2.5 py-1 text-[10px] font-semibold ${
@@ -631,6 +749,109 @@ export default function StaffPage() {
           </div>
         )}
       </section>
+
+      {rateTarget && (
+        <PayRateDialog
+          target={rateTarget}
+          profiles={rates.filter(
+            (rate) => rate.employee_id === rateTarget.employeeId,
+          )}
+          onClose={() => setRateTarget(null)}
+          // Refetching is what makes the cell, `/payroll` and the database agree; the staff table itself
+          // has nothing else to change, so no notice is raised over a row the owner can already see.
+          onSaved={() => refresh()}
+        />
+      )}
     </div>
+  );
+}
+
+/**
+ * The final salary of one employee for the current month (SCRUM-93): the `net_amount` of this month's
+ * payslip, with the status it is in — a DRAFT number is what the owner intends to pay, not what was paid — and
+ * the way to the screen where the figure is set (that needs the month and the draft, so it lives on
+ * `/payroll`).
+ */
+function FinalSalaryCell({ payslip }: { payslip: Payslip | null }) {
+  const { t, locale } = useLocale();
+
+  if (!payslip) {
+    return (
+      <p className="text-[10px] text-slate-400">{t("payroll.final.none")}</p>
+    );
+  }
+
+  return (
+    <>
+      <p className="whitespace-nowrap text-xs font-semibold text-slate-800">
+        {formatCurrency(payslip.net_amount, locale)}
+      </p>
+      <p className="whitespace-nowrap text-[10px] text-slate-500">
+        {t(PAYSLIP_STATUS_KEYS[payslip.status])}
+      </p>
+      <Link
+        href="/payroll"
+        className="mt-1 inline-block whitespace-nowrap text-[11px] font-semibold text-primary hover:underline"
+      >
+        {t("payroll.final.title")}
+      </Link>
+    </>
+  );
+}
+
+/**
+ * The salary cell of one row (SCRUM-92): the current rate and the day it starts, or the fact that there is
+ * none — which is exactly the state `generate_payslips` skips.
+ *
+ * The organization's owner never gets a rate (`set_pay_profile` refuses an `OWNER` as the target employee),
+ * so their cell is a statement rather than a button that could only answer `404`.
+ */
+function RateCell({
+  rate,
+  isOwner,
+  unavailable,
+  onOpen,
+}: {
+  rate: PayProfile | null;
+  isOwner: boolean;
+  unavailable: boolean;
+  onOpen: () => void;
+}) {
+  const { t, locale } = useLocale();
+
+  if (isOwner) {
+    return (
+      <p className="max-w-36 text-[10px] text-slate-400">
+        {t("payroll.rates.ownerLocked")}
+      </p>
+    );
+  }
+
+  return (
+    <>
+      <p className="whitespace-nowrap text-xs font-semibold text-slate-800">
+        {rate ? formatCurrency(rate.hourly_rate, locale) : t("payroll.rates.none")}
+      </p>
+      {rate && (
+        <p className="whitespace-nowrap text-[10px] text-slate-500">
+          {t("payroll.rates.effectiveShort", {
+            date: formatDate(rate.effective_from, locale),
+          })}
+        </p>
+      )}
+      {unavailable ? (
+        <p className="mt-1 max-w-36 text-[10px] text-amber-600">
+          {t("payroll.rates.loadFailed")}
+        </p>
+      ) : (
+        <button
+          type="button"
+          onClick={onOpen}
+          className="mt-1 whitespace-nowrap text-[11px] font-semibold text-primary hover:underline"
+        >
+          {rate ? t("payroll.rates.rowEdit") : t("payroll.rates.add")}
+        </button>
+      )}
+    </>
   );
 }

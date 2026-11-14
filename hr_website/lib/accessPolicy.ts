@@ -45,6 +45,14 @@ export const CAPABILITIES = [
    */
   "security:manage",
 
+  /**
+   * Bảng lương của chính mình (SCRUM-90): phiếu đã phát hành và "thu nhập tạm tính" giữa tháng. Every role
+   * holds it, because everybody except the owner is paid through a payslip — and RLS decides which rows
+   * exist (`payslips_select`: `employee_id = auth.uid() and status = 'PUBLISHED'`). The money itself is
+   * `payroll:manage`, which only the owner holds.
+   */
+  "payroll:view",
+
   /** Manager: run the operation. */
   "revenue:manage",
   "report:view",
@@ -69,6 +77,12 @@ export const CAPABILITIES = [
   "branch:manage",
   "staff:manage",
   "organization:manage",
+  /**
+   * The money itself (SCRUM-90): set a rate, generate the drafts, publish them, add a khoản mục, void a
+   * payslip. Owner only — `payroll_require_owner()` answers `403` for every other role, and the rates tab on
+   * `/payroll` is rendered only for a caller who holds this.
+   */
+  "payroll:manage",
 ] as const;
 
 export type Capability = (typeof CAPABILITIES)[number];
@@ -83,6 +97,9 @@ const EMPLOYEE_CAPABILITIES: readonly Capability[] = [
   // Every role holds `security:manage` too (SCRUM-79): a passkey belongs to the account, not to a job, so
   // an owner and a manager turn Face ID on for themselves exactly like an employee does.
   "security:manage",
+  // His own payslip (SCRUM-90). RLS narrows `payslips` to `employee_id = auth.uid() and status =
+  // 'PUBLISHED'`, so a DRAFT reaches nobody but the owner of the organization.
+  "payroll:view",
 
   // An employee does **not** hold `attendance:view` (SCRUM-68): the review screen is the manager's, and
   // their own timesheet lives on `/check-in` (30-day history, same `/api/attendance` under RLS).
@@ -122,6 +139,12 @@ const OWNER_CAPABILITIES: readonly Capability[] = [
   "branch:manage",
   "staff:manage",
   "organization:manage",
+  /**
+   * Đơn giá giờ, sinh phiếu, phát hành, huỷ phiếu (SCRUM-90). Owner-only, and deliberately NOT inherited by
+   * the manager level: `payroll_require_owner()` refuses every write for anybody else, so a manager link on
+   * `/payroll` would only be a button that answers `403`.
+   */
+  "payroll:manage",
 ];
 
 const ROLE_CAPABILITIES: Readonly<Record<string, ReadonlySet<string>>> = {
@@ -155,6 +178,9 @@ export const SCREEN_ACCESS: readonly { path: string; capability: Capability }[] 
   // `/attendance` is where a manager reviews the rows that come out of it.
   { path: "/check-in", capability: "attendance:checkin" },
   { path: "/attendance", capability: "attendance:view" },
+  // SCRUM-90 follows the timesheet it pays for: `/check-in` writes the hours, `/attendance` reviews them and
+  // `/payroll` turns them into money. Every role opens it; only the owner sees the rates tab and the buttons.
+  { path: "/payroll", capability: "payroll:view" },
   { path: "/staff", capability: "staff:manage" },
   { path: "/reports", capability: "report:view" },
   { path: "/notifications", capability: "notification:view" },
