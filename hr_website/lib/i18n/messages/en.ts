@@ -1097,7 +1097,7 @@ export const en: Translations = {
   "payroll.action.rates": "Hourly rates",
 
   "payroll.notice.generated": "Created or refreshed {count} draft payslips.",
-  "payroll.notice.generatedNone": "Nobody was eligible: no hourly rate, or no shift in that month.",
+  "payroll.notice.generatedNone": "Nobody was eligible: no hourly rate, no shift in that month, or the shift has not ended yet.",
   "payroll.notice.published": "Published {count} payslips.",
   "payroll.notice.publishedNone": "There were no drafts to publish.",
   "payroll.notice.held": "{count} payslips were held back because their timesheet still has an open dispute.",

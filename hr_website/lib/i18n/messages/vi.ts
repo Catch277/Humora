@@ -1098,7 +1098,7 @@ export const vi = {
   "payroll.action.rates": "Đơn giá giờ",
 
   "payroll.notice.generated": "Đã tạo hoặc cập nhật {count} phiếu nháp.",
-  "payroll.notice.generatedNone": "Không có ai đủ điều kiện tạo phiếu: thiếu đơn giá giờ hoặc không có ca nào trong tháng.",
+  "payroll.notice.generatedNone": "Không có ai đủ điều kiện tạo phiếu: thiếu đơn giá giờ, không có ca nào trong tháng, hoặc ca chưa kết thúc.",
   "payroll.notice.published": "Đã phát hành {count} phiếu lương.",
   "payroll.notice.publishedNone": "Không có phiếu nháp nào để phát hành.",
   "payroll.notice.held": "{count} phiếu bị giữ lại vì còn khiếu nại bảng công.",

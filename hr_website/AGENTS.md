@@ -434,6 +434,31 @@ month**. `SCRUM-93_final_salary.sql` adds `set_payslip_net(payslip, target, note
   net + its status (`GET /api/payroll/payslips?month=…`). The write stays on `/payroll` because an exact figure
   only means something against a month, and the payslip is the only object that has one.
 
+### A ca nobody closed pays up to the ca's end (SCRUM-94)
+
+`SCRUM-94_payroll_open_shift.sql` re-creates `payroll_work_lines` — the one function that turns hours into
+money — because of a real "Tạo bản nháp does nothing" bug:
+
+- **The bug**: the function filtered `and a.check_out_at is not null`. An incomplete check-out was not skipped,
+  it was **invisible**, so the generator saw `counted = 0, skipped = 0`, took its "nothing worked this month"
+  branch and created no draft — while `/attendance` showed 4,8 h for the same month (that screen has applied the
+  SCRUM-75 fallback since it shipped). Two numbers disagreed about the same row.
+- **The rule now**: `effective_seconds` = `worked_seconds` when there is a real giờ ra; otherwise, once the ca's
+  `end_time` has passed and the open segment began before it, `worked_seconds + (ca end − coalesce(resumed_at,
+  check_in_at))`. That is `attendanceAutoClose.ts` expressed in SQL, so the money and the timesheet cannot
+  drift. The ca end is built as `(work_date + end_time) at time zone 'Asia/Bangkok'`, +24 h for an overnight
+  template, and `null` for the zero-length `Nghỉ` template.
+- **Nothing is written**: `check_out_at` stays null so a manager can still correct it with who and why, and no
+  scheduled job is needed — this is a read-time inference, not a close. The `Sửa giờ` dialog still pre-fills the
+  same value, so one save turns it into a recorded fact.
+- **What stays unpaid, with a reason**: `NO_SHIFT` (unscheduled "Ngoài lịch" check-in — no end to infer),
+  `OPEN_SHIFT` (the ca has not ended yet, so the employee may still press "Ra ca"), `NO_TIME` (under a minute).
+  A row re-opened *after* its ca ended keeps its banked seconds and is not invented an end — the same guard
+  `autoCheckOutAt` applies.
+- **After applying it**, press **Tạo bản nháp** again for the month: the minutes are computed at generate time.
+  An employee still needs a pay profile (`Đơn giá giờ`) or the generator skips them, which the rates tab already
+  counts.
+
 ## Password reset by email (forgot password)
 
 `/login` has a "Quên mật khẩu?" panel and `/reset-password` is where the emailed link lands. The flow
@@ -1257,6 +1282,20 @@ screen that talks to Supabase Auth directly instead of through `app/api/**`.
   (`payroll:manage`). Giao diện: thẻ "Lương thực nhận" trong ngăn chi tiết của `/payroll` (ô nhập điền sẵn số
   hiện tại, hiện chênh lệch ±, chỉ bật với phiếu nháp) và cột "Lương thực nhận" mới trên `/staff` (số thực nhận
   tháng này + trạng thái phiếu). Chạy `SCRUM-93` sau `SCRUM-90` và `SCRUM-92`, cùng lúc với build.
+
+- Ca quên chấm ra được trả tới giờ tan ca (SCRUM-94): `SCRUM-94_payroll_open_shift.sql` tạo lại hàm
+  `payroll_work_lines` — hàm duy nhất đổi giờ công thành tiền — vì lỗi "Tạo bản nháp không ra gì": hàm này lọc
+  `and a.check_out_at is not null`, nên ca **chưa chấm ra không bị bỏ qua mà vô hình**; bộ sinh phiếu thấy
+  `counted = 0, skipped = 0`, rơi vào nhánh "tháng này không ai làm việc" và không tạo phiếu nào — trong khi
+  `/attendance` vẫn hiện 4,8 giờ (màn hình đó đã dùng fallback SCRUM-75). Giờ công tính như sau: có giờ ra thật
+  thì dùng `worked_seconds`; nếu chưa chấm ra, khi giờ tan ca (`(work_date + end_time) at time zone
+  'Asia/Bangkok'`, ca qua đêm +24 giờ, mẫu `Nghỉ` thì không có) đã qua và đoạn đang mở bắt đầu trước mốc đó thì
+  `worked_seconds + (giờ tan ca − coalesce(resumed_at, check_in_at))` — đúng quy tắc của
+  `lib/usecases/attendanceAutoClose.ts`, nên tiền và bảng công không thể lệch nhau. **Không ghi gì vào CSDL**:
+  `check_out_at` vẫn null để quản lý sửa được kèm người sửa và lý do, và không cần job định kỳ. Vẫn không trả
+  tiền cho: `NO_SHIFT` (chấm công "Ngoài lịch", không có giờ tan ca để suy ra), `OPEN_SHIFT` (ca chưa tan),
+  `NO_TIME` (dưới một phút); ca được mở lại **sau** giờ tan ca giữ nguyên số giây đã tích luỹ. Chạy script xong
+  thì bấm **Tạo bản nháp** lại cho tháng đó; nhân viên vẫn cần có "Đơn giá giờ" mới được tính.
 
 - Giao diện điện thoại: `md` (768px) là mốc duy nhất. Danh sách điều hướng chỉ nằm ở
   `components/navigation.ts` — `Sidebar` cho màn hình rộng, `MobileNav` là ngăn kéo trượt cho điện thoại (mở
