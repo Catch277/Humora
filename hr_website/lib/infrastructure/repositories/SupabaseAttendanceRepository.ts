@@ -5,12 +5,17 @@ import type {
   AttendanceCheckOutInput,
   AttendanceComplaintStatus,
   AttendanceCorrectionInput,
+  AttendanceExceptionResolutionInput,
+  AttendanceExceptionStatus,
   AttendanceFilters,
   AttendanceStatus,
 } from "@/lib/domain/entities/Attendance";
 import { AttendanceAlreadyCheckedInError } from "@/lib/domain/errors/AttendanceAlreadyCheckedInError";
 import { AttendanceNotFoundError } from "@/lib/domain/errors/AttendanceNotFoundError";
-import type { IAttendanceRepository } from "@/lib/domain/repositories/IAttendanceRepository";
+import type {
+  AttendancePage,
+  IAttendanceRepository,
+} from "@/lib/domain/repositories/IAttendanceRepository";
 import {
   toShift,
   type ShiftRow,
@@ -49,6 +54,10 @@ const ATTENDANCE_COLUMNS = [
   "complaint_status",
   "complaint_resolved_by",
   "complaint_resolved_at",
+  "exception_status",
+  "exception_note",
+  "exception_resolved_by",
+  "exception_resolved_at",
   "verified_by",
   "verified_at",
   "corrected_by",
@@ -100,6 +109,10 @@ type AttendanceRow = {
   complaint_status: string | null;
   complaint_resolved_by: string | null;
   complaint_resolved_at: string | null;
+  exception_status: string | null;
+  exception_note: string | null;
+  exception_resolved_by: string | null;
+  exception_resolved_at: string | null;
   verified_by: string | null;
   verified_at: string | null;
   corrected_by: string | null;
@@ -165,6 +178,11 @@ function toAttendance(row: AttendanceRow): Attendance {
     complaint_status: row.complaint_status as AttendanceComplaintStatus | null,
     complaint_resolved_by: row.complaint_resolved_by,
     complaint_resolved_at: row.complaint_resolved_at,
+    // The check constraint of SCRUM-97 keeps this inside the union (or null).
+    exception_status: row.exception_status as AttendanceExceptionStatus | null,
+    exception_note: row.exception_note,
+    exception_resolved_by: row.exception_resolved_by,
+    exception_resolved_at: row.exception_resolved_at,
     verified_by: row.verified_by,
     verified_at: row.verified_at,
     corrected_by: row.corrected_by,
@@ -181,12 +199,35 @@ function toAttendance(row: AttendanceRow): Attendance {
 }
 
 export class SupabaseAttendanceRepository implements IAttendanceRepository {
+  /**
+   * Every row matching the filters. The clock flows read one employee and one day, so they never page —
+   * this delegates to `findPage` so both paths apply the same filters and the same ordering.
+   */
   async findAll(filters: AttendanceFilters): Promise<Attendance[]> {
+    const { records } = await this.findPage(filters);
+
+    return records;
+  }
+
+  /**
+   * One page of the timesheet, with the exact row count for the filters.
+   *
+   * `range` omitted = the unpaginated read, and `total: null`: PostgREST would otherwise run a
+   * `count(*)` for a caller that only wants today's rows. The ordering is stable — `work_date desc`,
+   * then `check_in_at desc`, then `id` — because a page boundary on equal dates would otherwise drop
+   * or repeat a row between pages.
+   */
+  async findPage(
+    filters: AttendanceFilters,
+    range?: { page: number; pageSize: number },
+  ): Promise<AttendancePage> {
     const supabase = await createSupabaseServerClient();
     let query = supabase
       .from("attendance")
-      .select(ATTENDANCE_COLUMNS)
-      .order("work_date", { ascending: false });
+      .select(ATTENDANCE_COLUMNS, range ? { count: "exact" } : undefined)
+      .order("work_date", { ascending: false })
+      .order("check_in_at", { ascending: false, nullsFirst: false })
+      .order("id", { ascending: true });
 
     if (filters.branchId) {
       query = query.eq("branch_id", filters.branchId);
@@ -209,7 +250,13 @@ export class SupabaseAttendanceRepository implements IAttendanceRepository {
       query = query.lte("work_date", filters.endDate);
     }
 
-    const { data, error } = await query;
+    if (range) {
+      const from = (range.page - 1) * range.pageSize;
+
+      query = query.range(from, from + range.pageSize - 1);
+    }
+
+    const { data, error, count } = await query;
 
     if (error) {
       throw new Error(`Unable to load attendance: ${error.message}`);
@@ -217,7 +264,10 @@ export class SupabaseAttendanceRepository implements IAttendanceRepository {
 
     // The embedded resources make PostgREST's inferred row type unusable, so the cast goes
     // through `unknown` and is normalised by `toAttendance` instead.
-    return ((data ?? []) as unknown as AttendanceRow[]).map(toAttendance);
+    return {
+      records: ((data ?? []) as unknown as AttendanceRow[]).map(toAttendance),
+      total: range ? (count ?? 0) : null,
+    };
   }
 
   async findById(id: string): Promise<Attendance | null> {
@@ -435,6 +485,49 @@ export class SupabaseAttendanceRepository implements IAttendanceRepository {
       throw new Error(`Unable to correct the attendance record: ${error.message}`);
     }
 
+    if (!data) {
+      throw new AttendanceNotFoundError();
+    }
+
+    return toAttendance(data as unknown as AttendanceRow);
+  }
+
+  /**
+   * The manager's decision on a derived exception (SCRUM-97). `RESOLVED` stores the note and the author;
+   * `OPEN` clears both, so a re-opened row cannot keep a stale explanation of a decision that was undone.
+   *
+   * The timesheet facts are deliberately untouched: closing an anomaly is a statement about the review,
+   * not a correction of the evidence (that is `correct`, with its own audit trail).
+   */
+  async resolveException(
+    id: string,
+    input: AttendanceExceptionResolutionInput & {
+      resolverId: string;
+      resolvedAt: string;
+    },
+  ): Promise<Attendance> {
+    const supabase = await createSupabaseServerClient();
+    const resolved = input.status === "RESOLVED";
+
+    const { data, error } = await supabase
+      .from("attendance")
+      .update({
+        exception_status: input.status,
+        exception_note: resolved ? input.note : null,
+        exception_resolved_by: resolved ? input.resolverId : null,
+        exception_resolved_at: resolved ? input.resolvedAt : null,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", id)
+      .select(ATTENDANCE_COLUMNS)
+      .maybeSingle();
+
+    if (error) {
+      throw new Error(`Unable to resolve the attendance exception: ${error.message}`);
+    }
+
+    // RLS hides rows the caller may not update, so "no row" covers a wrong id and a forbidden update —
+    // both answer 404 to avoid leaking which ids exist.
     if (!data) {
       throw new AttendanceNotFoundError();
     }

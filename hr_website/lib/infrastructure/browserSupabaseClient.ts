@@ -1,5 +1,10 @@
 import { createBrowserClient } from "@supabase/ssr";
 
+import {
+  readBrowserCookies,
+  writeBrowserCookies,
+} from "@/lib/infrastructure/sessionScope";
+
 type BrowserSupabaseClient = ReturnType<typeof createBrowserClient>;
 
 /**
@@ -11,7 +16,9 @@ type BrowserSupabaseClient = ReturnType<typeof createBrowserClient>;
  * It writes the same auth cookies the request-scoped server client reads (`createServerClient` in
  * `supabaseClient.ts`), so `proxy.ts`, `requireCaller()` and RLS keep working unchanged: one session, no
  * `auth.storage` (the package persists to cookies on purpose, which is what makes the session visible to
- * the server) and no service-role key anywhere.
+ * the server) and no service-role key anywhere. Its cookie adapter is `sessionScope.ts` rather than the
+ * package's own `document.cookie` helpers, so the "Ghi nhớ đăng nhập" choice on `/login` also applies to a
+ * token this client refreshes while a screen is open.
  *
  * Call it lazily, from an event handler or an effect — at module scope it would touch `document.cookie`
  * while a server render evaluates the module. `createBrowserClient` already returns one instance per
@@ -37,7 +44,21 @@ export function getBrowserSupabaseClient(): BrowserSupabaseClient {
     );
   }
 
-  browserClient = createBrowserClient(supabaseUrl, supabaseAnonKey);
+  browserClient = createBrowserClient(supabaseUrl, supabaseAnonKey, {
+    /*
+      The package reads and writes `document.cookie` on its own, but it gives every cookie it writes a
+      400-day `maxAge`. Routing both halves through `sessionScope.ts` is what keeps a "không ghi nhớ"
+      login a session cookie even when this client refreshes the token (it does, on `/security`).
+    */
+    cookies: {
+      getAll() {
+        return readBrowserCookies();
+      },
+      setAll(cookiesToSet) {
+        writeBrowserCookies(cookiesToSet);
+      },
+    },
+  });
 
   return browserClient;
 }

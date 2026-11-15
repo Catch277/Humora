@@ -3,9 +3,30 @@
  * /api/auth/sign-in:
  *   post:
  *     summary: Sign in with email and password
- *     description: Exchanges email/password credentials for a Supabase Auth session and writes the session cookies onto the response.
+ *     description: |
+ *       Exchanges email/password credentials for a Supabase Auth session and writes the session cookies
+ *       onto the response.
+ *
+ *       The lifetime of those cookies follows the `humora-session-scope` cookie of the request — the
+ *       "Ghi nhớ đăng nhập" box on `/login` (`lib/infrastructure/sessionScope.ts`). `device` (the default,
+ *       and what a client that sends nothing gets) keeps the library's 400-day cookie; `session` writes the
+ *       same cookies without `maxAge`/`expires`, so closing the browser ends the login. No password is
+ *       stored on either path.
  *     tags:
  *       - Authentication
+ *     parameters:
+ *       - in: cookie
+ *         name: humora-session-scope
+ *         required: false
+ *         description: >-
+ *           `device` or `session`: whether this browser keeps the session after it closes. Anything else is
+ *           read as `device`. Not a security boundary — it only decides how long the caller's own browser
+ *           keeps the caller's own session.
+ *         schema:
+ *           type: string
+ *           enum:
+ *             - device
+ *             - session
  *     requestBody:
  *       required: true
  *       content:

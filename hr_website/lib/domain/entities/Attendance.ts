@@ -11,6 +11,15 @@ export const ATTENDANCE_STATUSES = [
 export type AttendanceStatus = (typeof ATTENDANCE_STATUSES)[number];
 
 /**
+ * Which of a record's two photos a caller means: the one taken at the arrival or the one at the
+ * departure. The pair is the query vocabulary of `GET /api/attendance/{id}/photo` (SCRUM-95) and the
+ * two panes of the review dialog, so it lives here rather than in either one.
+ */
+export const ATTENDANCE_PHOTO_KINDS = ["in", "out"] as const;
+
+export type AttendancePhotoKind = (typeof ATTENDANCE_PHOTO_KINDS)[number];
+
+/**
  * The branch fields the screen needs to judge the geofence, embedded from `branch_id` so the
  * validity verdict (distance vs `attendance_radius`) needs no second request.
  */
@@ -25,10 +34,13 @@ export interface AttendanceBranch {
 /**
  * One check-in record: an employee, a work date and (usually) a scheduled shift.
  *
- * Both clients write rows since SCRUM-68: the mobile app captures the GPS point *and* a photo, while
- * `/check-in` on the web records the point alone (no Storage bucket, so `check_in_photo_url` stays null)
- * — which is why the review screen must keep rendering "Ảnh xác minh: —" as a normal outcome. Reading,
- * reviewing and correcting stay a web task either way.
+ * Both clients write rows: the mobile app captures the GPS point *and* a face photo, while `/check-in`
+ * on the web records the point alone (there is no camera in the browser flow, so its photo column stays
+ * null) — which is why the review screen treats "no photo" as a normal outcome. Reading, reviewing and
+ * correcting stay a web task either way.
+ *
+ * Since SCRUM-95 the photo columns hold an object **path** in the private `attendance-photos` bucket,
+ * not a URL: the screen asks `GET /api/attendance/{id}/photo` for a short-lived signed link.
  */
 export interface Attendance {
   id: string;
@@ -44,7 +56,12 @@ export interface Attendance {
   check_out_longitude: number | null;
   /** Distance in metres between the check-in point and the branch centre (derived in the database). */
   check_in_distance_m: number | null;
+  /**
+   * Object path of the check-in photo, e.g. `<org>/<employee>/<work_date>/in-20261114T013012Z.jpg`
+   * (SCRUM-95). Never a public URL — read it through the photo endpoint, never from the client.
+   */
   check_in_photo_url: string | null;
+  /** Same shape as `check_in_photo_url`; null while the ca is open or when it was clocked out on the web. */
   check_out_photo_url: string | null;
   /**
    * Time actually worked, in seconds, accumulated by `attendance_track_worked_time` (SCRUM-69): every
@@ -62,6 +79,18 @@ export interface Attendance {
   complaint_status: AttendanceComplaintStatus | null;
   complaint_resolved_by: string | null;
   complaint_resolved_at: string | null;
+  /**
+   * The manager's decision on a derived exception (SCRUM-97 — see `lib/usecases/attendanceExceptions.ts`):
+   * `RESOLVED` once somebody investigated it, `OPEN` after a re-open, `null` when it was never raised.
+   *
+   * It never rewrites the facts: a late arrival stays `LATE`, it is just settled. That is also why it is
+   * separate from `verified_at` — "the timesheet is right" and "this anomaly was answered" are two
+   * different statements about the same row.
+   */
+  exception_status: AttendanceExceptionStatus | null;
+  exception_note: string | null;
+  exception_resolved_by: string | null;
+  exception_resolved_at: string | null;
   verified_by: string | null;
   verified_at: string | null;
   /** Set when a manager corrected the record (SCRUM-23), with the reason they gave. */
@@ -80,6 +109,15 @@ export const ATTENDANCE_COMPLAINT_STATUSES = ["OPEN", "RESOLVED"] as const;
 
 export type AttendanceComplaintStatus =
   (typeof ATTENDANCE_COMPLAINT_STATUSES)[number];
+
+/**
+ * The lifecycle of a manager's decision on a derived exception (SCRUM-97). `null` is a third state — the
+ * row was never raised — which is why the column is nullable and this union only covers what can be set.
+ */
+export const ATTENDANCE_EXCEPTION_STATUSES = ["OPEN", "RESOLVED"] as const;
+
+export type AttendanceExceptionStatus =
+  (typeof ATTENDANCE_EXCEPTION_STATUSES)[number];
 
 /** What a manager may fix on a record, and the reason the correction must carry. */
 export interface AttendanceCorrectionInput {
@@ -130,4 +168,14 @@ export interface AttendanceCheckOutInput {
 export interface AttendanceComplaintInput {
   attendanceId: string;
   complaint: string;
+}
+
+/**
+ * What a manager records when closing (or re-opening) an anomaly (SCRUM-97): the status and the note.
+ * The author and the instant come from the session and the server clock, never from the body — the same
+ * rule every other write in this module follows.
+ */
+export interface AttendanceExceptionResolutionInput {
+  status: AttendanceExceptionStatus;
+  note: string | null;
 }

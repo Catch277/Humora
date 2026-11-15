@@ -5,8 +5,9 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 
-import OrganizationCard from "@/components/OrganizationCard";
 import BrandMark from "@/components/BrandMark";
+import BrandTagline from "@/components/BrandTagline";
+import OrganizationCard from "@/components/OrganizationCard";
 import { visibleNavigation } from "@/components/navigation";
 import { useLocale } from "@/components/LocaleProvider";
 import { useProfile } from "@/components/ProfileProvider";
@@ -97,7 +98,7 @@ export default function MobileNav() {
     return null;
   }
 
-  const navItems = visibleNavigation(can);
+  const navGroups = visibleNavigation(can);
 
   return (
     <>
@@ -133,9 +134,7 @@ export default function MobileNav() {
               <BrandMark />
               <div className="leading-tight">
                 <p className="text-sm font-bold text-slate-900">Humora</p>
-                <p className="mt-0.5 text-[10px] font-medium text-slate-500">
-                  HR &amp; Shift Intelligence
-                </p>
+                <BrandTagline className="mt-1" />
               </div>
               <button
                 ref={closeRef}
@@ -148,34 +147,38 @@ export default function MobileNav() {
               </button>
             </div>
 
-            <nav className="flex flex-1 flex-col gap-1 overflow-y-auto overscroll-contain px-3 py-4">
-              <p className="mb-2 px-2 text-[10px] font-semibold uppercase tracking-wider text-slate-400">
-                {t("nav.sectionLabel")}
-              </p>
-              {navItems.map((item) => {
-                const isActive = pathname === item.href;
-                const Icon = item.icon;
+            <nav className="flex flex-1 flex-col gap-5 overflow-y-auto overscroll-contain px-3 py-4">
+              {navGroups.map((group) => (
+                <div key={group.labelKey} className="flex flex-col gap-1">
+                  <p className="mb-1 px-2 text-[10px] font-semibold uppercase tracking-wider text-slate-400">
+                    {t(group.labelKey)}
+                  </p>
+                  {group.items.map((item) => {
+                    const isActive = pathname === item.href;
+                    const Icon = item.icon;
 
-                return (
-                  <Link
-                    key={item.href}
-                    href={item.href}
-                    onClick={() => setOpenedAt(null)}
-                    aria-current={isActive ? "page" : undefined}
-                    className={`flex items-center gap-3 rounded-lg px-3 py-3 text-sm transition-colors ${
-                      isActive
-                        ? "bg-blue-50 font-semibold text-primary"
-                        : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
-                    }`}
-                  >
-                    <Icon
-                      size={18}
-                      className={isActive ? "text-primary" : "text-slate-400"}
-                    />
-                    {t(item.labelKey)}
-                  </Link>
-                );
-              })}
+                    return (
+                      <Link
+                        key={item.href}
+                        href={item.href}
+                        onClick={() => setOpenedAt(null)}
+                        aria-current={isActive ? "page" : undefined}
+                        className={`flex items-center gap-3 rounded-lg px-3 py-3 text-sm transition-colors ${
+                          isActive
+                            ? "bg-blue-50 font-semibold text-primary"
+                            : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
+                        }`}
+                      >
+                        <Icon
+                          size={18}
+                          className={isActive ? "text-primary" : "text-slate-400"}
+                        />
+                        {t(item.labelKey)}
+                      </Link>
+                    );
+                  })}
+                </div>
+              ))}
             </nav>
 
             <div className="shrink-0">

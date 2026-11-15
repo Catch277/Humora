@@ -27,24 +27,28 @@ class NotificationService {
       final items = (rows as List)
           .map((r) => AppNotification.fromJson(Map<String, dynamic>.from(r as Map)))
           .toList();
-      if (!unreadOnly) unreadCount.value = items.where((n) => !n.isRead).length;
+      // Chấm đỏ là con số chính xác của server, không phải số dòng chưa đọc trong trang này
+      // (một hộp thư có hơn 100 thông báo sẽ đếm thiếu).
+      if (!unreadOnly) await refreshUnread();
       return items;
     } catch (e) {
       throw toAppException(e);
     }
   }
 
-  /// Làm mới số chưa đọc; lỗi thì im lặng (chấm đỏ không đáng làm phiền người dùng).
+  /// Làm mới số chưa đọc bằng `count` chính xác (`Prefer: count=exact`), không kéo cả trang để đếm;
+  /// lỗi thì im lặng (chấm đỏ không đáng làm phiền người dùng).
   Future<void> refreshUnread() async {
     try {
-      final rows = await _client
+      final res = await _client
           .from('notifications')
           .select('id')
           .eq('user_id', _uid)
           .eq('is_read', false)
-          .limit(100)
+          .limit(1)
+          .count(CountOption.exact)
           .timeout(_timeout);
-      unreadCount.value = (rows as List).length;
+      unreadCount.value = res.count;
     } catch (_) {}
   }
 

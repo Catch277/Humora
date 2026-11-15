@@ -13,13 +13,44 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
 import BrandMark from "@/components/BrandMark";
+import BrandTagline from "@/components/BrandTagline";
 import LanguageToggle from "@/components/LanguageToggle";
 import PasswordInput from "@/components/PasswordInput";
 import { useLocale } from "@/components/LocaleProvider";
 import { passkeyErrorMessage } from "@/lib/domain/passkeyMessages";
+import { offerToBrowserPasswordManager } from "@/lib/infrastructure/browserPasswordManager";
 import { getBrowserSupabaseClient } from "@/lib/infrastructure/browserSupabaseClient";
+import { writeStoredSessionScope } from "@/lib/infrastructure/sessionScope";
 import { errorMessageFor } from "@/lib/i18n/serverMessages";
 import type { MessageKey } from "@/lib/i18n/translate";
+
+/**
+ * Where "Ghi nhớ đăng nhập" keeps the address of the last remembered sign-in — never a password. The value
+ * is a convenience for the next visit only; the session itself is the Supabase refresh token in its own
+ * cookies, whose lifetime `lib/infrastructure/sessionScope.ts` decides.
+ */
+const REMEMBERED_EMAIL_KEY = "humora-login-email";
+
+/** Storage can be blocked (private mode, a locked-down profile): then the form simply starts empty. */
+function readRememberedEmail(): string {
+  try {
+    return window.localStorage.getItem(REMEMBERED_EMAIL_KEY) ?? "";
+  } catch {
+    return "";
+  }
+}
+
+function storeRememberedEmail(email: string, remember: boolean): void {
+  try {
+    if (remember) {
+      window.localStorage.setItem(REMEMBERED_EMAIL_KEY, email);
+    } else {
+      window.localStorage.removeItem(REMEMBERED_EMAIL_KEY);
+    }
+  } catch {
+    /* Storage bị chặn: lần sau chỉ cần nhập lại email. */
+  }
+}
 
 /**
  * What `/api/auth/forgot-password` can answer with. The route sends a Vietnamese sentence of its own
@@ -50,6 +81,12 @@ export default function LoginPage() {
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  /**
+   * "Ghi nhớ đăng nhập": on by default, which is the behaviour the app already had (the session cookie
+   * outlived the browser). It never stores the password — it decides how long the Supabase cookies live
+   * (`lib/infrastructure/sessionScope.ts`) and whether the address is filled in next time.
+   */
+  const [remember, setRemember] = useState(true);
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [passkeySubmitting, setPasskeySubmitting] = useState(false);
@@ -66,6 +103,8 @@ export default function LoginPage() {
   const [forgotSentTo, setForgotSentTo] = useState("");
   /** Set when `GET /api/auth/recovery` bounced the visitor back with an unusable link. */
   const [recoveryFailed, setRecoveryFailed] = useState(false);
+  /** Set when `/reset-password` saved a new password and signed the recovery session out. */
+  const [resetDone, setResetDone] = useState(false);
 
   useEffect(() => {
     // `window.location.search` is not readable during render (the server has no URL to read), so the
@@ -73,12 +112,27 @@ export default function LoginPage() {
     // React 19's `react-hooks/set-state-in-effect` refuses a synchronous one (`components/Sidebar.tsx`
     // is the same shape).
     const params = new URLSearchParams(window.location.search);
+    const recovery = params.get("recovery");
+    const reset = params.get("reset");
 
-    if (params.get("recovery") !== "failed") {
-      return;
+    // The address of the last remembered sign-in, so a returning reader only types the password. Read here
+    // because storage does not exist during the server render, and applied through a promise callback for
+    // the same reason as the flags below.
+    const rememberedEmail = readRememberedEmail();
+
+    if (rememberedEmail) {
+      void Promise.resolve().then(() => setEmail(rememberedEmail));
     }
 
-    void Promise.resolve().then(() => setRecoveryFailed(true));
+    if (recovery === "failed") {
+      void Promise.resolve().then(() => setRecoveryFailed(true));
+    }
+
+    // `/reset-password` signs the recovery session out and lands here, so the reader sees where to type
+    // the password they just chose instead of being dropped on a dashboard.
+    if (reset === "success") {
+      void Promise.resolve().then(() => setResetDone(true));
+    }
   }, []);
 
   function openForgotMode() {
@@ -152,6 +206,10 @@ export default function LoginPage() {
     setPasskeySubmitting(true);
 
     try {
+      // The same "ghi nhớ" choice as the password form: the browser client reads this marker before it
+      // writes the session cookies, so a passkey login is not the one door that always remembers.
+      writeStoredSessionScope(remember ? "device" : "session");
+
       const supabase = getBrowserSupabaseClient();
       const { data, error: passkeyFailure } =
         await supabase.auth.signInWithPasskey();
@@ -197,6 +255,10 @@ export default function LoginPage() {
     setSubmitting(true);
 
     try {
+      // The choice travels as a cookie rather than as a body field: `@supabase/ssr` picks the lifetime of
+      // the session cookies when it writes them, and this marker is what every writer consults.
+      writeStoredSessionScope(remember ? "device" : "session");
+
       const response = await fetch("/api/auth/sign-in", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -217,6 +279,16 @@ export default function LoginPage() {
         return;
       }
 
+      // Only the address, and only when this device was asked to remember: nothing else about the account
+      // stays behind, and nothing is ever written for a reader who unticked the box.
+      storeRememberedEmail(email.trim(), remember);
+
+      if (remember) {
+        // The app keeps no password. This hands the pair to the browser's own manager instead, which is what
+        // fills the field next time (see `lib/infrastructure/browserPasswordManager.ts`).
+        offerToBrowserPasswordManager(email.trim(), password);
+      }
+
       // `replace` keeps the login screen out of the history so Back does not return to it.
       router.replace(resolveRedirectTarget());
       router.refresh();
@@ -234,9 +306,7 @@ export default function LoginPage() {
             <BrandMark className="h-9 w-9" />
             <div className="leading-tight">
               <p className="text-sm font-bold text-slate-900">Humora</p>
-              <p className="mt-0.5 text-[10px] font-medium text-slate-500">
-                HR &amp; Shift Intelligence
-              </p>
+              <BrandTagline className="mt-1" />
             </div>
           </div>
           {/* `/login` renders outside the shell (`Header` returns null for a public path), so the switch
@@ -251,6 +321,16 @@ export default function LoginPage() {
           >
             <AlertTriangle size={14} className="mt-0.5 shrink-0" />
             {t("login.recoveryFailed")}
+          </div>
+        )}
+
+        {resetDone && (
+          <div
+            role="status"
+            className="mt-5 flex items-start gap-2 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-xs text-emerald-800"
+          >
+            <CheckCircle2 size={14} className="mt-0.5 shrink-0" />
+            {t("login.resetSuccess")}
           </div>
         )}
 
@@ -369,13 +449,38 @@ export default function LoginPage() {
                 />
               </label>
 
-              <button
-                type="button"
-                onClick={openForgotMode}
-                className="block w-full text-right text-[11px] font-semibold text-primary hover:underline"
-              >
-                {t("login.forgotLink")}
-              </button>
+              <div>
+                <div className="flex items-center justify-between gap-3">
+                  <label className="flex cursor-pointer items-center gap-2 py-1 text-[11px] font-medium text-slate-600">
+                    <input
+                      type="checkbox"
+                      name="remember"
+                      checked={remember}
+                      onChange={(event) => setRemember(event.target.checked)}
+                      aria-describedby="login-remember-hint"
+                      className="h-4 w-4 shrink-0 rounded border-slate-300 accent-primary"
+                    />
+                    {t("login.rememberMe")}
+                  </label>
+
+                  <button
+                    type="button"
+                    onClick={openForgotMode}
+                    className="shrink-0 py-1 text-[11px] font-semibold text-primary hover:underline"
+                  >
+                    {t("login.forgotLink")}
+                  </button>
+                </div>
+                {/* Says out loud what the box does — and that no password is involved either way. */}
+                <p
+                  id="login-remember-hint"
+                  className="mt-1 text-[10px] text-slate-400"
+                >
+                  {remember
+                    ? t("login.rememberHint")
+                    : t("login.sessionHint")}
+                </p>
+              </div>
 
               {error && (
                 <div

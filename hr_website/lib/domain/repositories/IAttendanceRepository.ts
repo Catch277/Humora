@@ -3,12 +3,31 @@ import type {
   AttendanceCheckInInput,
   AttendanceCheckOutInput,
   AttendanceCorrectionInput,
+  AttendanceExceptionResolutionInput,
   AttendanceFilters,
   AttendanceStatus,
 } from "@/lib/domain/entities/Attendance";
 
+/**
+ * One read of the timesheet. `total` is the exact number of rows the filters match — `null` on the
+ * unpaginated read (`findAll`), because that caller (the clock flows, one employee and one day) does not
+ * need a `count(*)` and must not pay for it on every tap.
+ */
+export type AttendancePage = {
+  records: Attendance[];
+  total: number | null;
+};
+
 export interface IAttendanceRepository {
   findAll(filters: AttendanceFilters): Promise<Attendance[]>;
+  /**
+   * The paginated read behind `GET /api/attendance` (A4 "search the history"): the same filters, one
+   * page of rows and the exact total, ordered so a page boundary cannot repeat or skip a row.
+   */
+  findPage(
+    filters: AttendanceFilters,
+    range?: { page: number; pageSize: number },
+  ): Promise<AttendancePage>;
   findById(id: string): Promise<Attendance | null>;
   /**
    * Records one check-in (SCRUM-68). The caller, the branch and the shifts are already resolved by the
@@ -37,4 +56,15 @@ export interface IAttendanceRepository {
   ): Promise<Attendance>;
   /** Marks a record as reviewed by a manager: `verified_by` + `verified_at`. */
   verify(id: string, verifierId: string): Promise<Attendance>;
+  /**
+   * Records the manager's decision on a derived exception (SCRUM-97): `RESOLVED` with the note and the
+   * author, or `OPEN` to re-open it (which clears the note/author). The timesheet facts are untouched.
+   */
+  resolveException(
+    id: string,
+    input: AttendanceExceptionResolutionInput & {
+      resolverId: string;
+      resolvedAt: string;
+    },
+  ): Promise<Attendance>;
 }

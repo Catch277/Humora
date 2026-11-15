@@ -153,9 +153,12 @@ is the workhorse for labels and buttons.
   the keyboard without resizing the layout viewport, so a field at the bottom of a modal would otherwise
   stay hidden behind it. See §4.4.
 - Content is capped at `max-w-[1440px]` and centred; gutters `p-4` → `md:p-6`.
-- Sidebar `w-56`, hidden below `md` (the phone gets the drawer of §4.4 instead). It collapses to an
-  icon-only rail (`w-16`) from a toggle at its foot; the choice is the `humora-sidebar` cookie, read by
-  `app/layout.tsx` so the first paint already has the right width, and written by `Sidebar` itself. Header
+- Sidebar `w-64`, hidden below `md` (the phone gets the drawer of §4.4 instead). It collapses to an
+  icon-only rail (`w-16`) from an icon-only `ChevronLeft` / `ChevronRight` button centred on its **right**
+  border (`absolute right-0 top-1/2 translate-x-1/2`, `h-7 w-7 rounded-full border bg-surface`) — not a
+  nav entry and no text, so the panel stays entirely navigation; the choice is the `humora-sidebar` cookie,
+  read by `app/layout.tsx` so the first paint already has the right width, and written by `Sidebar` itself.
+  Header
   `h-16`, `sticky top-0 z-10`, `border-b border-slate-200/80`.
 - The header row shrinks on a phone: hamburger + `min-w-0 flex-1` search + one theme button + bell +
   sign-out. The three-way theme group and the `⌘K` hint are `md`-and-up only.
@@ -168,6 +171,11 @@ is the workhorse for labels and buttons.
   `flex flex-col ... lg:flex-row lg:items-end` sibling.
 - Card interiors: `p-4` (compact) or `p-5`/`p-6` (comfortable); table heads `px-4 py-3` / `px-5 py-4`.
 - Field groups inside dialogs: `grid gap-4 sm:grid-cols-2`.
+- An action row whose labels change with a filter keeps **one row** from `lg` up (`lg:flex-nowrap` on the
+  container, `shrink-0 whitespace-nowrap` on each button) and lets the prose beside it absorb the difference.
+  `/notifications` is the reference: its primary button reads "Đánh dấu tất cả đã đọc" on one chip and
+  "Đánh dấu nhóm Doanh thu đã đọc" on another, and inside a wrapping container that longer label pushed the
+  button onto a second line — the bar visibly rearranged itself on every chip click.
 
 ### 4.3 Grid recipes
 
@@ -193,7 +201,7 @@ the header gets its room back. Everything below it has to be usable with one thu
 | Touch | No hover-only affordance: the schedule cell's `+ Thêm` is `opacity-100` below `md` and revealed on hover/focus from `md` up. Anything that only exists on `group-hover` is invisible *and* tappable on a phone. |
 | Forms | Safari zooms the page when a focused field is below 16px, so `app/globals.css` forces `16px` on `input/select/textarea` under `max-width: 767px`. The rule sits **outside** every `@layer` so it outranks Tailwind's `text-xs`/`text-sm` utilities. |
 | Modals | `max-h-[85dvh]` (not `92vh`: the iOS toolbar eats into `vh`), `p-4 sm:p-6`, and the wrapper is `items-end sm:items-center`, so a dialog rises from the bottom like a sheet on a phone and stays centred on a desktop. |
-| Tables | Unchanged in shape: `overflow-x-auto` + `min-w-[…]`, so a phone swipes sideways. A cell whose content must not break carries `whitespace-nowrap` — the `/organization` invites table is the reference: without it the `Chờ vào tổ chức` pill wraps over three lines at 393px and stretches every row (header cells wrap too, so they need it as well). The first column is the row's identity (employee, ca, mã) — the place a sticky column would go if a screen needs it. |
+| Tables | Unchanged in shape: `overflow-x-auto` + `min-w-[…]`, so a phone swipes sideways. A cell whose content must not break carries `whitespace-nowrap` — the `/organization` invites table is the reference: without it the `Chờ vào tổ chức` pill wraps over three lines at 393px and stretches every row (header cells wrap too, so they need it as well). A badge pill additionally needs `inline-flex`: `whitespace-nowrap` alone does not stop an inline `span` from breaking, which is how `/staff`'s `Đang làm việc` pill rendered as "Đang làm / việc" and its "Cho nghỉ việc" action as "Cho nghỉ / việc" whenever the two prose columns beside it squeezed the status column. The first column is the row's identity (employee, ca, mã) — the place a sticky column would go if a screen needs it. |
 | Map | `LocationPickerMap` keeps Leaflet's defaults: `h-64 w-full`, wheel zoom on a desktop, and on a phone one-finger drag pans the *map* and pinch zooms it — so a swipe over the map does not scroll the page (the fields and the modal around it do). That is the normal trade-off for a picker; the pin is placed by tapping, not by dragging it. |
 
 ---
@@ -471,16 +479,41 @@ Initials-based, no photos anywhere in the admin UI:
 ```
 
 Section label above the list: `mb-2 px-2 text-[10px] font-semibold uppercase tracking-wider
-text-slate-400`. The brand block is the accent square + two-line name; the footer card is
-`m-3 rounded-xl border border-blue-100 bg-[#F1F5FF] p-3` with the branch and shift summary. **Every new
-screen must be added here** (lucide icon + Vietnamese label) so navigation stays complete.
+text-slate-400`. The brand block is the accent square + the wordmark + the tagline
+(`components/BrandTagline.tsx`: `CONNECTING` in `text-brand-navy`, `PEOPLE & GROWTH` in `text-brand-green`,
+`tracking-[0.15em]`, the two colours of the logo lockup kept as tokens so the dark theme can re-point them —
+one size down (`compact`, `text-[9px]`) in the 256px rail so the line keeps the lockup's single-line
+alignment with the wordmark instead of wrapping); the footer card is
+`m-3 rounded-xl border border-blue-100 bg-surface-accent p-3`. **Every new screen must be added here**
+(lucide icon + Vietnamese label) so navigation stays complete — and to the one heading its work belongs
+to. The list is grouped in `components/navigation.ts` (`NAV_GROUPS`, one `NavigationGroup` per heading)
+and both navigations render one block per group, so a heading is never a second, drifting copy of the
+list:
+
+| Heading (vi) | Links |
+| --- | --- |
+| Không gian làm việc | Tổng quan, Báo cáo |
+| Ca làm & chấm công | Lịch làm việc, Chấm công, Bảng công, Trạng thái nhân viên |
+| Vận hành | Doanh thu, Đơn từ, Cơ sở vật chất, Quản lý chi nhánh |
+| Nhân sự & lương | Quản lý nhân sự, Bảng lương |
+| Hệ thống | Thông báo, Trợ lý AI, Bảo mật |
+
+A group whose links the role may not open is dropped whole (`visibleNavigation` filters the entries and
+then the empty groups), so a lower role never reads a heading over nothing.
 
 Collapsed state: the same link without `gap-3 px-3`, with `justify-center px-0`, its label kept as
 `sr-only` and repeated in `title` — an icon rail whose links have no accessible name is not shippable.
-The section label becomes a `h-px bg-slate-100` rule, the footer card becomes the `OrganizationCard
-compact` chip (`h-10`, `Landmark`, name in `title`), and the toggle (`PanelLeftClose` / `PanelLeftOpen`,
-`aria-expanded` + `aria-controls`) stays in the same footer position in both states. The width is the
-only animated property (`transition-[width] duration-200 motion-reduce:transition-none`).
+Each group heading becomes a `sr-only` label plus an `h-px bg-slate-100` rule between blocks, the footer
+card becomes the `OrganizationCard compact` chip (`h-10`, `Landmark`, name in `title`), and the toggle
+(`ChevronLeft` / `ChevronRight`, `aria-expanded` + `aria-controls`) floats on the rail's right border in
+both states, so it never joins the list. The width is the only animated property
+(`transition-[width] duration-200 motion-reduce:transition-none`).
+
+On a short window the rail still scrolls (`overflow-y-auto`) — fifteen links do not fit everywhere — but its
+native scrollbar is hidden with `scrollbar-none` (`app/globals.css`): the OS thumb and the ▲/▼ buttons of a
+Windows scrollbar sit inside the panel and read as unexplained controls on its right edge (they were reported
+as a stray "slider" next to the collapse button). Only the chrome is hidden; wheel, trackpad, touch and
+keyboard scrolling are unchanged, and `overscroll-contain` keeps the flick from chaining to the page behind.
 
 ### 7.13 Global search (Header)
 
@@ -620,24 +653,25 @@ screen never composes a notification — it labels, groups and links what it fin
 
 ## 10. Screen inventory & navigation map
 
-Current `Sidebar` order (module → route → icon):
+Current `Sidebar` order, grouped by heading (module → route → icon):
 
-| Label (vi) | Route | Icon |
-| --- | --- | --- |
-| Tổng quan | `/` | `LayoutDashboard` |
-| Quản lý chi nhánh | `/branches` | `Building2` |
-| Cơ sở vật chất | `/facilities` | `PackageSearch` |
-| Doanh thu | `/revenue` | `CircleDollarSign` |
-| Đơn từ | `/requests` | `FileText` |
-| Lịch làm việc | `/schedules` | `CalendarRange` |
-| Trạng thái nhân viên | `/employee-status` | `UserCheck` |
-| Chấm công | `/check-in` | `Fingerprint` |
-| Bảng công | `/attendance` | `ClipboardCheck` |
-| Quản lý nhân sự | `/staff` | `UsersRound` |
-| Báo cáo | `/reports` | `PieChart` |
-| Thông báo | `/notifications` | `Bell` |
-| Trợ lý AI | `/chat` | `Bot` |
-| Bảo mật | `/security` | `ScanFace` |
+| Heading | Label (vi) | Route | Icon |
+| --- | --- | --- | --- |
+| Không gian làm việc | Tổng quan | `/` | `LayoutDashboard` |
+| | Báo cáo | `/reports` | `PieChart` |
+| Ca làm & chấm công | Lịch làm việc | `/schedules` | `CalendarRange` |
+| | Chấm công | `/check-in` | `Fingerprint` |
+| | Bảng công | `/attendance` | `ClipboardCheck` |
+| | Trạng thái nhân viên | `/employee-status` | `UserCheck` |
+| Vận hành | Doanh thu | `/revenue` | `CircleDollarSign` |
+| | Đơn từ | `/requests` | `FileText` |
+| | Cơ sở vật chất | `/facilities` | `PackageSearch` |
+| | Quản lý chi nhánh | `/branches` | `Building2` |
+| Nhân sự & lương | Quản lý nhân sự | `/staff` | `UsersRound` |
+| | Bảng lương | `/payroll` | `Banknote` |
+| Hệ thống | Thông báo | `/notifications` | `Bell` |
+| | Trợ lý AI | `/chat` | `Bot` |
+| | Bảo mật | `/security` | `ScanFace` |
 
 Sibling screens outside the sidebar: `/login` (sign-in — it hides the shell), `/register`
 (self-registration — hides the shell too, same card recipe with a fourth "Xác nhận mật khẩu" field),

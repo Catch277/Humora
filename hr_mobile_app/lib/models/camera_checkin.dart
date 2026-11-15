@@ -1,4 +1,5 @@
 import 'dart:convert';
+
 import 'package:camera/camera.dart';
 import 'package:flutter/foundation.dart'; // Để dùng kIsWeb
 import 'package:flutter/material.dart';
@@ -88,12 +89,20 @@ class _CameraCheckInScreenState extends State<CameraCheckInScreen> {
 
     try {
       String imagePath = 'web_mock_image';
-      
+      Uint8List? bytes;
+
       // Nếu chạy trên điện thoại/máy ảo thì chụp ảnh thực từ Camera
       if (!_isWebMode && _controller != null && _controller!.value.isInitialized) {
         await _initializeControllerFuture;
         final image = await _controller!.takePicture();
         imagePath = image.path;
+        // Đọc bytes ngay tại đây để màn hình chấm công tải ảnh lên Supabase Storage (SCRUM-95).
+        // Đọc lỗi thì vẫn chấm công được, chỉ thiếu ảnh.
+        try {
+          bytes = await image.readAsBytes();
+        } catch (e) {
+          debugPrint('Không đọc được ảnh vừa chụp: $e');
+        }
       }
 
       final now = DateTime.now();
@@ -101,10 +110,11 @@ class _CameraCheckInScreenState extends State<CameraCheckInScreen> {
 
       if (mounted) {
         // Trả kết quả về cho màn hình Home
-        Navigator.pop(context, {
+        Navigator.pop(context, <String, dynamic>{
           'time': timeStr,
           'imagePath': imagePath,
           'ip': _ipAddress,
+          'bytes': bytes,
         });
       }
     } catch (e) {

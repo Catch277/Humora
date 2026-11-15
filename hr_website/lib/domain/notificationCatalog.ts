@@ -25,6 +25,10 @@ export const NOTIFICATION_CATEGORIES = [
   "branch",
   "facility",
   "organization",
+  // Lương (SCRUM-90): a payslip being published and an employee disputing one. Both are money, so they get
+  // their own chip instead of hiding among "Chấm công" — the reader who mutes timesheet noise still wants
+  // to hear about pay.
+  "payroll",
 ] as const;
 
 export type NotificationCategory = (typeof NOTIFICATION_CATEGORIES)[number];
@@ -38,6 +42,7 @@ export const CATEGORY_KEYS: Readonly<Record<NotificationCategory, MessageKey>> =
   branch: "notificationCategory.branch",
   facility: "notificationCategory.facility",
   organization: "notificationCategory.organization",
+  payroll: "notificationCategory.payroll",
 };
 
 /**
@@ -56,6 +61,7 @@ export const CATEGORY_LABELS: Readonly<Record<NotificationCategory, string>> = {
   branch: translateVi(CATEGORY_KEYS.branch),
   facility: translateVi(CATEGORY_KEYS.facility),
   organization: translateVi(CATEGORY_KEYS.organization),
+  payroll: translateVi(CATEGORY_KEYS.payroll),
 };
 
 export interface NotificationTypeMeta {
@@ -94,6 +100,12 @@ export const NOTIFICATION_TYPES: Readonly<Record<string, NotificationTypeMeta>> 
   ATTENDANCE_VERIFIED: { key: "notificationType.attendanceVerified", category: "attendance" },
   ATTENDANCE_COMPLAINT: { key: "notificationType.attendanceComplaint", category: "attendance" },
   COMPLAINT_RESOLVED: { key: "notificationType.complaintResolved", category: "attendance" },
+  // A4 / SCRUM-97: a manager closed an abnormal-timekeeping note. Same category as the anomaly that
+  // produced it, so the employee finds both halves of the conversation in one filter.
+  ATTENDANCE_EXCEPTION_RESOLVED: {
+    key: "notificationType.attendanceExceptionResolved",
+    category: "attendance",
+  },
 
   // ── Nhân sự ──────────────────────────────────────────────────────────────────────────────
   ACCOUNT_CREATED: { key: "notificationType.accountCreated", category: "staff" },
@@ -125,6 +137,13 @@ export const NOTIFICATION_TYPES: Readonly<Record<string, NotificationTypeMeta>> 
   },
   ORGANIZATION_INVITED: { key: "notificationType.organizationInvited", category: "organization" },
   ORGANIZATION_UPDATED: { key: "notificationType.organizationUpdated", category: "organization" },
+
+  // ── Lương (SCRUM-90) ─────────────────────────────────────────────────────────────────────
+  // Both codes are written by `SCRUM-90_payroll.sql` itself: `publish_payslips` tells the employee, and
+  // `dispute_payslip` tells the organization's owners. The keys are the stored values verbatim — the script
+  // writes them lowercase, unlike the SCRUM-71/72 triggers, and a lookup is by exact value.
+  payslip_published: { key: "notificationType.payslipPublished", category: "payroll" },
+  payslip_disputed: { key: "notificationType.payslipDisputed", category: "payroll" },
 
   // Rows written before SCRUM-70 (the three codes the old screen knew). Kept so an inbox that
   // already carries one still renders a label instead of the raw code.
@@ -194,6 +213,9 @@ const ENTITY_SCREENS: Readonly<Record<string, readonly string[]>> = {
   facility: ["/facilities"],
   facility_category: ["/facilities"],
   organization: ["/organization"],
+  // SCRUM-90: both a published payslip and a khiếu nại against one land on the payroll screen. A DRAFT has
+  // no notification, so an employee never receives a link to a payslip they cannot open.
+  payslip: ["/payroll"],
 };
 
 export function notificationHref(

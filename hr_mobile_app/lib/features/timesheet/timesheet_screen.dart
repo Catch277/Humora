@@ -245,8 +245,8 @@ class _TimesheetScreenState extends State<TimesheetScreen> {
   Widget _p(Widget w) => Padding(padding: const EdgeInsets.symmetric(horizontal: 16), child: w);
 
   Widget _body() {
-    final worked = _rows.where((r) => r.checkOutAt != null).toList();
-    final totalMinutes = worked.fold<int>(0, (s, r) => s + r.workedMinutes);
+    final worked = _rows.where((r) => r.effectiveCheckOut() != null).toList();
+    final totalMinutes = worked.fold<int>(0, (s, r) => s + r.effectiveWorkedMinutes());
     final late = _rows.where((r) => r.status == 'LATE').length;
     final early = _rows.where((r) => r.status == 'EARLY_LEAVE').length;
     final counts = {for (final f in _Filter.values) f: _rows.where((r) => _matches(r, f)).length};
@@ -328,7 +328,10 @@ class _TimesheetScreenState extends State<TimesheetScreen> {
   Widget _card(AttendanceRecord r) {
     final (label, tone, icon) = _statusInfo(r);
     final inT = r.checkInAt == null ? '--:--' : formatTime(r.checkInAt!);
-    final outT = r.checkOutAt == null ? '--:--' : formatTime(r.checkOutAt!);
+    final outAt = r.effectiveCheckOut();
+    final outT = outAt == null
+        ? '--:--'
+        : '${formatTime(outAt)}${r.isAutoClosed() ? ' (tự động)' : ''}';
 
     return AppCard(
       margin: const EdgeInsets.only(bottom: 12),
@@ -358,7 +361,7 @@ class _TimesheetScreenState extends State<TimesheetScreen> {
               children: [
                 Expanded(child: _time('Vào', inT)),
                 Expanded(child: _time('Ra', outT)),
-                Expanded(child: _time('Giờ làm', r.checkOutAt == null ? '--' : formatMinutes(r.workedMinutes))),
+                Expanded(child: _time('Giờ làm', outAt == null ? '--' : formatMinutes(r.effectiveWorkedMinutes()))),
               ],
             ),
           ),
@@ -448,7 +451,10 @@ class _SupplementSheet extends StatelessWidget {
                   itemBuilder: (_, i) {
                     final r = records[i];
                     final inT = r.checkInAt == null ? '--:--' : formatTime(r.checkInAt!);
-                    final outT = r.checkOutAt == null ? '--:--' : formatTime(r.checkOutAt!);
+                    final outAt = r.effectiveCheckOut();
+                    final outT = outAt == null
+                        ? '--:--'
+                        : '${formatTime(outAt)}${r.isAutoClosed() ? ' (tự động)' : ''}';
                     return AppCard(
                       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
                       onTap: () => Navigator.pop(context, r),

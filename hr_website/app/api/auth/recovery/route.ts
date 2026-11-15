@@ -4,20 +4,35 @@
  *   get:
  *     summary: Complete a password reset link
  *     description: |
- *       The page a Supabase Auth recovery email returns to. It exchanges the one-time `code` for a
- *       recovery session and redirects to `/reset-password`, where the new password is saved through
+ *       The page a Supabase Auth recovery email returns to. It turns the one-time token into a recovery
+ *       session and redirects to `/reset-password`, where the new password is saved through
  *       `POST /api/auth/change-password`. A link that is missing, expired or already used lands on
  *       `/login?recovery=failed` instead of a screen whose save would be refused.
  *
- *       The `code` is PKCE-bound (`@supabase/ssr` pins `flowType: "pkce"` for both of its clients), so
- *       the link completes only in the browser that requested it — the code verifier is a cookie there.
+ *       Two link shapes are accepted, because the shape is decided by the Reset Password email template:
+ *       `token_hash` (recommended — `{{ .TokenHash }}` verifies on its own, so the link works in whichever
+ *       browser opens the mail) and the legacy `code` (`{{ .ConfirmationURL }}`). `@supabase/ssr` pins
+ *       `flowType: "pkce"` for both of its clients, so a `code` needs the verifier cookie of the browser
+ *       that requested the mail and a link opened elsewhere is refused rather than half-working.
  *     tags:
  *       - Authentication
  *     parameters:
  *       - in: query
  *         name: code
- *         required: true
- *         description: The one-time code Supabase Auth appends to the recovery link.
+ *         required: false
+ *         description: The one-time code Supabase Auth appends to a PKCE recovery link.
+ *         schema:
+ *           type: string
+ *       - in: query
+ *         name: token_hash
+ *         required: false
+ *         description: The token hash of a `{{ .TokenHash }}` recovery link. Either this or `code` is required.
+ *         schema:
+ *           type: string
+ *       - in: query
+ *         name: type
+ *         required: false
+ *         description: The token type sent beside `token_hash` (`recovery` for this flow).
  *         schema:
  *           type: string
  *       - in: query
@@ -42,9 +57,11 @@ const FAILED_PATH = "/login?recovery=failed";
 const FLOW_ID_PARAM = "sb_flow_id";
 
 export async function GET(request: NextRequest) {
-  const code = request.nextUrl.searchParams.get("code");
+  const params = request.nextUrl.searchParams;
+  const code = params.get("code");
+  const tokenHash = params.get("token_hash");
 
-  if (!code) {
+  if (!code && !tokenHash) {
     return NextResponse.redirect(new URL(FAILED_PATH, request.url));
   }
 
@@ -74,17 +91,23 @@ export async function GET(request: NextRequest) {
     },
   });
 
+  // A `token_hash` link carries everything it needs, so it completes in whichever browser opens the
+  // mail. The `code` branch stays for a project whose template still sends `{{ .ConfirmationURL }}`;
+  // there the PKCE verifier cookie is what binds the link to the browser that asked for it.
+  //
   // Passing the flow id is what the library documents for a server-side callback: without it the
   // verifier lookup falls back to "any stored flow", which is fine for a single request but cannot
   // tell a replayed link from a fresh one.
-  const flowId = request.nextUrl.searchParams.get(FLOW_ID_PARAM);
-  const { error } = await supabase.auth.exchangeCodeForSession(
-    code,
-    flowId ? { flowId } : undefined,
-  );
+  const flowId = params.get(FLOW_ID_PARAM);
+  const { error } = tokenHash
+    ? await supabase.auth.verifyOtp({ token_hash: tokenHash, type: "recovery" })
+    : await supabase.auth.exchangeCodeForSession(
+        code ?? "",
+        flowId ? { flowId } : undefined,
+      );
 
   if (error) {
-    console.error("Failed to exchange the recovery code", error);
+    console.error("Failed to complete the password reset link", error);
     return NextResponse.redirect(new URL(FAILED_PATH, request.url));
   }
 

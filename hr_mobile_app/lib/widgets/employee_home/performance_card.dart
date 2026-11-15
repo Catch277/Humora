@@ -88,8 +88,8 @@ class _PerformanceCardState extends State<PerformanceCard> {
   Widget build(BuildContext context) {
     final now = DateTime.now();
     final last = DateTime(now.year, now.month + 1, 0).day;
-    final done = _rows.where((r) => r.checkOutAt != null).toList();
-    final minutes = done.fold<int>(0, (s, r) => s + r.workedMinutes);
+    final done = _rows.where((r) => r.effectiveCheckOut() != null).toList();
+    final minutes = done.fold<int>(0, (s, r) => s + r.effectiveWorkedMinutes());
     final late = _rows.where((r) => r.status == 'LATE').length;
     final early = _rows.where((r) => r.status == 'EARLY_LEAVE').length;
 

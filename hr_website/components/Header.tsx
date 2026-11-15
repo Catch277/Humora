@@ -15,6 +15,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 
+import ConfirmDialog from "@/components/ConfirmDialog";
 import LanguageToggle from "@/components/LanguageToggle";
 import MobileNav from "@/components/MobileNav";
 import ThemeToggle from "@/components/ThemeToggle";
@@ -23,6 +24,7 @@ import { useProfile } from "@/components/ProfileProvider";
 import { roleLabel } from "@/lib/accessPolicy";
 import type { QuickSearchResult } from "@/lib/domain/entities/QuickSearch";
 import { isBranchHeadRole, isOwnerRole } from "@/lib/domain/roles";
+import { NOTIFICATIONS_CHANGED_EVENT } from "@/lib/notificationEvents";
 import { isPublicPath } from "@/lib/publicPaths";
 
 /** `GET /api/search` cần tối thiểu 2 ký tự; dưới ngưỡng đó chỉ hiện gợi ý, không gọi API. */
@@ -138,6 +140,11 @@ export default function Header() {
   const [searchError, setSearchError] = useState("");
   const [showDropdown, setShowDropdown] = useState(false);
   const [activeIndex, setActiveIndex] = useState(-1);
+  // Signing out ends the session, so it asks first (`components/ConfirmDialog.tsx`) — a stray click on the
+  // icon used to log the operator straight out of the screen they were working on.
+  const [signOutOpen, setSignOutOpen] = useState(false);
+  const [signingOut, setSigningOut] = useState(false);
+  const [signOutError, setSignOutError] = useState("");
   const searchContainerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -163,26 +170,49 @@ export default function Header() {
     };
   }, [pathname]);
 
-  // ...and polled on an interval, because the notification arrives while this screen is open (the
-  // producers run in the database). A hidden tab is skipped.
+  // ...and refreshed from three more places, because the rows are written by the database while this shell
+  // stays mounted:
+  //   * the poll below, the only thing that finds a row nobody announced;
+  //   * `NOTIFICATIONS_CHANGED_EVENT`, fired by `/notifications` after a successful read — reading does not
+  //     navigate, so without it the badge kept the previous number until a reload or the next poll (up to
+  //     30 s), which is exactly the reported "the badge only changes when I reload";
+  //   * the tab becoming visible again, so a background tab catches up on return instead of waiting out the
+  //     interval. The poll skips a hidden tab on purpose.
   useEffect(() => {
     if (isPublicPath(pathname)) {
       return;
     }
+
+    const refreshNow = () => {
+      void fetchUnreadCount().then((total) => {
+        if (total !== null) {
+          setUnreadCount(total);
+        }
+      });
+    };
 
     const timer = window.setInterval(() => {
       if (document.visibilityState !== "visible") {
         return;
       }
 
-      void fetchUnreadCount().then((total) => {
-        if (total !== null) {
-          setUnreadCount(total);
-        }
-      });
+      refreshNow();
     }, UNREAD_POLL_INTERVAL_MS);
 
-    return () => window.clearInterval(timer);
+    const onVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        refreshNow();
+      }
+    };
+
+    window.addEventListener(NOTIFICATIONS_CHANGED_EVENT, refreshNow);
+    document.addEventListener("visibilitychange", onVisibilityChange);
+
+    return () => {
+      window.clearInterval(timer);
+      window.removeEventListener(NOTIFICATIONS_CHANGED_EVENT, refreshNow);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+    };
   }, [pathname]);
 
   // The branch line under the name (SCRUM-63): only a manager and an employee have one — the owner
@@ -395,14 +425,36 @@ export default function Header() {
     }
   }
 
+  /**
+   * Runs from the confirmation dialog, never straight from the button — the POST is the point of no
+   * return. A refused sign-out keeps the dialog open: redirecting to `/login` while the session is still
+   * alive only bounces back through `proxy.ts`, which reads as "nothing happened".
+   */
   async function handleSignOut() {
+    if (signingOut) {
+      return;
+    }
+
+    setSignOutError("");
+    setSigningOut(true);
+
     try {
-      await fetch("/api/auth/sign-out", { method: "POST" });
-    } finally {
+      const response = await fetch("/api/auth/sign-out", { method: "POST" });
+
+      if (!response.ok) {
+        setSignOutError(t("header.signOutFailed"));
+        return;
+      }
+
+      setSignOutOpen(false);
       // `replace` keeps the authenticated page out of the history, and `refresh` drops the cached
       // server render so the shell re-renders without a session.
       router.replace("/login");
       router.refresh();
+    } catch {
+      setSignOutError(t("header.signOutFailed"));
+    } finally {
+      setSigningOut(false);
     }
   }
 
@@ -583,13 +635,31 @@ export default function Header() {
 
         <button
           type="button"
-          onClick={() => void handleSignOut()}
+          onClick={() => {
+            setSignOutError("");
+            setSignOutOpen(true);
+          }}
           title={t("header.signOut")}
+          aria-haspopup="dialog"
+          aria-expanded={signOutOpen}
           className="rounded-md p-2 text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-800"
         >
           <LogOut size={15} />
         </button>
       </div>
+
+      {signOutOpen && (
+        <ConfirmDialog
+          title={t("header.signOutTitle")}
+          description={t("header.signOutMessage")}
+          confirmLabel={t("header.signOutConfirm")}
+          error={signOutError || undefined}
+          busy={signingOut}
+          tone="danger"
+          onConfirm={() => void handleSignOut()}
+          onCancel={() => setSignOutOpen(false)}
+        />
+      )}
     </header>
   );
 }

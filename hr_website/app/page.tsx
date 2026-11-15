@@ -11,6 +11,7 @@ import {
   Users,
 } from "lucide-react";
 
+import DashboardCharts from "@/components/DashboardCharts";
 import { useLocale } from "@/components/LocaleProvider";
 import { useProfile } from "@/components/ProfileProvider";
 import { asArray, asArrayField } from "@/lib/asArray";
@@ -334,6 +335,13 @@ export default function Dashboard() {
           </p>
         </div>
       </div>
+
+      {/*
+        A5/SCRUM-98: the four analytics charts. Manager-and-owner only (`report:view`), which is the
+        same capability the revenue tile and `/reports` already use — an employee's dashboard keeps
+        the đơn and their own timesheet, exactly as before.
+      */}
+      {canViewReport && <DashboardCharts />}
 
       <div className={`grid gap-4 ${canViewReport ? "lg:grid-cols-2" : ""}`}>
         <section className="flex flex-col rounded-xl border border-slate-200/80 bg-surface p-5 shadow-sm">

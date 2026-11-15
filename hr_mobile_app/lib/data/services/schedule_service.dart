@@ -3,6 +3,12 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../core/format.dart';
 import 'api_error.dart';
 
+/// `MAX_SHIFT_NOTE_LENGTH` của web (`lib/domain/entities/ShiftRegistration.ts`).
+const int _maxShiftNoteLength = 300;
+
+/// Câu của `assertNotInThePast` (`lib/usecases/shiftWorkflowInput.ts` phía web).
+const String _pastDateMessage = 'Ngày làm việc phải từ hôm nay trở đi.';
+
 class ShiftTemplate {
   const ShiftTemplate({required this.id, required this.name, required this.start, required this.end});
   final String id;
@@ -146,32 +152,17 @@ class ScheduleService {
     }
   }
 
-  Future<void> register({required String shiftId, required DateTime date}) async {
-    try {
-      final profile = await _client
-          .from('users')
-          .select('branch_id')
-          .eq('id', _uid)
-          .maybeSingle()
-          .timeout(_timeout);
-      final branchId = profile?['branch_id']?.toString();
-      if (branchId == null) {
-        throw AppException('Bạn chưa được gán chi nhánh nên chưa đăng ký ca được. Hãy liên hệ quản lý.');
-      }
-      await _client.from('shift_registrations').insert({
-        'employee_id': _uid,
-        'branch_id': branchId,
-        'shift_id': shiftId,
-        'work_date': toSqlDate(date),
-        'status': 'PENDING',
-      }).timeout(_timeout);
-    } on PostgrestException catch (e) {
-      if (e.code == '23505') {
-        throw AppException('Bạn đã đăng ký ca này rồi.');
-      }
-      throw toAppException(e);
-    } catch (e) {
-      throw toAppException(e);
+  /// Đăng ký một ca — cùng quy tắc với `CreateShiftRegistrationUseCase` của web: ngày từ hôm nay
+  /// trở đi (giờ Bangkok), ghi chú tối đa 300 ký tự, và tài khoản phải thuộc một chi nhánh.
+  Future<void> register({
+    required String shiftId,
+    required DateTime date,
+    String? note,
+  }) async {
+    final outcomes = await registerMany([(shiftId: shiftId, date: date)], note: note);
+    final failure = outcomes.where((o) => !o.ok).firstOrNull;
+    if (failure != null) {
+      throw AppException(failure.error ?? 'Không gửi được đăng ký ca.');
     }
   }
 
@@ -193,20 +184,44 @@ class ScheduleService {
     }
   }
 
-  /// Đăng ký nhiều ca. Mỗi ca được gửi riêng; ca nào lỗi thì ghi lại lý do và vẫn gửi tiếp các ca còn lại,
-  /// để người dùng giữ được những lựa chọn hợp lệ.
-  Future<List<RegisterOutcome>> registerMany(List<({String shiftId, DateTime date})> items) async {
+  /// Đăng ký nhiều ca. Mỗi ca được gửi riêng; ca nào lỗi thì ghi lại lý do và vẫn gửi tiếp các ca còn
+  /// lại, để người dùng giữ được những lựa chọn hợp lệ.
+  ///
+  /// [note] áp dụng cho mọi ca trong lần gửi (cột `shift_registrations.note`, tối đa 300 ký tự như
+  /// `MAX_SHIFT_NOTE_LENGTH` của web). Ngày đã qua bị loại **trước khi** gọi server để câu báo lỗi
+  /// giống hệt web thay vì một `400`/`42501` khó hiểu.
+  Future<List<RegisterOutcome>> registerMany(
+    List<({String shiftId, DateTime date})> items, {
+    String? note,
+  }) async {
+    final text = (note ?? '').trim();
+    if (text.length > _maxShiftNoteLength) {
+      throw AppException('Ghi chú dài quá $_maxShiftNoteLength ký tự.');
+    }
+
     final branchId = await _branchId();
+    final today = bangkokToday();
 
     final out = <RegisterOutcome>[];
     for (final it in items) {
+      final workDate = toSqlDate(it.date);
+      if (workDate.compareTo(today) < 0) {
+        out.add(RegisterOutcome(
+          shiftId: it.shiftId,
+          date: it.date,
+          error: _pastDateMessage,
+        ));
+        continue;
+      }
+
       try {
         await _client.from('shift_registrations').insert({
           'employee_id': _uid,
           'branch_id': branchId,
           'shift_id': it.shiftId,
-          'work_date': toSqlDate(it.date),
+          'work_date': workDate,
           'status': 'PENDING',
+          if (text.isNotEmpty) 'note': text,
         }).timeout(_timeout);
         out.add(RegisterOutcome(shiftId: it.shiftId, date: it.date));
       } on PostgrestException catch (e) {
@@ -217,5 +232,41 @@ class ScheduleService {
       }
     }
     return out;
+  }
+
+  /// Rút đăng ký ca của chính mình — chỉ khi còn `PENDING`, cùng quy tắc với
+  /// `CancelShiftRegistrationUseCase` của web và policy `shift_registrations_cancel_own` (SCRUM-23).
+  /// Người khác đăng ký, hoặc đơn đã được duyệt, thì không huỷ được.
+  Future<void> cancel(String registrationId) async {
+    try {
+      final row = await _client
+          .from('shift_registrations')
+          .select('id, status')
+          .eq('id', registrationId)
+          .eq('employee_id', _uid)
+          .maybeSingle()
+          .timeout(_timeout);
+      if (row == null) {
+        throw AppException('Không tìm thấy đăng ký ca này.');
+      }
+      if ((row['status'] ?? '').toString() != 'PENDING') {
+        throw AppException('Chỉ huỷ được đăng ký đang chờ duyệt.');
+      }
+
+      final updated = await _client
+          .from('shift_registrations')
+          .update({'status': 'CANCELLED'})
+          .eq('id', registrationId)
+          .eq('employee_id', _uid)
+          .eq('status', 'PENDING')
+          .select('id')
+          .timeout(_timeout);
+      if ((updated as List).isEmpty) {
+        // Vừa bị duyệt giữa lúc đọc và lúc ghi.
+        throw AppException('Đăng ký này vừa được duyệt nên không huỷ được nữa.');
+      }
+    } catch (e) {
+      throw toAppException(e);
+    }
   }
 }

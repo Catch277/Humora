@@ -74,6 +74,11 @@ const SENTENCE_RULES: ReadonlyArray<SentenceRule> = [
   { test: /^Chỉ chủ sở hữu hoặc/, key: "error.operatorOnly" },
   { test: /^Chỉ chủ sở hữu/, key: "error.ownerOnly" },
   { test: /^Bạn chỉ quản lý được chi nhánh/, key: "error.branchPermission" },
+  // SCRUM-101/102: the CRM's own refusals. They are matched on their Vietnamese opening words — the stable
+  // token — so the English screen reads the same rule instead of a raw Vietnamese sentence.
+  { test: /^Khách hàng này còn/, key: "crmError.customerHasData" },
+  { test: /^Hợp đồng này còn/, key: "crmError.contractHasData" },
+  { test: /^Việc này đã được ghi nhận/, key: "crmError.reminderLogged" },
   { test: /^Email hoặc mật khẩu không đúng/, key: "error.credentials" },
   { test: /^Tài khoản này đã thuộc một tổ chức/, key: "error.alreadyInOrganization" },
   { test: /^Tài khoản chưa có hồ sơ người dùng/, key: "error.noProfile" },

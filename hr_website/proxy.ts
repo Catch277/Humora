@@ -2,11 +2,102 @@ import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
 import { canAccessScreen, firstAccessiblePath } from "@/lib/accessPolicy";
+import {
+  SESSION_SCOPE_COOKIE,
+  applySessionScope,
+  sessionScopeOf,
+} from "@/lib/infrastructure/sessionScope";
 import { isPublicPath } from "@/lib/publicPaths";
 
 /** Screens that belong to onboarding: reachable while the account has no organization yet. */
 const ONBOARDING_PATH = "/onboarding";
 const CHANGE_PASSWORD_PATH = "/change-password";
+
+/** The handler that turns a recovery token into a session; the mail is supposed to land there directly. */
+const RECOVERY_PATH = "/api/auth/recovery";
+
+/** Where a recovery link can land: GoTrue's Site URL root, or the sign-in screen it is bounced to. */
+const RECOVERY_LANDING_PATHS: ReadonlySet<string> = new Set(["/", "/login"]);
+
+/**
+ * A recovery mail is meant to open `/api/auth/recovery?code=…`, but GoTrue silently falls back to the
+ * project's Site URL when the `redirect_to` is not in the Redirect URLs allowlist — the link then opens
+ * `/?code=…`, which this file would bounce to `/login?next=…`, leaving the one-time code in a parameter
+ * the sign-in form never reads (it just shows the login page).
+ *
+ * Forwarding it here keeps a dashboard misconfiguration a setup problem instead of a dead link; the
+ * `next` branch repairs a URL an older build already spelled that way.
+ */
+function recoveryTarget(request: NextRequest): string | null {
+  if (request.method !== "GET") {
+    return null;
+  }
+
+  const { pathname, searchParams } = request.nextUrl;
+  const query = recoveryQueryOf(searchParams);
+
+  if (query) {
+    // `code` is a generic parameter name, so it is only honoured where a recovery landing can appear —
+    // the Site URL root, or the sign-in screen an older build bounced it to. `token_hash` exists for
+    // nothing else, so it is forwarded from any path.
+    if (searchParams.has("token_hash") || RECOVERY_LANDING_PATHS.has(pathname)) {
+      return `${RECOVERY_PATH}?${query}`;
+    }
+  }
+
+  if (!RECOVERY_LANDING_PATHS.has(pathname)) {
+    return null;
+  }
+
+  // `/?code=…` bounced to `/login?next=/?code=…` by an older build carries the token inside `next`.
+  const next = searchParams.get("next");
+  const unwrapped = next ? parseSearchOf(next) : null;
+  const nested = unwrapped ? recoveryQueryOf(unwrapped) : null;
+
+  return nested ? `${RECOVERY_PATH}?${nested}` : null;
+}
+
+/** The query a recovery token needs, or `null` when the URL carries no token at all. */
+function recoveryQueryOf(params: URLSearchParams): string | null {
+  const code = params.get("code");
+  const tokenHash = params.get("token_hash");
+
+  if (!code && !tokenHash) {
+    return null;
+  }
+
+  const forwarded = new URLSearchParams();
+
+  if (code) {
+    forwarded.set("code", code);
+
+    const flowId = params.get("sb_flow_id");
+
+    if (flowId) {
+      forwarded.set("sb_flow_id", flowId);
+    }
+  } else if (tokenHash) {
+    forwarded.set("token_hash", tokenHash);
+
+    // `verifyOtp` needs to know the token is a recovery one, not a sign-up confirmation.
+    const type = params.get("type");
+
+    if (type) {
+      forwarded.set("type", type);
+    }
+  }
+
+  return forwarded.toString();
+}
+
+/** `next` is a same-origin path; a full URL is accepted only for its query, which is all we forward. */
+function parseSearchOf(value: string): URLSearchParams | null {
+  try {
+    return new URL(value, "http://localhost").searchParams;
+  } catch {
+    return null;
+  }
+}
 
 type MembershipState = {
   organizationId: string | null;
@@ -76,17 +167,22 @@ export async function proxy(request: NextRequest) {
     return response;
   }
 
+  // "Ghi nhớ đăng nhập" (`lib/infrastructure/sessionScope.ts`): a session-only login is re-written without
+  // `maxAge`/`expires` here as well, so the refresh below cannot quietly turn it into a 400-day cookie.
+  const scope = sessionScopeOf(
+    request.cookies.get(SESSION_SCOPE_COOKIE)?.value,
+  );
+
   const supabase = createServerClient(supabaseUrl, supabaseAnonKey, {
     cookies: {
       getAll() {
         return request.cookies.getAll();
       },
       setAll(cookiesToSet) {
-        cookiesToSet.forEach(({ name, value }) =>
-          request.cookies.set(name, value),
-        );
+        const scoped = applySessionScope(cookiesToSet, scope);
+        scoped.forEach(({ name, value }) => request.cookies.set(name, value));
         response = NextResponse.next({ request });
-        cookiesToSet.forEach(({ name, value, options }) =>
+        scoped.forEach(({ name, value, options }) =>
           response.cookies.set(name, value, options),
         );
       },
@@ -98,6 +194,14 @@ export async function proxy(request: NextRequest) {
   } = await supabase.auth.getUser();
 
   const { pathname, search } = request.nextUrl;
+
+  // Runs before the sign-in redirect below, which is exactly what stranded the recovery code in `next`.
+  // The target starts with `/api/`, so it never re-enters this matcher.
+  const recovery = recoveryTarget(request);
+
+  if (recovery) {
+    return NextResponse.redirect(new URL(recovery, request.url));
+  }
 
   if (!user && !isPublicPath(pathname)) {
     const loginUrl = new URL("/login", request.url);
