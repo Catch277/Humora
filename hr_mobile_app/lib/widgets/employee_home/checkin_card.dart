@@ -54,11 +54,11 @@ class ClockCard extends StatelessWidget {
                     children: [
                       Text(
                         timeFormat,
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 40,
                           height: 1,
                           fontWeight: FontWeight.w800,
-                          color: AppColors.textPrimary,
+                          color: context.pal.textPrimary,
                           letterSpacing: -1,
                           fontFeatures: [FontFeature.tabularFigures()],
                         ),
@@ -68,13 +68,13 @@ class ClockCard extends StatelessWidget {
                         padding: const EdgeInsets.only(bottom: 4),
                         child: Text(
                           period,
-                          style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: AppColors.textSecondary),
+                          style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: context.pal.textSecondary),
                         ),
                       ),
                     ],
                   ),
                   const SizedBox(height: 8),
-                  Text(dateText, style: AppText.bodyMuted.copyWith(fontWeight: FontWeight.w600)),
+                  Text(dateText, style: AppText.bodyMuted(context).copyWith(fontWeight: FontWeight.w600)),
                 ],
               ),
             ),
@@ -138,7 +138,7 @@ class TodayShiftCard extends StatelessWidget {
           children: [
             Row(
               children: [
-                const Expanded(child: Text('CA LÀM HÔM NAY', style: AppText.label)),
+                Expanded(child: Text('CA LÀM HÔM NAY', style: AppText.label(context))),
                 StatusPill(status, tone: tone, icon: icon),
               ],
             ),
@@ -148,19 +148,19 @@ class TodayShiftCard extends StatelessWidget {
                 Container(
                   width: 40,
                   height: 40,
-                  decoration: BoxDecoration(color: AppColors.primarySoft, borderRadius: BorderRadius.circular(12)),
-                  child: const Icon(Icons.work_history_outlined, color: AppColors.primary, size: 22),
+                  decoration: BoxDecoration(color: context.pal.primarySoft, shape: BoxShape.circle, border: Border.all(color: context.pal.primary.withValues(alpha: .24))),
+                  child: Icon(Icons.work_history_outlined, color: context.pal.primary, size: 22),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(shiftLabel, style: AppText.title, maxLines: 2, overflow: TextOverflow.ellipsis),
+                      Text(shiftLabel, style: AppText.title(context), maxLines: 2, overflow: TextOverflow.ellipsis),
                       if (phase == CheckInPhase.ready || phase == CheckInPhase.noShift)
                         Padding(
                           padding: const EdgeInsets.only(top: 2),
-                          child: Text(countdownText, style: AppText.caption.copyWith(color: AppColors.primary)),
+                          child: Text(countdownText, style: AppText.caption(context).copyWith(color: context.pal.primary)),
                         ),
                     ],
                   ),
@@ -170,14 +170,14 @@ class TodayShiftCard extends StatelessWidget {
             const SizedBox(height: 12),
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-              decoration: BoxDecoration(color: AppColors.surfaceMuted, borderRadius: BorderRadius.circular(12)),
+              decoration: BoxDecoration(color: context.pal.surfaceMuted, borderRadius: BorderRadius.circular(12)),
               child: Row(
                 children: [
-                  Icon(Icons.login_rounded, size: 18, color: phase == CheckInPhase.working ? AppColors.success : AppColors.textMuted),
+                  Icon(Icons.login_rounded, size: 18, color: phase == CheckInPhase.working ? context.pal.success : context.pal.textMuted),
                   const SizedBox(width: 8),
-                  const Text('Giờ vào thực tế', style: AppText.bodyMuted),
+                  Text('Giờ vào thực tế', style: AppText.bodyMuted(context)),
                   const Spacer(),
-                  Text(checkInTime, style: AppText.money.copyWith(fontSize: 14)),
+                  Text(checkInTime, style: AppText.money(context).copyWith(fontSize: 14)),
                 ],
               ),
             ),
@@ -241,7 +241,7 @@ class CheckInAction extends StatelessWidget {
               onPressed: onPressed,
             ),
             const SizedBox(height: 16),
-            Text(label, style: AppText.title, textAlign: TextAlign.center),
+            Text(label, style: AppText.title(context), textAlign: TextAlign.center),
             const SizedBox(height: 14),
             const _Hint(Icons.location_on_outlined, 'Bật GPS và cho phép ứng dụng truy cập vị trí.'),
             const SizedBox(height: 6),
@@ -263,9 +263,9 @@ class _Hint extends StatelessWidget {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Icon(icon, size: 16, color: AppColors.textMuted),
+        Icon(icon, size: 16, color: context.pal.textMuted),
         const SizedBox(width: 8),
-        Expanded(child: Text(text, style: AppText.caption)),
+        Expanded(child: Text(text, style: AppText.caption(context))),
       ],
     );
   }
@@ -331,8 +331,8 @@ class _RoundButtonState extends State<_RoundButton> with SingleTickerProviderSta
   @override
   Widget build(BuildContext context) {
     final Color base = !widget.enabled && !widget.busy
-        ? (widget.phase == CheckInPhase.done ? AppColors.success : AppColors.border)
-        : (widget.checkingOut ? AppColors.danger : AppColors.primary);
+        ? (widget.phase == CheckInPhase.done ? context.pal.success : context.pal.border)
+        : (widget.checkingOut ? context.pal.dangerStrong : context.pal.primary);
 
     final IconData icon = widget.success
         ? Icons.check_rounded
@@ -344,7 +344,10 @@ class _RoundButtonState extends State<_RoundButton> with SingleTickerProviderSta
                     ? Icons.logout_rounded
                     : Icons.fingerprint_rounded;
 
-    final fgColor = (widget.phase == CheckInPhase.noShift) ? AppColors.textMuted : Colors.white;
+    // Nút "đã xong" ở dark mode có nền xanh lá sáng → icon tối mới đủ tương phản.
+    final fgColor = (widget.phase == CheckInPhase.noShift)
+        ? context.pal.textMuted
+        : (widget.phase == CheckInPhase.done && !widget.enabled && context.pal.isDark ? AppColors.ink : Colors.white);
 
     return Semantics(
       button: true,

@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../routes/app_routers.dart';
+import '../core/app_colors.dart';
+import '../core/theme_controller.dart';
 
 // Biến toàn cục lấy client Supabase
 final supabase = Supabase.instance.client;
@@ -120,7 +122,7 @@ class _LoginScreenState extends State<LoginScreen>
     final size = MediaQuery.of(context).size;
 
     return Scaffold(
-      backgroundColor: const Color(0xFFE9EEF9),
+      backgroundColor: context.pal.background,
       body: Stack(
         children: [
           // Background Gradient Spheres (Trang trí hiệu ứng nền bóng mờ)
@@ -134,8 +136,8 @@ class _LoginScreenState extends State<LoginScreen>
                 shape: BoxShape.circle,
                 gradient: RadialGradient(
                   colors: [
-                    Colors.white.withOpacity(0.9),
-                    const Color(0xFFC7D7F8).withOpacity(0.4),
+                    context.pal.primary.withValues(alpha: 0.08),
+                    AppColors.primaryGlow.withOpacity(0.4),
                     Colors.transparent,
                   ],
                 ),
@@ -152,8 +154,8 @@ class _LoginScreenState extends State<LoginScreen>
                 shape: BoxShape.circle,
                 gradient: RadialGradient(
                   colors: [
-                    Colors.white.withOpacity(0.8),
-                    const Color(0xFFC7D7F8).withOpacity(0.3),
+                    context.pal.primary.withValues(alpha: 0.07),
+                    AppColors.primaryGlow.withOpacity(0.3),
                     Colors.transparent,
                   ],
                 ),
@@ -171,7 +173,7 @@ class _LoginScreenState extends State<LoginScreen>
                 gradient: RadialGradient(
                   colors: [
                     const Color(0xFF2563EB).withOpacity(0.2),
-                    Colors.white.withOpacity(0.5),
+                    context.pal.primary.withValues(alpha: 0.04),
                     Colors.transparent,
                   ],
                 ),
@@ -187,22 +189,38 @@ class _LoginScreenState extends State<LoginScreen>
               width: 44,
               height: 44,
               decoration: BoxDecoration(
-                color: const Color(0xFFE0E7F5),
+                color: context.pal.surface,
                 shape: BoxShape.circle,
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.white.withOpacity(0.8),
+                    color: context.pal.neuHighlight,
                     offset: const Offset(-4, -4),
                     blurRadius: 8,
                   ),
                   BoxShadow(
-                    color: const Color(0xFFA6B4C9).withOpacity(0.5),
+                    color: context.pal.neuShadow,
                     offset: const Offset(4, 4),
                     blurRadius: 8,
                   ),
                 ],
               ),
-              child: const Icon(Icons.nightlight_round, color: Color(0xFF1E293B), size: 20),
+              child: Material(
+                color: Colors.transparent,
+                shape: const CircleBorder(),
+                child: InkWell(
+                  customBorder: const CircleBorder(),
+                  onTap: () => themeNotifier.value =
+                      context.pal.isDark ? ThemeMode.light : ThemeMode.dark,
+                  child: Tooltip(
+                    message: context.pal.isDark ? 'Chuyển sang Light mode' : 'Chuyển sang Dark mode',
+                    child: Icon(
+                      context.pal.isDark ? Icons.light_mode_rounded : Icons.dark_mode_rounded,
+                      color: context.pal.textSecondary,
+                      size: 20,
+                    ),
+                  ),
+                ),
+              ),
             ),
           ),
 
@@ -224,16 +242,16 @@ Container(
   height: 130,
   padding: const EdgeInsets.all(16), // Khoảng lề giúp ảnh nằm gọn đẹp trong thẻ
   decoration: BoxDecoration(
-    color: const Color(0xFFE9EEF9),
+    color: context.pal.background,
     borderRadius: BorderRadius.circular(36),
     boxShadow: [
       BoxShadow(
-        color: Colors.white.withOpacity(0.9),
+        color: context.pal.neuHighlight,
         offset: const Offset(-8, -8),
         blurRadius: 16,
       ),
       BoxShadow(
-        color: const Color(0xFFA6B4C9).withOpacity(0.5),
+        color: context.pal.neuShadow,
         offset: const Offset(8, 8),
         blurRadius: 16,
       ),
@@ -250,21 +268,21 @@ Container(
                       const SizedBox(height: 28),
 
                       // Tiêu đề Welcome Back
-                      const Text(
+                      Text(
                         'Welcome Back',
                         style: TextStyle(
                           fontSize: 28,
                           fontWeight: FontWeight.bold,
-                          color: Color(0xFF0F172A),
+                          color: context.pal.textPrimary,
                           letterSpacing: 0.5,
                         ),
                       ),
                       const SizedBox(height: 6),
-                      const Text(
+                      Text(
                         'Sign in to continue',
                         style: TextStyle(
                           fontSize: 14,
-                          color: Color(0xFF64748B),
+                          color: context.pal.textSecondary,
                           letterSpacing: 0.8,
                         ),
                       ),
@@ -290,7 +308,7 @@ Container(
                             _obscurePassword
                                 ? Icons.visibility_off_outlined
                                 : Icons.visibility_outlined,
-                            color: const Color(0xFF64748B),
+                            color: context.pal.textSecondary,
                             size: 20,
                           ),
                           onPressed: () {
@@ -320,18 +338,18 @@ Container(
                                   decoration: BoxDecoration(
                                     color: _rememberMe
                                         ? const Color(0xFF2563EB)
-                                        : const Color(0xFFE9EEF9),
+                                        : context.pal.background,
                                     borderRadius: BorderRadius.circular(6),
                                     boxShadow: _rememberMe
                                         ? []
                                         : [
                                             BoxShadow(
-                                              color: Colors.white.withOpacity(0.8),
+                                              color: context.pal.neuHighlight,
                                               offset: const Offset(-2, -2),
                                               blurRadius: 4,
                                             ),
                                             BoxShadow(
-                                              color: const Color(0xFFA6B4C9).withOpacity(0.5),
+                                              color: context.pal.neuShadow,
                                               offset: const Offset(2, 2),
                                               blurRadius: 4,
                                             ),
@@ -343,10 +361,10 @@ Container(
                                 ),
                               ),
                               const SizedBox(width: 8),
-                              const Text(
+                              Text(
                                 'Remember Me',
                                 style: TextStyle(
-                                  color: Color(0xFF334155),
+                                  color: context.pal.textSecondary,
                                   fontSize: 13,
                                   fontWeight: FontWeight.w500,
                                 ),
@@ -360,10 +378,10 @@ Container(
                               minimumSize: Size.zero,
                               tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                             ),
-                            child: const Text(
+                            child: Text(
                               'Forgot Password?',
                               style: TextStyle(
-                                color: Color(0xFF2563EB),
+                                color: context.pal.primary,
                                 fontSize: 13,
                                 fontWeight: FontWeight.bold,
                               ),
@@ -443,12 +461,12 @@ Container(
                       
 
                       // Text Footer
-                      const Text(
+                      Text(
                         'NHÂN SỰ  •  CHẤM CÔNG  •  TĂNG TRƯỞNG',
                         style: TextStyle(
                           fontSize: 11,
                           fontWeight: FontWeight.w600,
-                          color: Color(0xFF94A3B8),
+                          color: context.pal.textMuted,
                           letterSpacing: 1.2,
                         ),
                       ),
@@ -474,16 +492,16 @@ Container(
   }) {
     return Container(
       decoration: BoxDecoration(
-        color: const Color(0xFFE9EEF9),
+        color: context.pal.background,
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
-            color: Colors.white.withOpacity(0.9),
+            color: context.pal.neuHighlight,
             offset: const Offset(-4, -4),
             blurRadius: 8,
           ),
           BoxShadow(
-            color: const Color(0xFFA6B4C9).withOpacity(0.4),
+            color: context.pal.neuShadow,
             offset: const Offset(4, 4),
             blurRadius: 8,
           ),
@@ -493,11 +511,11 @@ Container(
         controller: controller,
         obscureText: obscureText,
         keyboardType: keyboardType,
-        style: const TextStyle(color: Color(0xFF0F172A), fontSize: 15),
+        style: TextStyle(color: context.pal.textPrimary, fontSize: 15),
         decoration: InputDecoration(
           hintText: hintText,
-          hintStyle: const TextStyle(color: Color(0xFF94A3B8), fontSize: 14),
-          prefixIcon: Icon(icon, color: const Color(0xFF64748B), size: 22),
+          hintStyle: TextStyle(color: context.pal.textMuted, fontSize: 14),
+          prefixIcon: Icon(icon, color: context.pal.textSecondary, size: 22),
           suffixIcon: suffixIcon,
           border: InputBorder.none,
           contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),

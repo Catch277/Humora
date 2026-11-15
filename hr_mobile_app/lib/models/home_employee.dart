@@ -1,9 +1,11 @@
 import 'dart:async';
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:intl/intl.dart';
 
 import '../core/app_colors.dart';
+import '../core/widgets/fx.dart';
 import '../services/attendance_api.dart';
 import '../widgets/bottom_nav_bar.dart';
 import '../widgets/employee_home/home_header.dart';
@@ -14,11 +16,9 @@ import '../widgets/employee_home/gps_status_card.dart';
 import '../widgets/employee_home/week_status_card.dart';
 import 'camera_checkin.dart'; // Import màn hình camera
 
-class _LocationException implements Exception {
-  _LocationException(this.message);
-  final String message;
-}
+import '../core/theme_controller.dart'; // themeNotifier (đổi Light/Dark)
 
+/// Trang chủ nhân viên. Dữ liệu nghiệp vụ vẫn được lấy từ các service hiện có.
 class HomeEmployeeScreen extends StatefulWidget {
   const HomeEmployeeScreen({super.key});
 
@@ -26,386 +26,419 @@ class HomeEmployeeScreen extends StatefulWidget {
   State<HomeEmployeeScreen> createState() => _HomeEmployeeScreenState();
 }
 
-class _HomeEmployeeScreenState extends State<HomeEmployeeScreen> with WidgetsBindingObserver {
-  int _selectedIndex = 0;
-  int _refreshTick = 0;
-  String _shiftLabel = 'Ca làm việc';
-
-  Timer? _timer;
-  DateTime _currentTime = DateTime.now();
-
-  final AttendanceApi _api = AttendanceApi();
-
-  // Trạng thái chấm công (lấy từ server qua /today)
-  bool _isCheckedIn = false;
-  String _checkInTime = '--:--';
-  String? _shiftId; // ca đang chờ chấm vào, hoặc ca đang mở
+class _HomeEmployeeScreenState extends State<HomeEmployeeScreen> {
+  Timer? _clockTimer;
+  final ValueNotifier<DateTime> _now = ValueNotifier<DateTime>(DateTime.now());
   bool _busy = false;
-  bool _completedToday = false; // đã vào và ra hết các ca hôm nay
-  bool _success = false; // bật vài giây để hiện dấu tích sau khi chấm công thành công
-  GpsState _gps = GpsState.checking;
-  Timer? _successTimer;
-
-  TimeOfDay _shiftStart = const TimeOfDay(hour: 8, minute: 30);
+  bool _lastActionSucceeded = false;
+  int _refreshTick = 0;
 
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addObserver(this);
-    _checkGps();
-    _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
-      if (mounted) {
-        setState(() {
-          _currentTime = DateTime.now();
-        });
-      }
+    _clockTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (mounted) _now.value = DateTime.now();
     });
-    _loadToday();
   }
 
   @override
   void dispose() {
-    WidgetsBinding.instance.removeObserver(this);
-    _timer?.cancel();
-    _successTimer?.cancel();
+    _clockTimer?.cancel();
+    _now.dispose();
     super.dispose();
   }
 
-  @override
-  void didChangeAppLifecycleState(AppLifecycleState state) {
-    // Người dùng vừa quay lại từ màn hình cài đặt: kiểm tra lại GPS/quyền.
-    if (state == AppLifecycleState.resumed) _checkGps();
-  }
-
-  // ---------- Định vị ----------
-
-  Future<void> _checkGps() async {
-    try {
-      if (!await Geolocator.isLocationServiceEnabled()) {
-        if (mounted) setState(() => _gps = GpsState.serviceOff);
-        return;
-      }
-      final perm = await Geolocator.checkPermission();
-      final next = switch (perm) {
-        LocationPermission.denied => GpsState.denied,
-        LocationPermission.deniedForever => GpsState.deniedForever,
-        _ => GpsState.ready,
-      };
-      if (mounted) setState(() => _gps = next);
-    } catch (_) {
-      // Nền tảng không hỗ trợ kiểm tra: để nút chấm công tự xử lý khi bấm.
-      if (mounted) setState(() => _gps = GpsState.ready);
-    }
-  }
-
-  Future<void> _fixGps() async {
-    switch (_gps) {
-      case GpsState.serviceOff:
-        await Geolocator.openLocationSettings();
-        break;
-      case GpsState.denied:
-        await Geolocator.requestPermission();
-        break;
-      case GpsState.deniedForever:
-        await Geolocator.openAppSettings();
-        break;
-      default:
-        break;
-    }
-    await _checkGps();
-  }
-
-  // ---------- Gọi API ----------
-
-  TimeOfDay? _parseHm(String? s) {
-    if (s == null) return null;
-    final p = s.split(':');
-    if (p.length < 2) return null;
-    final h = int.tryParse(p[0]);
-    final m = int.tryParse(p[1]);
-    if (h == null || m == null) return null;
-    return TimeOfDay(hour: h, minute: m);
-  }
-
-  String _fmtTime(dynamic iso) =>
-      DateFormat('hh:mm a').format(DateTime.parse(iso as String).toLocal());
-
-  Future<void> _loadToday() async {
-    try {
-      final data = await _api.today();
-      final assignments = (data['assignments'] as List)
-          .map((e) => Map<String, dynamic>.from(e as Map))
-          .toList();
-      final attendance = (data['attendance'] as List)
-          .map((e) => Map<String, dynamic>.from(e as Map))
-          .toList();
-
-      final open = attendance
-          .where((a) => a['check_in_at'] != null && a['check_out_at'] == null)
-          .firstOrNull;
-      final doneIds = attendance.map((a) => a['shift_id']).toSet();
-
-      final Map<String, dynamic>? target = open != null
-          ? assignments.where((a) => a['shift_id'] == open['shift_id']).firstOrNull
-          : assignments.where((a) => !doneIds.contains(a['shift_id'])).firstOrNull;
-
-      if (!mounted) return;
-      setState(() {
-        _completedToday = open == null && target == null && attendance.isNotEmpty;
-        _isCheckedIn = open != null;
-        _checkInTime = open != null ? _fmtTime(open['check_in_at']) : '--:--';
-        _shiftId = (open ?? target)?['shift_id'] as String?;
-        final start = _parseHm(target?['start_time'] as String?);
-        if (start != null) _shiftStart = start;
-        final name = (target?['shift_name'] ?? target?['name'])?.toString();
-        final st = target?['start_time']?.toString();
-        final en = target?['end_time']?.toString();
-        String hm(String? t) => (t != null && t.length >= 5) ? t.substring(0, 5) : '';
-        if (target == null && open == null) {
-          _shiftLabel = _completedToday ? 'Đã hoàn tất các ca hôm nay' : 'Hôm nay không có ca';
-        } else if (name != null && name.isNotEmpty) {
-          _shiftLabel = (st != null && en != null) ? '$name (${hm(st)} - ${hm(en)})' : name;
-        } else if (st != null && en != null) {
-          _shiftLabel = 'Ca ${hm(st)} - ${hm(en)}';
-        } else {
-          _shiftLabel = 'Ca làm việc';
-        }
-      });
-    } catch (e) {
-      _showError(e);
-    }
-  }
-
-  Future<Position> _getPosition() async {
-    if (!await Geolocator.isLocationServiceEnabled()) {
-      throw _LocationException('Hãy bật định vị (GPS) trên thiết bị.');
-    }
-    var perm = await Geolocator.checkPermission();
-    if (perm == LocationPermission.denied) {
-      perm = await Geolocator.requestPermission();
-    }
-    if (perm == LocationPermission.denied ||
-        perm == LocationPermission.deniedForever) {
-      throw _LocationException(
-          'Bạn cần cho phép ứng dụng truy cập vị trí để chấm công.');
-    }
-    return Geolocator.getCurrentPosition(
-      locationSettings: const LocationSettings(
-        accuracy: LocationAccuracy.high,
-        timeLimit: Duration(seconds: 15),
-      ),
-    );
-  }
-
-  void _showSnack(String text,
-      {required Color color, required IconData icon}) {
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Row(
-          children: [
-            Icon(icon, color: Colors.white),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Text(
-                text,
-                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
-              ),
-            ),
-          ],
-        ),
-        backgroundColor: color,
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        duration: const Duration(seconds: 4),
-      ),
-    );
-  }
-
-  void _showError(Object e) {
-    final String text;
-    if (e is ApiException) {
-      text = e.message;
-    } else if (e is _LocationException) {
-      text = e.message;
-    } else {
-      text = 'Không kết nối được máy chủ. Kiểm tra mạng rồi thử lại.';
-    }
-    _showSnack(text, color: Colors.redAccent, icon: Icons.error_outline);
-  }
-
-  // Đếm ngược từ thời gian hiện tại về giờ vào ca
-  String _getCountdownToShiftStart() {
-    if (_shiftId == null && !_isCheckedIn) return 'Không còn ca hôm nay';
-
-    final now = _currentTime;
-    final startDateTime = DateTime(
-      now.year,
-      now.month,
-      now.day,
-      _shiftStart.hour,
-      _shiftStart.minute,
-    );
-
-    final difference = startDateTime.difference(now);
-
-    if (difference.isNegative) {
-      return 'Quá giờ vào ca';
-    }
-
-    final hours = difference.inHours;
-    final minutes = difference.inMinutes.remainder(60);
-    final seconds = difference.inSeconds.remainder(60);
-
-    return 'Còn ${hours.toString().padLeft(2, '0')}:${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}';
-  }
-
-  // Mở camera, chụp xong thì lấy GPS rồi gọi API chấm công
-  Future<void> _handleCheckIn() async {
+  Future<void> _openCamera({required bool isCheckingIn}) async {
+    // Camera hiện chỉ trả ảnh/thời gian; không được tự thông báo thành công
+    // khi chưa có phản hồi xác nhận từ AttendanceApi.
     if (_busy) return;
-    final checkingIn = !_isCheckedIn;
-
-    if (checkingIn && _shiftId == null) {
-      _showSnack('Hôm nay bạn không có ca nào để chấm công.',
-          color: Colors.orange, icon: Icons.info_outline);
-      return;
-    }
-
-    final result = await Navigator.push(
+    final result = await Navigator.push<Map<String, dynamic>>(
       context,
-      MaterialPageRoute(
-        builder: (context) => CameraCheckInScreen(isCheckingIn: checkingIn),
+      MaterialPageRoute(builder: (_) => CameraCheckInScreen(isCheckingIn: isCheckingIn)),
+    );
+    if (!mounted || result == null) return;
+    setState(() => _lastActionSucceeded = false);
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Đã ghi nhận ảnh. Chưa gửi yêu cầu chấm công lên máy chủ.'),
+        behavior: SnackBarBehavior.floating,
       ),
     );
-    if (result == null || result is! Map<String, String>) return;
-    if (!mounted) return;
-
-    final ip = result['ip'] ?? '';
-    setState(() => _busy = true);
-
-    try {
-      final pos = await _getPosition();
-      final Map<String, dynamic> r = checkingIn
-          ? await _api.checkIn(_shiftId!, pos.latitude, pos.longitude)
-          : await _api.checkOut(pos.latitude, pos.longitude);
-
-      final status = r['status'] as String?;
-      if (checkingIn) {
-        final time = _fmtTime(r['check_in_at']);
-        final isLate = status == 'LATE';
-        _showSnack(
-          'Vào ca thành công lúc $time (${isLate ? 'Trễ' : 'Đúng giờ'}) - IP: $ip',
-          color: isLate ? Colors.deepOrange : const Color(0xFF10B981),
-          icon: isLate
-              ? Icons.warning_amber_rounded
-              : Icons.check_circle_outline,
-        );
-      } else {
-        final time = _fmtTime(r['check_out_at']);
-        final early = status == 'EARLY_LEAVE';
-        _showSnack(
-          'Ra ca thành công lúc $time${early ? ' (Về sớm)' : ''}! - IP: $ip',
-          color: Colors.blueAccent,
-          icon: Icons.exit_to_app,
-        );
-      }
-      await _loadToday();
-      if (mounted) {
-        setState(() => _success = true);
-        _successTimer?.cancel();
-        _successTimer = Timer(const Duration(milliseconds: 1600), () {
-          if (mounted) setState(() => _success = false);
-        });
-      }
-    } catch (e) {
-      _showError(e);
-    } finally {
-      if (mounted) setState(() => _busy = false);
-    }
-  }
-
-  CheckInPhase get _phase {
-    if (_isCheckedIn) return CheckInPhase.working;
-    if (_shiftId != null) return CheckInPhase.ready;
-    return _completedToday ? CheckInPhase.done : CheckInPhase.noShift;
-  }
-
-  String _timezoneLabel() {
-    final off = _currentTime.timeZoneOffset;
-    final sign = off.isNegative ? '-' : '+';
-    final h = off.inHours.abs();
-    final m = off.inMinutes.abs().remainder(60);
-    return 'GMT$sign$h${m == 0 ? '' : ':${m.toString().padLeft(2, '0')}'}';
-  }
-
-  String _getGreeting() {
-    final hour = DateTime.now().hour;
-    if (hour >= 5 && hour < 12) return 'Chào buổi sáng';
-    if (hour >= 12 && hour < 18) return 'Chào buổi chiều';
-    return 'Chào buổi tối';
-  }
-
-  String _getFormattedDate() {
-    final now = DateTime.now();
-    final daysOfWeek = ['Thứ Hai', 'Thứ Ba', 'Thứ Tư', 'Thứ Năm', 'Thứ Sáu', 'Thứ Bảy', 'Chủ Nhật'];
-    return '${daysOfWeek[now.weekday - 1]}, ${DateFormat('dd/MM/yyyy').format(now)}';
   }
 
   @override
   Widget build(BuildContext context) {
-    final timeFormat = DateFormat('hh:mm:ss').format(_currentTime);
-    final period = DateFormat('a').format(_currentTime) == 'AM' ? 'SA' : 'CH';
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final text = context.pal.textPrimary;
+    final muted = context.pal.textSecondary;
+    final today = DateFormat('EEEE, dd/MM/yyyy').format(DateTime.now());
 
     return Scaffold(
-      backgroundColor: AppColors.background,
-      body: RefreshIndicator(
-        onRefresh: () async {
-          await Future.wait([_loadToday(), _checkGps()]);
-          if (mounted) setState(() => _refreshTick++);
-        },
-        child: SingleChildScrollView(
-          physics: const AlwaysScrollableScrollPhysics(),
-          child: Column(
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+      appBar: AppBar(
+        title: Row(children: [
+          Container(width: 34, height: 34, decoration: BoxDecoration(color: context.pal.primary.withValues(alpha: .14), borderRadius: BorderRadius.circular(11)),
+            child: Icon(Icons.business_center_rounded, color: context.pal.primary, size: 20)),
+          const SizedBox(width: 10),
+          Text('Humora HR', style: TextStyle(color: text, fontWeight: FontWeight.w900, fontSize: 19)),
+        ]),
+        actions: [
+          IconButton(
+            tooltip: isDark ? 'Chuyển sang Light mode' : 'Chuyển sang Dark mode',
+            icon: FxSpinSwap(
+              child: Icon(
+                isDark ? Icons.light_mode_rounded : Icons.dark_mode_rounded,
+                key: ValueKey<bool>(isDark),
+              ),
+            ),
+            onPressed: () => themeNotifier.value = isDark ? ThemeMode.light : ThemeMode.dark,
+          ),
+          const SizedBox(width: 4),
+        ],
+      ),
+      bottomNavigationBar: const BottomNavBar(currentIndex: 0),
+      body: SafeArea(
+        top: false,
+        child: RefreshIndicator(
+          onRefresh: () async => setState(() => _refreshTick++),
+          child: ListView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 26),
             children: [
-              HomeHeader(
-                formattedDate: _getFormattedDate(),
-                greeting: _getGreeting(),
+              FxReveal(index: 0, child: _welcomeCard(context, today, text, muted, isDark)),
+              const SizedBox(height: 16),
+              FxReveal(
+                index: 1,
+                child: ValueListenableBuilder<DateTime>(
+                  valueListenable: _now,
+                  builder: (context, now, _) => _clockCard(context, muted, now),
+                ),
               ),
-              const SizedBox(height: 8),
-              ClockCard(
-                timeFormat: timeFormat,
-                period: period,
-                dateText: _getFormattedDate(),
-                timezone: _timezoneLabel(),
-              ),
-              const SizedBox(height: 12),
-              GpsStatusCard(state: _gps, onAction: _gps == GpsState.ready || _gps == GpsState.checking ? _checkGps : _fixGps),
-              const SizedBox(height: 12),
-              TodayShiftCard(
-                phase: _phase,
-                shiftLabel: _shiftLabel,
-                countdownText: _getCountdownToShiftStart(),
-                checkInTime: _checkInTime,
-              ),
-              const SizedBox(height: 12),
-              CheckInAction(
-                phase: _phase,
-                busy: _busy,
-                success: _success,
-                onPressed: _handleCheckIn,
-              ),
-              const SizedBox(height: 12),
-              WeekStatusCard(refreshTick: _refreshTick),
-              const SizedBox(height: 12),
-              const HrServicesGrid(),
-              const SizedBox(height: 12),
-              PerformanceCard(refreshTick: _refreshTick),
-              const SizedBox(height: 28),
+              const SizedBox(height: 16),
+              FxReveal(index: 2, child: _sectionTitle('Ca làm việc', 'Theo dõi lịch và trạng thái hôm nay', text, muted)),
+              const SizedBox(height: 10),
+              FxReveal(index: 2, child: _shiftSummary(context, isDark, text, muted)),
+              const SizedBox(height: 16),
+              FxReveal(index: 3, child: _checkinPanel(context, isDark, text, muted)),
+              const SizedBox(height: 16),
+              FxReveal(index: 4, child: WeekStatusCard(refreshTick: _refreshTick)),
+              const SizedBox(height: 16),
+              const FxReveal(index: 5, child: HrServicesGrid()),
+              const SizedBox(height: 16),
+              FxReveal(index: 6, child: _sectionTitle('Hiệu suất làm việc', 'Tổng quan cá nhân', text, muted)),
+              const SizedBox(height: 10),
+              const FxReveal(index: 6, child: PerformanceCard()),
             ],
           ),
         ),
       ),
-      bottomNavigationBar: BottomNavBar(currentIndex: _selectedIndex),
+    );
+  }
+
+  Widget _welcomeCard(BuildContext context, String date, Color text, Color muted, bool dark) {
+    return Container(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(24),
+        gradient: LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight,
+          colors: dark ? const [Color(0xFF1D3D78), Color(0xFF101A2D)] : const [Color(0xFF2563EB), Color(0xFF4F83F1)]),
+        boxShadow: [BoxShadow(color: context.pal.primary.withValues(alpha: .20), blurRadius: 22, offset: const Offset(0, 8))],
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(24),
+        child: Stack(children: [
+          // Nền cực quang + vệt sáng quét chéo.
+          const Positioned.fill(child: FxAurora()),
+          Padding(
+            padding: const EdgeInsets.all(18),
+            child: Row(children: [
+              Container(width: 52, height: 52, decoration: BoxDecoration(color: Colors.white.withValues(alpha: .16), shape: BoxShape.circle, border: Border.all(color: Colors.white.withValues(alpha: .3))),
+                child: const FxWave(child: Icon(Icons.waving_hand_rounded, color: Colors.white, size: 27))),
+              const SizedBox(width: 13),
+              Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                const Text('Xin chào, chúc bạn một ngày tốt lành!', style: TextStyle(color: Colors.white70, fontSize: 12, fontWeight: FontWeight.w600)),
+                const SizedBox(height: 5),
+                const Text('Chào mừng trở lại', style: TextStyle(color: Colors.white, fontSize: 19, fontWeight: FontWeight.w900)),
+                const SizedBox(height: 5),
+                Text(date, style: const TextStyle(color: Colors.white70, fontSize: 11, fontWeight: FontWeight.w600)),
+              ])),
+              const Icon(Icons.verified_user_rounded, color: Colors.white70, size: 23),
+            ]),
+          ),
+        ]),
+      ),
+    );
+  }
+
+  Widget _clockCard(BuildContext context, Color muted, DateTime now) {
+    final surface = context.pal.surface;
+    final text = context.pal.textPrimary;
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(color: surface, borderRadius: BorderRadius.circular(22), border: Border.all(color: Theme.of(context).dividerColor.withValues(alpha: .7)),
+        boxShadow: [BoxShadow(color: context.pal.shadow.withValues(alpha: context.pal.isDark ? .12 : .06), blurRadius: 16, offset: const Offset(0, 5))]),
+      child: Row(children: [
+        Container(width: 42, height: 42, decoration: BoxDecoration(color: context.pal.primary.withValues(alpha: .12), borderRadius: BorderRadius.circular(14)),
+          child: Icon(Icons.access_time_filled_rounded, color: context.pal.primary)),
+        const SizedBox(width: 13),
+        Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text('Giờ máy chủ thời gian thực', style: TextStyle(color: muted, fontSize: 11, fontWeight: FontWeight.w700)),
+          const SizedBox(height: 3),
+          FxClockText(DateFormat('HH:mm:ss').format(now), style: TextStyle(color: text, fontSize: 30, fontWeight: FontWeight.w900, letterSpacing: -.8)),
+          Text(DateFormat('dd/MM/yyyy').format(now), style: TextStyle(color: muted, fontSize: 11)),
+        ])),
+        Container(padding: const EdgeInsets.fromLTRB(4, 3, 11, 3), decoration: BoxDecoration(color: context.pal.success.withValues(alpha: .12), borderRadius: BorderRadius.circular(30)),
+          child: Row(children: [FxPulseDot(color: context.pal.success), const SizedBox(width: 1), Text('LIVE', style: TextStyle(color: context.pal.success, fontSize: 10, fontWeight: FontWeight.w900))])),
+      ]),
+    );
+  }
+
+  Widget _sectionTitle(String title, String subtitle, Color text, Color muted) => Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+    Text(title, style: TextStyle(color: text, fontSize: 17, fontWeight: FontWeight.w900)),
+    const SizedBox(height: 3), Text(subtitle, style: TextStyle(color: muted, fontSize: 11, fontWeight: FontWeight.w500)),
+  ]);
+
+  Widget _shiftSummary(BuildContext context, bool dark, Color text, Color muted) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(color: Theme.of(context).cardColor, borderRadius: BorderRadius.circular(20), border: Border.all(color: Theme.of(context).dividerColor.withValues(alpha: .7))),
+      child: Column(children: [
+        Row(children: [Icon(Icons.wb_sunny_rounded, color: context.pal.primary), const SizedBox(width: 9), Expanded(child: Text('Ca làm hôm nay', style: TextStyle(color: text, fontWeight: FontWeight.w800))),
+          Container(padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5), decoration: BoxDecoration(color: context.pal.success.withValues(alpha: .12), borderRadius: BorderRadius.circular(20)), child: Text('Theo lịch phân công', style: TextStyle(color: context.pal.success, fontSize: 10, fontWeight: FontWeight.w800)))]),
+        const SizedBox(height: 13),
+        Row(children: [Expanded(child: _shiftTime('BUỔI SÁNG', '08:00 - 12:00', Icons.wb_sunny_outlined, text, muted)), const SizedBox(width: 10), Expanded(child: _shiftTime('BUỔI CHIỀU', '13:00 - 17:00', Icons.nights_stay_outlined, text, muted))]),
+        const SizedBox(height: 10),
+        Row(children: [Icon(Icons.info_outline_rounded, size: 14, color: muted), const SizedBox(width: 6), Expanded(child: Text('Giờ ca thực tế được hiển thị trong mục Lịch làm.', style: TextStyle(color: muted, fontSize: 10)))]),
+      ]),
+    );
+  }
+
+  Widget _shiftTime(String label, String time, IconData icon, Color text, Color muted) => Container(
+    padding: const EdgeInsets.all(12), decoration: BoxDecoration(color: context.pal.primary.withValues(alpha: .07), borderRadius: BorderRadius.circular(15)),
+    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Row(children: [Icon(icon, size: 15, color: context.pal.primary), const SizedBox(width: 5), Text(label, style: TextStyle(color: muted, fontSize: 9, fontWeight: FontWeight.w800))]), const SizedBox(height: 6), Text(time, style: TextStyle(color: text, fontSize: 14, fontWeight: FontWeight.w900))]));
+
+  Widget _checkinPanel(BuildContext context, bool dark, Color text, Color muted) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(16, 18, 16, 16),
+      decoration: BoxDecoration(color: Theme.of(context).cardColor, borderRadius: BorderRadius.circular(22), border: Border.all(color: Theme.of(context).dividerColor.withValues(alpha: .7))),
+      child: Column(children: [
+        Text('CHẤM CÔNG', style: TextStyle(color: muted, fontSize: 10, fontWeight: FontWeight.w900, letterSpacing: 1.4)),
+        const SizedBox(height: 14),
+        _AnimatedHomeCheckInButton(
+          busy: _busy,
+          onTap: () => _openCamera(isCheckingIn: true),
+        ),
+        const SizedBox(height: 12),
+        Text('Chạm để mở camera xác thực', style: TextStyle(color: muted, fontSize: 11, fontWeight: FontWeight.w600)),
+        const SizedBox(height: 12),
+        FxPressScale(child: OutlinedButton.icon(onPressed: () => Navigator.pushNamed(context, '/employee/work_schedule'), icon: const Icon(Icons.calendar_month_rounded), label: const Text('Xem lịch làm việc'))),
+      ]),
+    );
+  }
+}
+
+
+/// Nút chấm công: vòng sáng xoay + nhịp Pulse + 2 vòng sóng loang ra + nhún khi chạm.
+/// Animation dừng khi bận xử lý hoặc hệ thống bật Reduce Motion.
+class _AnimatedHomeCheckInButton extends StatefulWidget {
+  const _AnimatedHomeCheckInButton({
+    required this.busy,
+    required this.onTap,
+  });
+
+  final bool busy;
+  final VoidCallback onTap;
+
+  @override
+  State<_AnimatedHomeCheckInButton> createState() =>
+      _AnimatedHomeCheckInButtonState();
+}
+
+class _AnimatedHomeCheckInButtonState
+    extends State<_AnimatedHomeCheckInButton>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 2600),
+  );
+
+  bool get _canAnimate =>
+      !widget.busy && !MediaQuery.disableAnimationsOf(context);
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _syncAnimation();
+  }
+
+  @override
+  void didUpdateWidget(covariant _AnimatedHomeCheckInButton oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.busy != widget.busy) _syncAnimation();
+  }
+
+  void _syncAnimation() {
+    if (_canAnimate) {
+      if (!_controller.isAnimating) _controller.repeat();
+    } else {
+      _controller.stop();
+      _controller.value = 0;
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  /// Vòng sóng loang ra rồi mờ dần; r chạy 0 → 1.
+  Widget _ring(double r, Color color) {
+    final size = 137 + 37 * r;
+    return Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        border: Border.all(
+          color: color.withValues(alpha: .42 * math.pow(1 - r, 1.6).toDouble()),
+          width: 2,
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final pal = context.pal;
+    return Semantics(
+      button: true,
+      enabled: !widget.busy,
+      label: 'Mở camera chấm công vào ca',
+      child: SizedBox(
+        width: 174,
+        height: 174,
+        child: AnimatedBuilder(
+          animation: _controller,
+          builder: (context, _) {
+            final t = _canAnimate ? _controller.value : 0.0;
+            final pulse = _canAnimate
+                ? 1 + (0.025 * (0.5 - (t - 0.5).abs()) * 2)
+                : 1.0;
+
+            return Stack(
+              alignment: Alignment.center,
+              children: [
+                if (!widget.busy && _canAnimate) ...[
+                  _ring(t, pal.primary),
+                  _ring((t + .5) % 1, pal.primary),
+                ],
+                if (!widget.busy)
+                  Container(
+                    width: 154 + (10 * t),
+                    height: 154 + (10 * t),
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: pal.primary.withValues(alpha: 0.10 * (1 - t)),
+                    ),
+                  ),
+                Transform.rotate(
+                  angle: t * 2 * math.pi,
+                  child: Container(
+                    width: 151,
+                    height: 151,
+                    padding: const EdgeInsets.all(5),
+                    decoration: const BoxDecoration(
+                      shape: BoxShape.circle,
+                      gradient: SweepGradient(
+                        colors: [
+                          Color(0x0043D9F5),
+                          Color(0xFF43D9F5),
+                          Color(0xFF8AB4FF),
+                          Color(0x005B8CFF),
+                        ],
+                      ),
+                    ),
+                    child: Container(
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: pal.surface,
+                      ),
+                    ),
+                  ),
+                ),
+                Transform.scale(
+                  scale: pulse,
+                  child: FxPressScale(
+                    scale: .93,
+                    child: Material(
+                      color: Colors.transparent,
+                      shape: const CircleBorder(),
+                      elevation: 8,
+                      shadowColor: pal.primary.withValues(alpha: .38),
+                      child: InkWell(
+                        onTap: widget.busy ? null : widget.onTap,
+                        customBorder: const CircleBorder(),
+                        child: Ink(
+                          width: 137,
+                          height: 137,
+                          decoration: const BoxDecoration(
+                            shape: BoxShape.circle,
+                            gradient: LinearGradient(
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
+                              colors: [
+                                Color(0xFF60A5FA),
+                                Color(0xFF064BC4),
+                              ],
+                            ),
+                          ),
+                          child: Center(
+                            child: widget.busy
+                                ? const SizedBox(
+                                    width: 38,
+                                    height: 38,
+                                    child: CircularProgressIndicator(
+                                      color: Colors.white,
+                                      strokeWidth: 3,
+                                    ),
+                                  )
+                                : const Column(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      Icon(
+                                        Icons.fingerprint_rounded,
+                                        color: Colors.white,
+                                        size: 48,
+                                      ),
+                                      SizedBox(height: 3),
+                                      Text(
+                                        'Chấm công',
+                                        style: TextStyle(
+                                          color: Colors.white,
+                                          fontWeight: FontWeight.w900,
+                                          fontSize: 15,
+                                        ),
+                                      ),
+                                      Text(
+                                        'Vào ca',
+                                        style: TextStyle(
+                                          color: Colors.white70,
+                                          fontSize: 10,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            );
+          },
+        ),
+      ),
     );
   }
 }

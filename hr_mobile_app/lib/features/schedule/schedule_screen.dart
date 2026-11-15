@@ -34,7 +34,18 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
   @override
   void initState() {
     super.initState();
-    _load();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final args = ModalRoute.of(context)?.settings.arguments;
+      if (args is DateTime) {
+        final selected = dateOnly(args);
+        setState(() {
+          _selected = selected;
+          _monday = _mondayOf(selected);
+        });
+      }
+      _load();
+    });
   }
 
   Future<void> _load() async {
@@ -103,11 +114,11 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
       final items = _on(d);
       if (items.isEmpty) continue;
       if (items.any(countsAsWorkShift)) {
-        m[d] = const DayMark(Icons.event_available_rounded, AppColors.primary, 'có ca');
+        m[d] = DayMark(Icons.event_available_rounded, MarkTone.primary, 'có ca');
       } else if (items.any((s) => s.isRegistration && s.status != 'REJECTED')) {
-        m[d] = const DayMark(Icons.hourglass_top_rounded, AppColors.warning, 'chờ duyệt');
+        m[d] = DayMark(Icons.hourglass_top_rounded, MarkTone.warning, 'chờ duyệt');
       } else if (items.any((s) => s.status == 'LEAVE')) {
-        m[d] = const DayMark(Icons.beach_access_outlined, AppColors.textSecondary, 'nghỉ phép');
+        m[d] = DayMark(Icons.beach_access_outlined, MarkTone.muted, 'nghỉ phép');
       }
     }
     return m;
@@ -165,26 +176,27 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
               tooltip: 'Tuần trước',
             ),
             Expanded(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    '${formatDayMonth(_monday)} - ${formatDayMonth(sunday)}/${sunday.year}',
-                    style: AppText.title,
-                  ),
-                  const SizedBox(height: 2),
-                  if (isCurrent)
-                    const Text('Tuần này', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.primary))
-                  else
-                    GestureDetector(
-                      onTap: _goThisWeek,
-                      child: const Padding(
-                        padding: EdgeInsets.symmetric(vertical: 2),
-                        child: Text('Về tuần này',
-                            style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.primary)),
-                      ),
+              child: Material(
+                color: context.pal.primarySoft.withValues(alpha: .38),
+                borderRadius: BorderRadius.circular(14),
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(14),
+                  onTap: _goThisWeek,
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 8),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text('${formatDayMonth(_monday)} - ${formatDayMonth(sunday)}/${sunday.year}',
+                          style: AppText.title(context), textAlign: TextAlign.center),
+                        const SizedBox(height: 2),
+                        Text(isCurrent ? 'Tuần này · Chạm để làm mới' : 'Chạm để về tuần này',
+                          style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: context.pal.primary),
+                          textAlign: TextAlign.center),
+                      ],
                     ),
-                ],
+                  ),
+                ),
               ),
             ),
             IconButton(
@@ -219,8 +231,8 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                 label: 'Chờ duyệt',
                 value: '$pending',
                 icon: Icons.hourglass_top_rounded,
-                color: AppColors.warning,
-                background: AppColors.warningSoft,
+                color: context.pal.warning,
+                background: context.pal.warningSoft,
               ),
             ),
           ],
@@ -243,14 +255,14 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
           Container(
             width: 56,
             height: 56,
-            decoration: const BoxDecoration(color: AppColors.primarySoft, shape: BoxShape.circle),
-            child: const Icon(Icons.event_busy_outlined, color: AppColors.primary, size: 26),
+            decoration: BoxDecoration(color: context.pal.primarySoft, shape: BoxShape.circle),
+            child: Icon(Icons.event_busy_outlined, color: context.pal.primary, size: 26),
           ),
           const SizedBox(height: 12),
-          const Text('Không có ca trong ngày này', style: AppText.title),
+          Text('Không có ca trong ngày này', style: AppText.title(context)),
           const SizedBox(height: 4),
-          const Text('Bạn có thể đăng ký thêm ca làm cho ngày sắp tới.',
-              style: AppText.bodyMuted, textAlign: TextAlign.center),
+          Text('Bạn có thể đăng ký thêm ca làm cho ngày sắp tới.',
+              style: AppText.bodyMuted(context), textAlign: TextAlign.center),
           const SizedBox(height: 14),
           SecondaryButton(label: 'Đăng ký ca', icon: Icons.add_rounded, onPressed: _openRegister),
         ],
@@ -281,7 +293,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                 onPressed: _requestLeave,
                 icon: const Icon(Icons.event_busy_outlined, size: 16),
                 label: const Text('Xin nghỉ'),
-                style: TextButton.styleFrom(foregroundColor: AppColors.danger),
+                style: TextButton.styleFrom(foregroundColor: context.pal.danger),
               ),
             ),
         ],
@@ -296,8 +308,8 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              SizedBox(width: 104, child: Text(k, style: AppText.bodyMuted)),
-              Expanded(child: Text(v, style: AppText.body.copyWith(fontWeight: FontWeight.w600))),
+              SizedBox(width: 104, child: Text(k, style: AppText.bodyMuted(context))),
+              Expanded(child: Text(v, style: AppText.body(context).copyWith(fontWeight: FontWeight.w600))),
             ],
           ),
         );
@@ -306,8 +318,8 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
       context: context,
       backgroundColor: Colors.transparent,
       builder: (_) => Container(
-        decoration: const BoxDecoration(
-          color: AppColors.surface,
+        decoration: BoxDecoration(
+          color: context.pal.surface,
           borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
         ),
         padding: const EdgeInsets.fromLTRB(24, 20, 24, 20),
@@ -319,7 +331,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
             children: [
               Row(
                 children: [
-                  Expanded(child: Text(s.name, style: AppText.h2)),
+                  Expanded(child: Text(s.name, style: AppText.h2(context))),
                   StatusPill(info.label, tone: info.tone, icon: info.icon),
                 ],
               ),

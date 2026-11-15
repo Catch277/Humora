@@ -32,13 +32,14 @@ class BottomNavBar extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       decoration: BoxDecoration(
-        color: AppColors.surface,
+        color: context.pal.surface,
         borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+        border: Border(top: BorderSide(color: context.pal.border, width: 1.0)),
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFF0C2A5E).withValues(alpha: 0.08),
-            blurRadius: 24,
-            offset: const Offset(0, -6),
+            color: context.pal.shadow.withValues(alpha: context.pal.isDark ? 0.28 : 0.10),
+            blurRadius: 26,
+            offset: const Offset(0, -7),
           ),
         ],
       ),
@@ -70,7 +71,7 @@ class BottomNavBar extends StatelessWidget {
     bool badge = false,
   }) {
     final selected = index == currentIndex;
-    final color = selected ? AppColors.primary : AppColors.textMuted;
+    final color = selected ? context.pal.primary : context.pal.textMuted;
 
     Widget iconWidget = Icon(selected ? selectedIcon : icon, size: 24, color: color);
     if (badge) {
@@ -98,14 +99,19 @@ class BottomNavBar extends StatelessWidget {
             AnimatedContainer(
               duration: const Duration(milliseconds: 220),
               curve: Curves.easeOut,
-              width: 48,
-              height: 30,
+              width: 50,
+              height: 34,
               alignment: Alignment.center,
               decoration: BoxDecoration(
-                color: selected ? AppColors.primarySoft : Colors.transparent,
-                borderRadius: BorderRadius.circular(15),
+                color: selected ? context.pal.primary.withValues(alpha: context.pal.isDark ? .18 : .12) : Colors.transparent,
+                borderRadius: BorderRadius.circular(999),
               ),
-              child: iconWidget,
+              child: AnimatedScale(
+                scale: selected ? 1.12 : 1.0,
+                duration: const Duration(milliseconds: 180),
+                curve: Curves.easeOutBack,
+                child: iconWidget,
+              ),
             ),
             const SizedBox(height: 3),
             Text(

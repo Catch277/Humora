@@ -109,8 +109,8 @@ class _UnlockSheetState extends State<_UnlockSheet> {
   @override
   Widget build(BuildContext context) {
     return Container(
-      decoration: const BoxDecoration(
-        color: AppColors.surface,
+      decoration: BoxDecoration(
+        color: context.pal.surface,
         borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
       ),
       padding: EdgeInsets.fromLTRB(
@@ -130,7 +130,7 @@ class _UnlockSheetState extends State<_UnlockSheet> {
                 width: 40,
                 height: 4,
                 decoration: BoxDecoration(
-                  color: AppColors.border,
+                  color: context.pal.border,
                   borderRadius: BorderRadius.circular(4),
                 ),
               ),
@@ -139,19 +139,19 @@ class _UnlockSheetState extends State<_UnlockSheet> {
             Container(
               width: 48,
               height: 48,
-              decoration: const BoxDecoration(
-                color: AppColors.primarySoft,
+              decoration: BoxDecoration(
+                color: context.pal.primarySoft,
                 shape: BoxShape.circle,
               ),
-              child: const Icon(Icons.lock_outline_rounded, color: AppColors.primary),
+              child: Icon(Icons.lock_outline_rounded, color: context.pal.primary),
             ),
             const SizedBox(height: 14),
-            const Text('Xác nhận để xem thu nhập', style: AppText.h2),
+            Text('Xác nhận để xem thu nhập', style: AppText.h2(context)),
             const SizedBox(height: 6),
-            const Text(
+            Text(
               'Thông tin lương rất nhạy cảm. Nhập lại mật khẩu đăng nhập để tiếp tục. '
               'Phiên xem sẽ tự khoá sau 5 phút.',
-              style: AppText.bodyMuted,
+              style: AppText.bodyMuted(context),
             ),
             const SizedBox(height: 18),
             TextField(
@@ -166,7 +166,7 @@ class _UnlockSheetState extends State<_UnlockSheet> {
                 labelText: 'Mật khẩu',
                 errorText: _error,
                 filled: true,
-                fillColor: AppColors.surfaceMuted,
+                fillColor: context.pal.surfaceMuted,
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(14),
                   borderSide: BorderSide.none,

@@ -153,7 +153,7 @@ class _PayslipDetailScreenState extends State<PayslipDetailScreen> {
                   sub: '${formatMinutes(s.overtimeMinutes)} • hệ số ${_mult(overtimeLines)}',
                 ),
               ...s.earnings.map((i) => _row(i.label, formatVnd(i.amount))),
-              const Divider(height: 22, color: AppColors.border),
+              Divider(height: 22, color: context.pal.border),
               _row('Tổng thu nhập', formatVnd(s.grossAmount), bold: true),
             ],
           ),
@@ -164,16 +164,16 @@ class _PayslipDetailScreenState extends State<PayslipDetailScreen> {
           child: Column(
             children: [
               if (s.deductions.isEmpty)
-                const Padding(
+                Padding(
                   padding: EdgeInsets.only(bottom: 4),
                   child: Align(
                     alignment: Alignment.centerLeft,
-                    child: Text('Không có khoản khấu trừ', style: AppText.bodyMuted),
+                    child: Text('Không có khoản khấu trừ', style: AppText.bodyMuted(context)),
                   ),
                 )
               else
                 ...s.deductions.map((i) => _row(i.label, '- ${formatVnd(i.amount)}', negative: true)),
-              const Divider(height: 22, color: AppColors.border),
+              Divider(height: 22, color: context.pal.border),
               _row('Tổng khấu trừ', s.deductionAmount == 0 ? formatVnd(0) : '- ${formatVnd(s.deductionAmount)}',
                   bold: true, negative: s.deductionAmount > 0),
             ],
@@ -216,20 +216,20 @@ class _PayslipDetailScreenState extends State<PayslipDetailScreen> {
               icon: const Icon(Icons.flag_outlined, size: 18),
               label: Text(s.hadDispute ? 'Gửi thắc mắc mới' : 'Có sai sót? Gửi thắc mắc'),
               style: OutlinedButton.styleFrom(
-                foregroundColor: AppColors.textPrimary,
-                side: const BorderSide(color: AppColors.border),
+                foregroundColor: context.pal.textPrimary,
+                side: BorderSide(color: context.pal.border),
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
               ),
             ),
           ),
         ],
         const SizedBox(height: 14),
-        const Padding(
+        Padding(
           padding: EdgeInsets.symmetric(horizontal: 4),
           child: Text(
             'Phiếu lương được tính từ giờ làm thực tế trong Bảng công. '
             'Thông tin này chỉ mình bạn và chủ sở hữu có quyền xem.',
-            style: AppText.caption,
+            style: AppText.caption(context),
           ),
         ),
       ],
@@ -248,10 +248,10 @@ class _PayslipDetailScreenState extends State<PayslipDetailScreen> {
       padding: const EdgeInsets.all(22),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(24),
-        gradient: const LinearGradient(
+        gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [AppColors.primary, AppColors.primaryStrong],
+          colors: [context.pal.primary, AppColors.primaryStrong],
         ),
       ),
       child: Column(
@@ -312,13 +312,13 @@ class _PayslipDetailScreenState extends State<PayslipDetailScreen> {
               padding: const EdgeInsets.all(16),
               child: Row(
                 children: [
-                  const Icon(Icons.list_alt_rounded, color: AppColors.primary),
+                  Icon(Icons.list_alt_rounded, color: context.pal.primary),
                   const SizedBox(width: 12),
                   Expanded(
-                    child: Text('Chi tiết ${s.workLines.length} ca đã tính', style: AppText.title),
+                    child: Text('Chi tiết ${s.workLines.length} ca đã tính', style: AppText.title(context)),
                   ),
                   Icon(_showLines ? Icons.expand_less_rounded : Icons.expand_more_rounded,
-                      color: AppColors.textMuted),
+                      color: context.pal.textMuted),
                 ],
               ),
             ),
@@ -337,7 +337,7 @@ class _PayslipDetailScreenState extends State<PayslipDetailScreen> {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text(weekdayShort(l.workDate), style: AppText.caption),
+                              Text(weekdayShort(l.workDate), style: AppText.caption(context)),
                               Text(formatDayMonth(l.workDate),
                                   style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
                             ],
@@ -351,7 +351,7 @@ class _PayslipDetailScreenState extends State<PayslipDetailScreen> {
                                 children: [
                                   Flexible(
                                     child: Text(l.shiftName,
-                                        style: AppText.body, overflow: TextOverflow.ellipsis),
+                                        style: AppText.body(context), overflow: TextOverflow.ellipsis),
                                   ),
                                   if (l.isOvertime) ...[
                                     const SizedBox(width: 6),
@@ -359,11 +359,11 @@ class _PayslipDetailScreenState extends State<PayslipDetailScreen> {
                                   ],
                                 ],
                               ),
-                              Text(formatMinutes(l.minutes), style: AppText.caption),
+                              Text(formatMinutes(l.minutes), style: AppText.caption(context)),
                             ],
                           ),
                         ),
-                        Text(formatVnd(l.amount), style: AppText.money.copyWith(fontSize: 14)),
+                        Text(formatVnd(l.amount), style: AppText.money(context).copyWith(fontSize: 14)),
                       ],
                     ),
                   );
@@ -385,17 +385,17 @@ class _PayslipDetailScreenState extends State<PayslipDetailScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(label, style: bold ? AppText.title : AppText.body),
-                if (sub != null) Text(sub, style: AppText.caption),
+                Text(label, style: bold ? AppText.title(context) : AppText.body(context)),
+                if (sub != null) Text(sub, style: AppText.caption(context)),
               ],
             ),
           ),
           const SizedBox(width: 12),
           Text(
             value,
-            style: AppText.money.copyWith(
+            style: AppText.money(context).copyWith(
               fontSize: bold ? 16 : 14.5,
-              color: negative ? AppColors.danger : AppColors.textPrimary,
+              color: negative ? context.pal.danger : context.pal.textPrimary,
             ),
           ),
         ],
@@ -433,8 +433,8 @@ class _DisputeSheetState extends State<_DisputeSheet> {
   @override
   Widget build(BuildContext context) {
     return Container(
-      decoration: const BoxDecoration(
-        color: AppColors.surface,
+      decoration: BoxDecoration(
+        color: context.pal.surface,
         borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
       ),
       padding: EdgeInsets.fromLTRB(24, 14, 24, MediaQuery.of(context).viewInsets.bottom + 24),
@@ -448,15 +448,15 @@ class _DisputeSheetState extends State<_DisputeSheet> {
               child: Container(
                 width: 40,
                 height: 4,
-                decoration: BoxDecoration(color: AppColors.border, borderRadius: BorderRadius.circular(4)),
+                decoration: BoxDecoration(color: context.pal.border, borderRadius: BorderRadius.circular(4)),
               ),
             ),
             const SizedBox(height: 18),
-            const Text('Gửi thắc mắc về phiếu lương', style: AppText.h2),
+            Text('Gửi thắc mắc về phiếu lương', style: AppText.h2(context)),
             const SizedBox(height: 6),
-            const Text(
+            Text(
               'Nêu rõ ngày/ca bị thiếu hoặc khoản chưa đúng. Quản lý sẽ nhận được thông báo.',
-              style: AppText.bodyMuted,
+              style: AppText.bodyMuted(context),
             ),
             const SizedBox(height: 16),
             TextField(
@@ -468,7 +468,7 @@ class _DisputeSheetState extends State<_DisputeSheet> {
                 hintText: 'Ví dụ: Ngày 12/09 tôi làm đủ ca sáng nhưng chưa được tính.',
                 errorText: _error,
                 filled: true,
-                fillColor: AppColors.surfaceMuted,
+                fillColor: context.pal.surfaceMuted,
                 border: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide.none),
               ),
             ),

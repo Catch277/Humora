@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/create_leave_request.dart'; // Import màn hình tạo đơn
+import '../core/app_colors.dart';
 
 class LeaveRequestEmployeeScreen extends StatefulWidget {
   const LeaveRequestEmployeeScreen({super.key});
@@ -140,7 +141,7 @@ class _LeaveRequestEmployeeScreenState
               Text('Gửi đơn xin nghỉ phép thành công!'),
             ],
           ),
-          backgroundColor: const Color(0xFF10B981),
+          backgroundColor: context.pal.success,
           behavior: SnackBarBehavior.floating,
           shape:
               RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -176,7 +177,7 @@ class _LeaveRequestEmployeeScreenState
     }).toList();
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF4F6FC),
+      backgroundColor: context.pal.background,
       body: SafeArea(
         child: Column(
           children: [
@@ -212,9 +213,9 @@ class _LeaveRequestEmployeeScreenState
                           ),
                         )
                       : filteredList.isEmpty
-                          ? const Center(
+                          ? Center(
                               child: Text('Không có đơn xin nghỉ phép nào',
-                                  style: TextStyle(color: Colors.grey)))
+                                  style: TextStyle(color: context.pal.textMuted)))
                           : RefreshIndicator(
                               onRefresh: _loadRequests,
                               child: ListView.builder(
@@ -252,41 +253,41 @@ class _LeaveRequestEmployeeScreenState
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           Container(
-            decoration: const BoxDecoration(
-              color: Color(0xFFEFF6FF),
+            decoration: BoxDecoration(
+              color: context.pal.primarySoft,
               shape: BoxShape.circle,
             ),
             child: IconButton(
-              icon: const Icon(Icons.arrow_back_ios_new,
-                  size: 18, color: Colors.black87),
+              icon: Icon(Icons.arrow_back_ios_new,
+                  size: 18, color: context.pal.textPrimary),
               onPressed: () => Navigator.pop(context),
             ),
           ),
           Column(
-            children: const [
+            children: [
               Text(
                 'Đơn xin nghỉ phép',
                 style: TextStyle(
                   fontSize: 18,
                   fontWeight: FontWeight.bold,
-                  color: Colors.black87,
+                  color: context.pal.textPrimary,
                 ),
               ),
               SizedBox(height: 2),
               Text(
                 'Lịch sử & Tiến trình phê duyệt',
-                style: TextStyle(fontSize: 12, color: Colors.grey),
+                style: TextStyle(fontSize: 12, color: context.pal.textMuted),
               ),
             ],
           ),
           Container(
-            decoration: const BoxDecoration(
-              color: Color(0xFFEFF6FF),
+            decoration: BoxDecoration(
+              color: context.pal.primarySoft,
               shape: BoxShape.circle,
             ),
             child: IconButton(
-              icon: const Icon(Icons.refresh,
-                  size: 20, color: Color(0xFF2563EB)),
+              icon: Icon(Icons.refresh,
+                  size: 20, color: context.pal.primary),
               onPressed: _loadRequests,
             ),
           ),
@@ -316,7 +317,7 @@ class _LeaveRequestEmployeeScreenState
               margin: const EdgeInsets.only(right: 10),
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               decoration: BoxDecoration(
-                color: isSelected ? const Color(0xFF2563EB) : Colors.white,
+                color: isSelected ? context.pal.primary : context.pal.surface,
                 borderRadius: BorderRadius.circular(20),
                 border: Border.all(
                   color: isSelected
@@ -329,7 +330,7 @@ class _LeaveRequestEmployeeScreenState
                   Text(
                     item['label'],
                     style: TextStyle(
-                      color: isSelected ? Colors.white : Colors.black87,
+                      color: isSelected ? Colors.white : context.pal.textPrimary,
                       fontWeight:
                           isSelected ? FontWeight.bold : FontWeight.w500,
                       fontSize: 13,
@@ -348,7 +349,7 @@ class _LeaveRequestEmployeeScreenState
                     child: Text(
                       '${item['count']}',
                       style: TextStyle(
-                        color: isSelected ? Colors.white : Colors.black54,
+                        color: isSelected ? Colors.white : context.pal.textSecondary,
                         fontSize: 11,
                         fontWeight: FontWeight.bold,
                       ),
@@ -367,10 +368,10 @@ class _LeaveRequestEmployeeScreenState
   Widget _buildPendingCard(Map<String, dynamic> item) {
     return Container(
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: context.pal.surface,
         borderRadius: BorderRadius.circular(20),
-        border: const Border(
-          left: BorderSide(color: Color(0xFFF59E0B), width: 4),
+        border: Border(
+          left: BorderSide(color: context.pal.warning, width: 4),
         ),
         boxShadow: [
           BoxShadow(
@@ -393,13 +394,13 @@ class _LeaveRequestEmployeeScreenState
                     padding:
                         const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                     decoration: BoxDecoration(
-                      color: const Color(0xFFEFF6FF),
+                      color: context.pal.primarySoft,
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: Text(
                       item['id'] ?? '',
-                      style: const TextStyle(
-                        color: Color(0xFF2563EB),
+                      style: TextStyle(
+                        color: context.pal.primary,
                         fontWeight: FontWeight.bold,
                         fontSize: 12,
                       ),
@@ -408,7 +409,7 @@ class _LeaveRequestEmployeeScreenState
                   const SizedBox(width: 8),
                   Text(
                     item['timeStr'] ?? '',
-                    style: const TextStyle(color: Colors.grey, fontSize: 12),
+                    style: TextStyle(color: context.pal.textMuted, fontSize: 12),
                   ),
                 ],
               ),
@@ -416,18 +417,18 @@ class _LeaveRequestEmployeeScreenState
                 padding:
                     const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                 decoration: BoxDecoration(
-                  color: const Color(0xFFFEF3C7),
+                  color: context.pal.warningSoft,
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Row(
-                  children: const [
+                  children: [
                     Icon(Icons.access_time_filled,
-                        size: 12, color: Color(0xFFD97706)),
+                        size: 12, color: context.pal.warning),
                     SizedBox(width: 4),
                     Text(
                       'Chờ duyệt',
                       style: TextStyle(
-                        color: Color(0xFFD97706),
+                        color: context.pal.warning,
                         fontWeight: FontWeight.bold,
                         fontSize: 12,
                       ),
@@ -448,10 +449,10 @@ class _LeaveRequestEmployeeScreenState
                   children: [
                     Text(
                       item['leaveType'] ?? '',
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.bold,
-                        color: Colors.black87,
+                        color: context.pal.textPrimary,
                       ),
                     ),
                     if ((item['leaveSubtitle'] ?? '').toString().isNotEmpty) ...[
@@ -459,7 +460,7 @@ class _LeaveRequestEmployeeScreenState
                       Text(
                         item['leaveSubtitle'],
                         style:
-                            const TextStyle(fontSize: 12, color: Colors.grey),
+                            TextStyle(fontSize: 12, color: context.pal.textMuted),
                       ),
                     ],
                   ],
@@ -470,13 +471,13 @@ class _LeaveRequestEmployeeScreenState
                 padding:
                     const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 decoration: BoxDecoration(
-                  color: const Color(0xFFEFF6FF),
+                  color: context.pal.primarySoft,
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Text(
                   item['daysCount'] ?? '',
-                  style: const TextStyle(
-                    color: Color(0xFF2563EB),
+                  style: TextStyle(
+                    color: context.pal.primary,
                     fontWeight: FontWeight.bold,
                     fontSize: 12,
                   ),
@@ -488,15 +489,15 @@ class _LeaveRequestEmployeeScreenState
           Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: const Color(0xFFF9FAFB),
+              color: context.pal.surfaceMuted,
               borderRadius: BorderRadius.circular(12),
             ),
             child: Column(
               children: [
                 Row(
                   children: [
-                    const Icon(Icons.calendar_today_outlined,
-                        size: 16, color: Color(0xFF2563EB)),
+                    Icon(Icons.calendar_today_outlined,
+                        size: 16, color: context.pal.primary),
                     const SizedBox(width: 8),
                     Flexible(
                       child: Text(
@@ -507,7 +508,7 @@ class _LeaveRequestEmployeeScreenState
                     ),
                     Text(
                       '(${item['shiftType'] ?? 'Cả ngày'})',
-                      style: const TextStyle(color: Colors.grey, fontSize: 12),
+                      style: TextStyle(color: context.pal.textMuted, fontSize: 12),
                     ),
                   ],
                 ),
@@ -515,18 +516,18 @@ class _LeaveRequestEmployeeScreenState
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Icon(Icons.notes_outlined,
-                        size: 16, color: Colors.grey),
+                    Icon(Icons.notes_outlined,
+                        size: 16, color: context.pal.textMuted),
                     const SizedBox(width: 8),
-                    const Text('Lý do: ',
-                        style: TextStyle(color: Colors.grey, fontSize: 13)),
+                    Text('Lý do: ',
+                        style: TextStyle(color: context.pal.textMuted, fontSize: 13)),
                     Expanded(
                       child: Text(
                         item['reason'] ?? '',
-                        style: const TextStyle(
+                        style: TextStyle(
                             fontWeight: FontWeight.bold,
                             fontSize: 13,
-                            color: Colors.black87),
+                            color: context.pal.textPrimary),
                       ),
                     ),
                   ],
@@ -537,14 +538,14 @@ class _LeaveRequestEmployeeScreenState
           const SizedBox(height: 16),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: const [
+            children: [
               Text('Tiến trình phê duyệt',
-                  style: TextStyle(fontSize: 12, color: Colors.grey)),
+                  style: TextStyle(fontSize: 12, color: context.pal.textMuted)),
               Text('1/3 Hoàn tất',
                   style: TextStyle(
                       fontSize: 12,
                       fontWeight: FontWeight.bold,
-                      color: Color(0xFF2563EB))),
+                      color: context.pal.primary)),
             ],
           ),
           const SizedBox(height: 12),
@@ -568,10 +569,10 @@ class _LeaveRequestEmployeeScreenState
     final rejectReason = (item['rejectReason'] ?? '').toString();
     return Container(
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: context.pal.surface,
         borderRadius: BorderRadius.circular(20),
-        border: const Border(
-          left: BorderSide(color: Color(0xFFEF4444), width: 4),
+        border: Border(
+          left: BorderSide(color: context.pal.danger, width: 4),
         ),
         boxShadow: [
           BoxShadow(
@@ -591,26 +592,26 @@ class _LeaveRequestEmployeeScreenState
               Row(
                 children: [
                   Text(item['id'] ?? '',
-                      style: const TextStyle(
-                          color: Colors.black54,
+                      style: TextStyle(
+                          color: context.pal.textSecondary,
                           fontWeight: FontWeight.bold,
                           fontSize: 12)),
                   const SizedBox(width: 8),
                   Text(item['timeStr'] ?? '',
                       style:
-                          const TextStyle(color: Colors.grey, fontSize: 12)),
+                          TextStyle(color: context.pal.textMuted, fontSize: 12)),
                 ],
               ),
               Container(
                 padding:
                     const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                 decoration: BoxDecoration(
-                  color: const Color(0xFFFEF2F2),
+                  color: context.pal.dangerSoft,
                   borderRadius: BorderRadius.circular(12),
                 ),
-                child: const Text('Từ chối',
+                child: Text('Từ chối',
                     style: TextStyle(
-                        color: Color(0xFFEF4444),
+                        color: context.pal.danger,
                         fontWeight: FontWeight.bold,
                         fontSize: 12)),
               ),
@@ -618,13 +619,13 @@ class _LeaveRequestEmployeeScreenState
           ),
           const SizedBox(height: 12),
           Text(item['leaveType'] ?? '',
-              style: const TextStyle(
+              style: TextStyle(
                   fontSize: 16,
                   fontWeight: FontWeight.bold,
-                  color: Colors.black87)),
+                  color: context.pal.textPrimary)),
           const SizedBox(height: 6),
           Text('${item['dateRange'] ?? ''} (${item['shiftType'] ?? ''})',
-              style: const TextStyle(fontSize: 13, color: Colors.black87)),
+              style: TextStyle(fontSize: 13, color: context.pal.textPrimary)),
           if (rejectReason.isNotEmpty) ...[
             const SizedBox(height: 8),
             Text('Lý do từ chối: $rejectReason',
@@ -639,7 +640,7 @@ class _LeaveRequestEmployeeScreenState
   Widget _buildApprovedCard(Map<String, dynamic> item) {
     return Container(
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: context.pal.surface,
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
@@ -662,13 +663,13 @@ class _LeaveRequestEmployeeScreenState
                     padding:
                         const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                     decoration: BoxDecoration(
-                      color: const Color(0xFFF3F4F6),
+                      color: context.pal.surfaceMuted,
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: Text(
                       item['id'] ?? '',
-                      style: const TextStyle(
-                          color: Colors.black54,
+                      style: TextStyle(
+                          color: context.pal.textSecondary,
                           fontWeight: FontWeight.bold,
                           fontSize: 12),
                     ),
@@ -676,24 +677,24 @@ class _LeaveRequestEmployeeScreenState
                   const SizedBox(width: 8),
                   Text(item['timeStr'] ?? '',
                       style:
-                          const TextStyle(color: Colors.grey, fontSize: 12)),
+                          TextStyle(color: context.pal.textMuted, fontSize: 12)),
                 ],
               ),
               Container(
                 padding:
                     const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                 decoration: BoxDecoration(
-                  color: const Color(0xFFECFDF5),
+                  color: context.pal.successSoft,
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Row(
-                  children: const [
+                  children: [
                     Icon(Icons.check_circle,
-                        size: 14, color: Color(0xFF10B981)),
+                        size: 14, color: context.pal.success),
                     SizedBox(width: 4),
                     Text('Đã duyệt',
                         style: TextStyle(
-                            color: Color(0xFF10B981),
+                            color: context.pal.success,
                             fontWeight: FontWeight.bold,
                             fontSize: 12)),
                   ],
@@ -712,22 +713,22 @@ class _LeaveRequestEmployeeScreenState
                   children: [
                     Text(
                       item['leaveType'] ?? '',
-                      style: const TextStyle(
+                      style: TextStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.bold,
-                          color: Colors.black87),
+                          color: context.pal.textPrimary),
                     ),
                     if ((item['leaveSubtitle'] ?? '').toString().isNotEmpty) ...[
                       const SizedBox(height: 2),
                       Text(item['leaveSubtitle'],
-                          style: const TextStyle(
-                              fontSize: 12, color: Colors.grey)),
+                          style: TextStyle(
+                              fontSize: 12, color: context.pal.textMuted)),
                     ],
                     const SizedBox(height: 6),
                     Text(
                         '${item['dateRange'] ?? ''} (${item['shiftType'] ?? ''})',
-                        style: const TextStyle(
-                            fontSize: 13, color: Colors.black87)),
+                        style: TextStyle(
+                            fontSize: 13, color: context.pal.textPrimary)),
                   ],
                 ),
               ),
@@ -736,13 +737,13 @@ class _LeaveRequestEmployeeScreenState
                 padding:
                     const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 decoration: BoxDecoration(
-                  color: const Color(0xFFF3F4F6),
+                  color: context.pal.surfaceMuted,
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Text(
                   item['daysCount'] ?? '',
-                  style: const TextStyle(
-                      color: Colors.black87,
+                  style: TextStyle(
+                      color: context.pal.textPrimary,
                       fontWeight: FontWeight.bold,
                       fontSize: 12),
                 ),
@@ -755,7 +756,7 @@ class _LeaveRequestEmployeeScreenState
               padding:
                   const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
               decoration: BoxDecoration(
-                color: const Color(0xFFF9FAFB),
+                color: context.pal.surfaceMuted,
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Row(
@@ -763,7 +764,7 @@ class _LeaveRequestEmployeeScreenState
                   Container(
                     padding: const EdgeInsets.all(6),
                     decoration: BoxDecoration(
-                      color: const Color(0xFFFEF2F2),
+                      color: context.pal.dangerSoft,
                       borderRadius: BorderRadius.circular(6),
                     ),
                     child: const Text('PDF',
@@ -776,16 +777,16 @@ class _LeaveRequestEmployeeScreenState
                   Expanded(
                     child: Text(
                       item['attachment'],
-                      style: const TextStyle(
+                      style: TextStyle(
                           fontSize: 13,
                           fontWeight: FontWeight.w500,
-                          color: Colors.black87),
+                          color: context.pal.textPrimary),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
                   ),
-                  const Icon(Icons.download_rounded,
-                      size: 18, color: Color(0xFF2563EB)),
+                  Icon(Icons.download_rounded,
+                      size: 18, color: context.pal.primary),
                 ],
               ),
             ),
@@ -804,22 +805,22 @@ class _LeaveRequestEmployeeScreenState
           height: 32,
           decoration: BoxDecoration(
             color: isDone
-                ? const Color(0xFF10B981)
+                ? context.pal.success
                 : (isCurrent
-                    ? const Color(0xFFF59E0B)
-                    : const Color(0xFFE5E7EB)),
+                    ? context.pal.warning
+                    : context.pal.border),
             shape: BoxShape.circle,
           ),
           child: Icon(icon,
               size: 18,
-              color: isDone || isCurrent ? Colors.white : Colors.grey),
+              color: isDone || isCurrent ? Colors.white : context.pal.textMuted),
         ),
         const SizedBox(height: 4),
         Text(
           label,
           style: TextStyle(
             fontSize: 11,
-            color: isCurrent ? const Color(0xFFD97706) : Colors.grey,
+            color: isCurrent ? context.pal.warning : context.pal.textMuted,
             fontWeight: isCurrent ? FontWeight.bold : FontWeight.normal,
           ),
         ),
@@ -832,7 +833,7 @@ class _LeaveRequestEmployeeScreenState
       child: Container(
         height: 2,
         margin: const EdgeInsets.only(bottom: 16),
-        color: isActive ? const Color(0xFF2563EB) : const Color(0xFFE5E7EB),
+        color: isActive ? context.pal.primary : context.pal.border,
       ),
     );
   }
@@ -842,7 +843,7 @@ class _LeaveRequestEmployeeScreenState
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: context.pal.surface,
         borderRadius: const BorderRadius.only(
           topLeft: Radius.circular(20),
           topRight: Radius.circular(20),
@@ -862,18 +863,18 @@ class _LeaveRequestEmployeeScreenState
               height: 48,
               child: OutlinedButton.icon(
                 onPressed: () => Navigator.pop(context),
-                icon: const Icon(Icons.home_outlined,
-                    color: Colors.black87, size: 20),
-                label: const Text(
+                icon: Icon(Icons.home_outlined,
+                    color: context.pal.textPrimary, size: 20),
+                label: Text(
                   'Về Trang chủ',
                   style: TextStyle(
-                    color: Colors.black87,
+                    color: context.pal.textPrimary,
                     fontWeight: FontWeight.bold,
                     fontSize: 14,
                   ),
                 ),
                 style: OutlinedButton.styleFrom(
-                  side: BorderSide(color: Colors.grey.shade300),
+                  side: BorderSide(color: context.pal.border),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(16),
                   ),
@@ -898,7 +899,7 @@ class _LeaveRequestEmployeeScreenState
                   ),
                 ),
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF3B82F6),
+                  backgroundColor: context.pal.primary,
                   elevation: 0,
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(16),
