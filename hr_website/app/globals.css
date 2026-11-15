@@ -148,3 +148,20 @@ html {
   -webkit-tap-highlight-color: transparent;
 }
 
+/* ── Scrollbars that are not controls ─────────────────────────────────────────────────────────
+   A native scrollbar draws an OS-coloured thumb *and*, on Windows, the ▲/▼ buttons — inside a panel
+   that is otherwise navigation they read as two more controls (the navigation rail was reported as
+   having an unexplained "slider" on its right edge). `scrollbar-none` keeps scrolling and hides only
+   its chrome: wheel, trackpad, touch, keyboard and `tabindex` focus all still move the panel, and
+   `overscroll-contain` stops the flick from chaining to the page behind it. Scrolling is never
+   disabled, because a rail that silently clips its last links is worse than a visible bar. */
+@utility scrollbar-none {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  overscroll-behavior: contain;
+
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
+

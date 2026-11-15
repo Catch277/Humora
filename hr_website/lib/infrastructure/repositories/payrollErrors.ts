@@ -37,6 +37,7 @@ const NOT_FOUND_TOKENS: ReadonlySet<string> = new Set([
   PAYROLL_TOKENS.payslipNotFound,
   PAYROLL_TOKENS.payslipNotFoundOrNotDraft,
   PAYROLL_TOKENS.itemNotFound,
+  PAYROLL_TOKENS.demoNotFound,
 ]);
 
 /** `409`: a *business* state conflict — published, void, already disputed, still disputed. */
@@ -46,6 +47,7 @@ const CONFLICT_TOKENS: ReadonlySet<string> = new Set([
   PAYROLL_TOKENS.noOpenDispute,
   PAYROLL_TOKENS.alreadyDisputed,
   PAYROLL_TOKENS.payProfileDuplicate,
+  PAYROLL_TOKENS.demoDuplicate,
 ]);
 
 /** `400`: the payload breaks a rule only the database can judge (today in Bangkok, the running sums). */
@@ -56,6 +58,10 @@ const INPUT_TOKENS: ReadonlySet<string> = new Set([
   PAYROLL_TOKENS.disputeNoteLength,
   PAYROLL_TOKENS.deductionsExceedGross,
   PAYROLL_TOKENS.targetInvalid,
+  // SCRUM-100: the one demo-salary rule that needs the stored totals — `gross = hours × rate + allowance +
+  // bonus` is money arithmetic, so it stays in SQL and arrives here as a `400` beside the field.
+  PAYROLL_TOKENS.demoDeductionsExceedGross,
+  PAYROLL_TOKENS.demoPositionRequired,
 ]);
 
 /**

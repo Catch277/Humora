@@ -330,6 +330,57 @@ export function parseDisputeBody(
   return { ok: true, value: note };
 }
 
+/** What `POST /api/payroll/sync` hands its use case: the month already expanded to `YYYY-MM-01`. */
+export type PayrollSyncInput = {
+  periodStart: string;
+  apply: boolean;
+  employeeId?: string;
+};
+
+/**
+ * The `body` of `POST /api/payroll/sync` (SCRUM-99).
+ *
+ * `apply` is optional and only `true` counts as a request to write: the screen shows the dry run first, so a
+ * missing flag must never be read as "go ahead". `employeeId` narrows the run to one person, which is what the
+ * per-row button on the reconciliation tab sends.
+ */
+export function parsePayrollSyncBody(
+  body: Record<string, unknown>,
+): ParseResult<PayrollSyncInput> {
+  const period = parsePayrollPeriod(
+    typeof body.month === "string" ? body.month : null,
+  );
+
+  if (!period.ok) {
+    return period;
+  }
+
+  const apply = body.apply;
+
+  if (apply !== undefined && apply !== null && typeof apply !== "boolean") {
+    return { ok: false, error: "apply phải là true hoặc false." };
+  }
+
+  const employeeId = body.employeeId;
+
+  if (
+    employeeId !== undefined &&
+    employeeId !== null &&
+    (typeof employeeId !== "string" || !UUID_PATTERN.test(employeeId))
+  ) {
+    return { ok: false, error: "employeeId phải là UUID." };
+  }
+
+  return {
+    ok: true,
+    value: {
+      periodStart: period.value,
+      apply: apply === true,
+      employeeId: typeof employeeId === "string" ? employeeId : undefined,
+    },
+  };
+}
+
 /** Reads a JSON body, answering the `400` the recipe asks for instead of throwing. */
 export async function readJsonBody(
   request: Request,

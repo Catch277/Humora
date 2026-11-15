@@ -38,7 +38,25 @@ export async function branchScopeOf(
     return { all: true, ids: new Set<string>() };
   }
 
-  const branches = await branchRepository.findAll();
+  return branchScopeFrom(await branchRepository.findAll(), caller);
+}
+
+/**
+ * `branchScopeOf` for a caller that already holds the branch list.
+ *
+ * The dashboard (SCRUM-98) reads `/api/branches`' rows anyway — it needs their names for the per-branch
+ * chart — so loading them a second time inside `branchScopeOf` would be one wasted query per filter
+ * change. The rule itself stays in one place: this is the same predicate, not a second copy of it.
+ */
+export function branchScopeFrom(
+  branches: readonly Branch[],
+  caller: BranchCaller,
+): BranchScope {
+  const viewer = viewerFromRole(caller.role, caller.userId);
+
+  if (viewer.managesAllBranches) {
+    return { all: true, ids: new Set<string>() };
+  }
 
   return {
     all: false,

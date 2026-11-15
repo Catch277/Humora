@@ -265,6 +265,35 @@ class _ShiftRegisterScreenState extends State<ShiftRegisterScreen> {
     _loadWeek();
   }
 
+  /// Rút một đăng ký còn chờ duyệt. Server từ chối nếu đơn đã được xử lý, và câu trả lời của service
+  /// đã là tiếng Việt nên hiện thẳng được.
+  Future<void> _cancel(ScheduledShift reg) async {
+    final ok = await showConfirmDialog(
+      context,
+      title: 'Huỷ đăng ký ca?',
+      content: Text(
+        '${reg.name} (${reg.start} - ${reg.end}) ngày ${formatDayMonth(reg.workDate)}.\n'
+        'Sau khi huỷ bạn có thể đăng ký lại nếu ca còn nhận.',
+        style: AppText.body,
+      ),
+      confirmLabel: 'Huỷ đăng ký',
+      danger: true,
+    );
+    if (!ok || !mounted) return;
+
+    setState(() => _busy = true);
+    try {
+      await _service.cancel(reg.id);
+      if (!mounted) return;
+      showAppSnack(context, 'Đã huỷ đăng ký ca.');
+      _loadWeek();
+    } catch (e) {
+      if (mounted) showAppSnack(context, e.toString(), error: true);
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
   Future<void> _confirmLeave() async {
     final ok = await showConfirmDialog(
       context,
@@ -405,14 +434,19 @@ class _ShiftRegisterScreenState extends State<ShiftRegisterScreen> {
     final same = _sameShiftExisting(day, t);
     if (same != null) {
       final info = shiftStatusInfo(same);
+      // Đăng ký còn chờ duyệt thì chạm vào thẻ để rút lại (policy `shift_registrations_cancel_own`).
+      final canCancel = same.isRegistration && same.status == 'PENDING' && !_busy;
       return ShiftCard(
         name: t.name,
         start: t.start,
         end: t.end,
         selectable: true,
-        disabled: true,
+        disabled: !canCancel,
+        onTap: canCancel ? () => _cancel(same) : null,
         badge: StatusPill(info.label, tone: info.tone, icon: info.icon),
-        note: same.isRegistration ? 'Bạn đã đăng ký ca này.' : 'Bạn đã được phân ca này.',
+        note: canCancel
+            ? 'Bạn đã đăng ký ca này. Chạm để huỷ đăng ký.'
+            : (same.isRegistration ? 'Bạn đã đăng ký ca này.' : 'Bạn đã được phân ca này.'),
       );
     }
 

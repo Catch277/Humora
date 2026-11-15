@@ -44,6 +44,7 @@ import {
 } from "@/lib/domain/notificationCatalog";
 import { formatDateTime } from "@/lib/i18n/format";
 import type { MessageKey, Translate } from "@/lib/i18n/translate";
+import { announceNotificationsChanged } from "@/lib/notificationEvents";
 
 const PAGE_SIZE = 20;
 
@@ -355,6 +356,9 @@ export default function NotificationsPage() {
           item.id === notification.id ? { ...item, is_read: true } : item,
         ),
       );
+      // The header's badge is a different component tree; tell it to re-read the count (see
+      // `lib/notificationEvents`) instead of waiting for its 30 s poll.
+      announceNotificationsChanged();
     } catch {
       setPageError(t("error.network"));
     } finally {
@@ -393,6 +397,9 @@ export default function NotificationsPage() {
       }
 
       refresh();
+      // "Đánh dấu tất cả đã đọc" is the case the badge lagged worst (every unread row at once), so the
+      // header is told immediately as well (see `lib/notificationEvents`).
+      announceNotificationsChanged();
     } catch {
       setPageError(t("error.network"));
     } finally {

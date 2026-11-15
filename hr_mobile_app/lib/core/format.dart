@@ -74,6 +74,12 @@ DateTime? parseDate(dynamic v) {
 /// Ngày dạng 'yyyy-MM-dd' để gửi lên Postgres.
 String toSqlDate(DateTime d) => '${d.year}-${_two(d.month)}-${_two(d.day)}';
 
+/// "Hôm nay" theo giờ nghiệp vụ Asia/Bangkok (UTC+7, không có DST).
+///
+/// Không dùng `DateTime.now()` trực tiếp: một thiết bị đặt sai múi giờ vẫn phải đọc đúng ngày làm
+/// việc mà bảng công và phiếu lương dùng (`businessDay` phía web).
+String bangkokToday() => toSqlDate(DateTime.now().toUtc().add(const Duration(hours: 7)));
+
 /// "vừa xong", "5 phút trước", "Hôm qua", hoặc ngày đầy đủ.
 String timeAgo(DateTime when, {DateTime? now}) {
   final n = now ?? DateTime.now();

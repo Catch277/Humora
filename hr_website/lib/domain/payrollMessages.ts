@@ -38,6 +38,12 @@ const PAYROLL_MESSAGE_KEYS: Readonly<Record<string, MessageKey>> = {
   PAYSLIP_DISPUTE_NOTE_LENGTH: "payrollError.disputeNoteLength",
   PAYSLIP_DEDUCTIONS_EXCEED_GROSS: "payrollError.deductionsExceedGross",
   PAYSLIP_TARGET_INVALID: "payrollError.targetInvalid",
+
+  // Lương thử việc (SCRUM-100)
+  DEMO_PAY_NOT_FOUND: "payrollError.demoNotFound",
+  DEMO_PAY_DUPLICATE: "payrollError.demoDuplicate",
+  DEMO_PAY_DEDUCTIONS_EXCEED_GROSS: "payrollError.demoDeductionsExceedGross",
+  DEMO_PAY_POSITION_REQUIRED: "payrollError.demoPositionRequired",
 };
 
 /**
@@ -81,4 +87,8 @@ export const PAYROLL_TOKENS = {
   disputeNoteLength: "PAYSLIP_DISPUTE_NOTE_LENGTH",
   deductionsExceedGross: "PAYSLIP_DEDUCTIONS_EXCEED_GROSS",
   targetInvalid: "PAYSLIP_TARGET_INVALID",
+  demoNotFound: "DEMO_PAY_NOT_FOUND",
+  demoDuplicate: "DEMO_PAY_DUPLICATE",
+  demoDeductionsExceedGross: "DEMO_PAY_DEDUCTIONS_EXCEED_GROSS",
+  demoPositionRequired: "DEMO_PAY_POSITION_REQUIRED",
 } as const;

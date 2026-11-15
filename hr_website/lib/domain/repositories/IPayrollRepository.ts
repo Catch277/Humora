@@ -7,6 +7,11 @@ import type {
 } from "@/lib/domain/entities/PayProfile";
 import type { PayslipDetail } from "@/lib/domain/entities/PayslipDetail";
 import type {
+  PayrollReconciliation,
+  PayrollSyncOptions,
+  PayrollSyncResult,
+} from "@/lib/domain/entities/PayrollReconciliation";
+import type {
   Payslip,
   PayslipFilters,
   PublishPayslipsResult,
@@ -72,4 +77,18 @@ export interface IPayrollRepository {
 
   /** "Thu nhập tạm tính" of the caller for one month, computed by the payslip's own rule. */
   estimate(periodStart: string): Promise<PayEstimate>;
+
+  /**
+   * Đối soát một tháng (SCRUM-99): the stored figures next to the recomputed ones, per employee, with the
+   * flags that say what is wrong. Read-only — the recomputed side calls `payroll_work_lines()`, so it can
+   * never drift from what a generate would write. Owner only (`payroll_require_owner()` inside the RPC).
+   */
+  reconcile(periodStart: string): Promise<PayrollReconciliation>;
+
+  /**
+   * Đồng bộ lại một tháng (SCRUM-99). `apply: false` answers the plan and writes nothing; `apply: true`
+   * re-runs `generate_payslips` for the rows that need it. A published payslip is reported, never touched,
+   * and a draft whose month holds no ca is left alone instead of being deleted.
+   */
+  sync(periodStart: string, options: PayrollSyncOptions): Promise<PayrollSyncResult>;
 }

@@ -24,6 +24,7 @@ import { useProfile } from "@/components/ProfileProvider";
 import { roleLabel } from "@/lib/accessPolicy";
 import type { QuickSearchResult } from "@/lib/domain/entities/QuickSearch";
 import { isBranchHeadRole, isOwnerRole } from "@/lib/domain/roles";
+import { NOTIFICATIONS_CHANGED_EVENT } from "@/lib/notificationEvents";
 import { isPublicPath } from "@/lib/publicPaths";
 
 /** `GET /api/search` cần tối thiểu 2 ký tự; dưới ngưỡng đó chỉ hiện gợi ý, không gọi API. */
@@ -169,26 +170,49 @@ export default function Header() {
     };
   }, [pathname]);
 
-  // ...and polled on an interval, because the notification arrives while this screen is open (the
-  // producers run in the database). A hidden tab is skipped.
+  // ...and refreshed from three more places, because the rows are written by the database while this shell
+  // stays mounted:
+  //   * the poll below, the only thing that finds a row nobody announced;
+  //   * `NOTIFICATIONS_CHANGED_EVENT`, fired by `/notifications` after a successful read — reading does not
+  //     navigate, so without it the badge kept the previous number until a reload or the next poll (up to
+  //     30 s), which is exactly the reported "the badge only changes when I reload";
+  //   * the tab becoming visible again, so a background tab catches up on return instead of waiting out the
+  //     interval. The poll skips a hidden tab on purpose.
   useEffect(() => {
     if (isPublicPath(pathname)) {
       return;
     }
+
+    const refreshNow = () => {
+      void fetchUnreadCount().then((total) => {
+        if (total !== null) {
+          setUnreadCount(total);
+        }
+      });
+    };
 
     const timer = window.setInterval(() => {
       if (document.visibilityState !== "visible") {
         return;
       }
 
-      void fetchUnreadCount().then((total) => {
-        if (total !== null) {
-          setUnreadCount(total);
-        }
-      });
+      refreshNow();
     }, UNREAD_POLL_INTERVAL_MS);
 
-    return () => window.clearInterval(timer);
+    const onVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        refreshNow();
+      }
+    };
+
+    window.addEventListener(NOTIFICATIONS_CHANGED_EVENT, refreshNow);
+    document.addEventListener("visibilitychange", onVisibilityChange);
+
+    return () => {
+      window.clearInterval(timer);
+      window.removeEventListener(NOTIFICATIONS_CHANGED_EVENT, refreshNow);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+    };
   }, [pathname]);
 
   // The branch line under the name (SCRUM-63): only a manager and an employee have one — the owner

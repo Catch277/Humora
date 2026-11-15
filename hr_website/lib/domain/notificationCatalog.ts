@@ -100,6 +100,12 @@ export const NOTIFICATION_TYPES: Readonly<Record<string, NotificationTypeMeta>> 
   ATTENDANCE_VERIFIED: { key: "notificationType.attendanceVerified", category: "attendance" },
   ATTENDANCE_COMPLAINT: { key: "notificationType.attendanceComplaint", category: "attendance" },
   COMPLAINT_RESOLVED: { key: "notificationType.complaintResolved", category: "attendance" },
+  // A4 / SCRUM-97: a manager closed an abnormal-timekeeping note. Same category as the anomaly that
+  // produced it, so the employee finds both halves of the conversation in one filter.
+  ATTENDANCE_EXCEPTION_RESOLVED: {
+    key: "notificationType.attendanceExceptionResolved",
+    category: "attendance",
+  },
 
   // ── Nhân sự ──────────────────────────────────────────────────────────────────────────────
   ACCOUNT_CREATED: { key: "notificationType.accountCreated", category: "staff" },

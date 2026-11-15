@@ -83,6 +83,17 @@ export const CAPABILITIES = [
    * `/payroll` is rendered only for a caller who holds this.
    */
   "payroll:manage",
+  /**
+   * Khách hàng & hợp đồng (SCRUM-101, C3/C4): the customer book, the contract money and the Gmail log.
+   * Owner-only because it holds commercial data (who pays what), and `customers_owner_all` /
+   * `customer_contracts_owner_all` repeat the rule in the database.
+   */
+  "customer:manage",
+  /**
+   * Bảo hành, bảo trì và nhắc việc (SCRUM-102, C5). A separate capability from `customer:manage` so the two
+   * screens can be granted differently later; today both are the owner's.
+   */
+  "maintenance:manage",
 ] as const;
 
 export type Capability = (typeof CAPABILITIES)[number];
@@ -145,6 +156,10 @@ const OWNER_CAPABILITIES: readonly Capability[] = [
    * `/payroll` would only be a button that answers `403`.
    */
   "payroll:manage",
+  // SCRUM-101/102: the CRM and its warranty screen. Owner-only — a manager runs the coffee-shop operation,
+  // not the software contracts the organization sells.
+  "customer:manage",
+  "maintenance:manage",
 ];
 
 const ROLE_CAPABILITIES: Readonly<Record<string, ReadonlySet<string>>> = {
@@ -186,6 +201,10 @@ export const SCREEN_ACCESS: readonly { path: string; capability: Capability }[] 
   { path: "/notifications", capability: "notification:view" },
   { path: "/chat", capability: "knowledge:view" },
   { path: "/organization", capability: "organization:manage" },
+  // SCRUM-101/102: the customer book and the warranty/reminder queue. Both owner-only; the sidebar drops
+  // them for a manager and an employee exactly like it drops `/staff`.
+  { path: "/customers", capability: "customer:manage" },
+  { path: "/maintenance", capability: "maintenance:manage" },
   // SCRUM-79 sits at the end on purpose: it is an account setting rather than a daily destination, and
   // the order here is only what `firstAccessiblePath` walks — the sidebar has its own list.
   { path: "/security", capability: "security:manage" },

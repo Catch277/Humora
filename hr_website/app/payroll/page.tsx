@@ -19,13 +19,23 @@ import {
 import { useEffect, useMemo, useState } from "react";
 
 import { useLocale } from "@/components/LocaleProvider";
+import DemoSalaryDialog, {
+  type DemoSalarySavedEvent,
+} from "@/components/DemoSalaryDialog";
 import PayRateDialog, {
   type PayRateSavedEvent,
   type PayRateTarget,
 } from "@/components/PayRateDialog";
+import PayrollSyncDialog from "@/components/PayrollSyncDialog";
 import { useProfile } from "@/components/ProfileProvider";
+import type { DemoPaySalary, DemoPaySummary } from "@/lib/domain/entities/DemoPaySalary";
 import type { PayEstimate } from "@/lib/domain/entities/PayEstimate";
 import type { PayProfile } from "@/lib/domain/entities/PayProfile";
+import {
+  needsPayrollSync,
+  type PayrollReconciliation,
+  type PayrollSyncResult,
+} from "@/lib/domain/entities/PayrollReconciliation";
 import type { PayslipDetail } from "@/lib/domain/entities/PayslipDetail";
 import {
   PAYSLIP_ITEM_CODE_PRESETS,
@@ -103,6 +113,38 @@ function payslipStatusLabel(status: PayslipStatus, t: Translate): string {
   return t(STATUS_KEYS[status]);
 }
 
+/**
+ * The flag and status vocabularies the two new tabs render (SCRUM-99/100). A `Record` keyed by the stored code,
+ * with the value the dictionary key renders: a code this build does not know shows itself instead of a blank
+ * chip, which is the rule `lib/domain/notificationCatalog.ts` follows for notification types.
+ */
+const FLAG_KEYS: Record<string, MessageKey> = {
+  MISSING_PAYSLIP: "payroll.recon.flag.MISSING_PAYSLIP",
+  WOULD_REMOVE: "payroll.recon.flag.WOULD_REMOVE",
+  STALE: "payroll.recon.flag.STALE",
+  NO_ATTENDANCE: "payroll.recon.flag.NO_ATTENDANCE",
+  NO_RATE: "payroll.recon.flag.NO_RATE",
+  OPEN_SHIFT: "payroll.recon.flag.OPEN_SHIFT",
+  MANUAL_ITEMS: "payroll.recon.flag.MANUAL_ITEMS",
+  ADJUSTMENT: "payroll.recon.flag.ADJUSTMENT",
+  DRAFT: "payroll.recon.flag.DRAFT",
+  PUBLISHED: "payroll.recon.flag.PUBLISHED",
+};
+
+const DEMO_STATUS_KEYS: Record<string, MessageKey> = {
+  ACTIVE: "payroll.demo.status.ACTIVE",
+  ARCHIVED: "payroll.demo.status.ARCHIVED",
+};
+
+const FLAG_BADGES: Record<string, string> = {
+  STALE: "border-amber-200 bg-amber-50 text-amber-700",
+  MISSING_PAYSLIP: "border-rose-200 bg-rose-50 text-rose-700",
+  WOULD_REMOVE: "border-rose-200 bg-rose-50 text-rose-700",
+  ADJUSTMENT: "border-primary/30 bg-blue-50 text-primary",
+  DRAFT: "border-amber-200 bg-amber-50 text-amber-700",
+  PUBLISHED: "border-emerald-200 bg-emerald-50 text-emerald-700",
+};
+
 /** `minutes` as the hours a reader expects, one decimal at most (`4,5 giờ`) — the API speaks minutes. */
 function hoursValue(minutes: number): number {
   return Math.round((minutes / 60) * 10) / 10;
@@ -148,7 +190,9 @@ export default function PayrollPage() {
   const [notices, setNotices] = useState<Notice[]>([]);
   const [busy, setBusy] = useState(false);
 
-  const [tab, setTab] = useState<"payslips" | "rates">("payslips");
+  const [tab, setTab] = useState<"payslips" | "rates" | "recon" | "demo">(
+    "payslips",
+  );
   const [detailId, setDetailId] = useState<string | null>(null);
   const [detail, setDetail] = useState<PayslipDetail | null>(null);
   const [rateTarget, setRateTarget] = useState<PayRateTarget | null>(null);
@@ -157,6 +201,20 @@ export default function PayrollPage() {
   const [disputeNote, setDisputeNote] = useState("");
   /** SCRUM-93: what the owner typed into "Lương thực nhận"; seeded from the payslip's current net. */
   const [netDraft, setNetDraft] = useState("");
+
+  /** SCRUM-99: the resync dialog and the reconciliation of the open month. */
+  const [syncOpen, setSyncOpen] = useState(false);
+  const [recon, setRecon] = useState<PayrollReconciliation | null>(null);
+  const [reconFailure, setReconFailure] = useState<RequestFailure | null>(null);
+
+  /** SCRUM-100: the trial-salary catalogue and its monitoring figure. */
+  const [demoRows, setDemoRows] = useState<DemoPaySalary[] | null>(null);
+  const [demoSummary, setDemoSummary] = useState<DemoPaySummary | null>(null);
+  const [demoFailure, setDemoFailure] = useState<RequestFailure | null>(null);
+  /** `undefined` = closed, `null` = the add form, a row = edit that row. */
+  const [demoTarget, setDemoTarget] = useState<
+    DemoPaySalary | null | undefined
+  >(undefined);
 
   /**
    * One request per thing the month needs, all at once so the table, the KPIs and the estimate describe the
@@ -231,6 +289,79 @@ export default function PayrollPage() {
       cancelled = true;
     };
   }, [month, reloadToken, readsDirectory]);
+
+  /**
+   * The two owner-only tabs load **lazily**, on the tab that needs them. A database that has not run
+   * SCRUM-99/SCRUM-100 must still render the payslips tab, and an employee never asks for either. Each failure
+   * is kept per tab so a missing script shows its own banner instead of taking the screen down.
+   *
+   * `setState` happens only inside the promise callbacks — React 19's `set-state-in-effect` rule fails a
+   * synchronous one in the effect body (the same reason the load above is written this way).
+   */
+  useEffect(() => {
+    if (!managesPayroll) {
+      return;
+    }
+
+    let cancelled = false;
+
+    const request = (path: string): Promise<Response | null> =>
+      fetch(path).catch(() => null);
+
+    if (tab === "recon") {
+      request(`/api/payroll/reconciliation?month=${month}`).then(
+        async (response) => {
+          if (cancelled) {
+            return;
+          }
+
+          if (!response?.ok) {
+            setReconFailure(
+              response ? await failureOf(response) : { status: 500 },
+            );
+            setRecon(null);
+            return;
+          }
+
+          setReconFailure(null);
+          setRecon((await response.json()) as PayrollReconciliation);
+        },
+      );
+    }
+
+    if (tab === "demo") {
+      Promise.all([
+        request("/api/payroll/demo-salaries"),
+        request("/api/payroll/demo-salaries/summary"),
+      ]).then(async ([rowsResponse, summaryResponse]) => {
+        if (cancelled) {
+          return;
+        }
+
+        if (!rowsResponse?.ok) {
+          setDemoFailure(
+            rowsResponse ? await failureOf(rowsResponse) : { status: 500 },
+          );
+          setDemoRows(null);
+          setDemoSummary(null);
+          return;
+        }
+
+        // The summary only feeds the KPI strip; losing it must not hide the table.
+        setDemoFailure(null);
+        setDemoRows((await rowsResponse.json()) as DemoPaySalary[]);
+        setDemoSummary(
+          summaryResponse?.ok
+            ? ((await summaryResponse.json()) as DemoPaySummary)
+            : null,
+        );
+      });
+    }
+
+    return () => {
+      cancelled = true;
+    };
+  }, [tab, month, reloadToken, managesPayroll]);
 
   /** Stale data from another month must not be read as this month's numbers. */
   const loading = data === null || data.month !== month;
@@ -457,6 +588,70 @@ export default function PayrollPage() {
       },
     ]);
     refresh();
+  }
+
+  /** SCRUM-99: the dialog already wrote; the page only reports how many payslips moved and reloads. */
+  function handleSyncApplied(changed: number) {
+    setNotices([
+      changed > 0
+        ? { key: "payroll.sync.done", params: { count: changed } }
+        : { key: "payroll.sync.doneNone" },
+    ]);
+    refresh();
+  }
+
+  /** SCRUM-99: one row's own resync — the same endpoint with `employeeId`, so there is no second write path. */
+  async function handleRowSync(employeeId: string) {
+    setBusy(true);
+    resetMessages();
+
+    try {
+      const response = await fetch("/api/payroll/sync", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ month, apply: true, employeeId }),
+      });
+
+      if (!response.ok) {
+        setActionFailure(await failureOf(response));
+        return;
+      }
+
+      const result = (await response.json()) as PayrollSyncResult;
+
+      setNotices([
+        result.changed > 0
+          ? { key: "payroll.sync.done", params: { count: result.changed } }
+          : { key: "payroll.sync.doneNone" },
+      ]);
+      refresh();
+    } catch {
+      setActionFailure({ status: 500 });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  /** SCRUM-100: one notice per outcome, then a reload so the table and the KPI strip describe the same rows. */
+  function handleDemoSaved(event: DemoSalarySavedEvent) {
+    setNotices([
+      {
+        key:
+          event === "created"
+            ? "payroll.demo.notice.created"
+            : event === "updated"
+              ? "payroll.demo.notice.updated"
+              : event === "archived"
+                ? "payroll.demo.notice.archived"
+                : "payroll.demo.notice.removed",
+      },
+    ]);
+    refresh();
+  }
+
+  function openDemo(target: DemoPaySalary | null) {
+    resetMessages();
+    setDemoTarget(target);
   }
 
   /**
@@ -808,6 +1003,16 @@ export default function PayrollPage() {
                 <Wallet className="h-4 w-4" />
                 {t("payroll.action.publish")}
               </button>
+              {/* SCRUM-99: opens on a dry run, so the reader sees the diff before anything is written. */}
+              <button
+                type="button"
+                onClick={() => setSyncOpen(true)}
+                disabled={busy}
+                className="inline-flex items-center gap-2 rounded-xl border border-slate-200/80 bg-surface px-3 py-2 text-sm font-medium text-slate-600 hover:bg-surface-muted disabled:opacity-60"
+              >
+                <RefreshCw className="h-4 w-4" />
+                {t("payroll.sync.action")}
+              </button>
             </>
           )}
         </div>
@@ -938,6 +1143,28 @@ export default function PayrollPage() {
             }`}
           >
             {t("payroll.tab.rates")}
+          </button>
+          <button
+            type="button"
+            onClick={() => setTab("recon")}
+            className={`rounded-xl px-3 py-2 text-sm font-medium ${
+              tab === "recon"
+                ? "bg-primary text-white"
+                : "border border-slate-200/80 bg-surface text-slate-600 hover:bg-surface-muted"
+            }`}
+          >
+            {t("payroll.tab.recon")}
+          </button>
+          <button
+            type="button"
+            onClick={() => setTab("demo")}
+            className={`rounded-xl px-3 py-2 text-sm font-medium ${
+              tab === "demo"
+                ? "bg-primary text-white"
+                : "border border-slate-200/80 bg-surface text-slate-600 hover:bg-surface-muted"
+            }`}
+          >
+            {t("payroll.tab.demo")}
           </button>
         </div>
       )}
@@ -1198,6 +1425,420 @@ export default function PayrollPage() {
         </section>
       )}
 
+      {tab === "recon" && managesPayroll && (
+        <section className="flex flex-col gap-4">
+          <div className="flex flex-wrap items-start justify-between gap-2">
+            <div>
+              <h2 className="text-sm font-semibold text-slate-900">
+                {t("payroll.recon.title")}
+              </h2>
+              <p className="mt-1 max-w-3xl text-xs text-slate-500">
+                {t("payroll.recon.subtitle")}
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setSyncOpen(true)}
+              disabled={busy}
+              className="inline-flex min-h-10 items-center gap-2 rounded-xl border border-primary/30 bg-blue-50 px-3 text-sm font-medium text-primary hover:bg-blue-100 disabled:opacity-60"
+            >
+              <RefreshCw className="h-4 w-4" />
+              {t("payroll.sync.action")}
+            </button>
+          </div>
+
+          {reconFailure && (
+            <div
+              role="alert"
+              className="flex items-start gap-2 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700"
+            >
+              <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0" />
+              <span>{t("payroll.recon.loadFailed")}</span>
+            </div>
+          )}
+
+          {!recon && !reconFailure && (
+            <div className="flex items-center gap-2 rounded-2xl border border-slate-200/80 bg-surface px-4 py-10 text-sm text-slate-500">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              {t("payroll.loading")}
+            </div>
+          )}
+
+          {recon && (
+            <>
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                <Metric
+                  icon={RefreshCw}
+                  label={t("payroll.recon.kpi.needs")}
+                  value={formatNumber(recon.summary.needs_sync, locale)}
+                  hint={t("payroll.recon.kpi.needsHint")}
+                />
+                <Metric
+                  icon={CircleDollarSign}
+                  label={t("payroll.recon.kpi.delta")}
+                  value={formatCurrency(recon.summary.delta_total, locale)}
+                  hint={t("payroll.recon.kpi.deltaHint")}
+                />
+                <Metric
+                  icon={Clock3}
+                  label={t("payroll.recon.kpi.missingRate")}
+                  value={formatNumber(recon.summary.missing_rates, locale)}
+                  hint={t("payroll.recon.kpi.missingRateHint")}
+                />
+                <Metric
+                  icon={Receipt}
+                  label={t("payroll.recon.kpi.openShift")}
+                  value={formatNumber(recon.summary.open_shifts, locale)}
+                  hint={t("payroll.recon.kpi.openShiftHint")}
+                />
+              </div>
+
+              <section className="overflow-hidden rounded-2xl border border-slate-200/80 bg-surface">
+                {recon.rows.length === 0 ? (
+                  <div className="px-4 py-10 text-center">
+                    <Banknote className="mx-auto h-8 w-8 text-slate-300" />
+                    <p className="mt-2 text-sm text-slate-600">
+                      {t("payroll.recon.empty")}
+                    </p>
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="min-w-full text-sm">
+                      <thead className="bg-surface-muted text-left text-xs uppercase tracking-wide text-slate-500">
+                        <tr>
+                          <th className="whitespace-nowrap px-4 py-3 font-medium">
+                            {t("payroll.recon.column.employee")}
+                          </th>
+                          <th className="whitespace-nowrap px-4 py-3 font-medium">
+                            {t("payroll.recon.column.status")}
+                          </th>
+                          <th className="whitespace-nowrap px-4 py-3 text-right font-medium">
+                            {t("payroll.recon.column.hours")}
+                          </th>
+                          <th className="whitespace-nowrap px-4 py-3 text-right font-medium">
+                            {t("payroll.recon.column.work")}
+                          </th>
+                          <th className="whitespace-nowrap px-4 py-3 text-right font-medium">
+                            {t("payroll.recon.column.allowance")}
+                          </th>
+                          <th className="whitespace-nowrap px-4 py-3 text-right font-medium">
+                            {t("payroll.recon.column.manual")}
+                          </th>
+                          <th className="whitespace-nowrap px-4 py-3 text-right font-medium">
+                            {t("payroll.recon.column.net")}
+                          </th>
+                          <th className="whitespace-nowrap px-4 py-3 text-right font-medium">
+                            {t("payroll.recon.column.delta")}
+                          </th>
+                          <th className="whitespace-nowrap px-4 py-3 text-right font-medium">
+                            {t("payroll.recon.column.actions")}
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {recon.rows.map((row) => (
+                          <tr
+                            key={row.employee_id}
+                            className="hover:bg-surface-muted/60"
+                          >
+                            <td className="px-4 py-3">
+                              <p className="font-medium text-slate-900">
+                                {row.full_name ??
+                                  `#${row.employee_id.slice(0, 8)}`}
+                              </p>
+                              <p className="text-xs text-slate-500">
+                                {branchNameOf(row.branch_id)}
+                              </p>
+                              <div className="mt-1 flex flex-wrap gap-1">
+                                {row.flags.length === 0 && (
+                                  <span className="text-[10px] text-slate-400">
+                                    {t("payroll.recon.noFlag")}
+                                  </span>
+                                )}
+                                {row.flags.map((flag) => (
+                                  <span
+                                    key={flag}
+                                    className={`whitespace-nowrap rounded-full border px-1.5 py-0.5 text-[10px] font-medium ${
+                                      FLAG_BADGES[flag] ??
+                                      "border-slate-200 bg-slate-50 text-slate-600"
+                                    }`}
+                                  >
+                                    {FLAG_KEYS[flag] ? t(FLAG_KEYS[flag]) : flag}
+                                  </span>
+                                ))}
+                              </div>
+                            </td>
+                            <td className="px-4 py-3">
+                              {row.status === "DRAFT" ||
+                              row.status === "PUBLISHED" ? (
+                                <span
+                                  className={`whitespace-nowrap rounded-full border px-2 py-0.5 text-xs font-medium ${STATUS_BADGES[row.status]}`}
+                                >
+                                  {payslipStatusLabel(row.status, t)}
+                                </span>
+                              ) : (
+                                <span className="whitespace-nowrap text-xs text-slate-400">
+                                  —
+                                </span>
+                              )}
+                            </td>
+                            <td className="whitespace-nowrap px-4 py-3 text-right text-slate-700">
+                              {t("payroll.hoursValue", {
+                                hours: formatNumber(
+                                  hoursValue(
+                                    row.regular_minutes + row.overtime_minutes,
+                                  ),
+                                  locale,
+                                ),
+                              })}
+                            </td>
+                            <td className="whitespace-nowrap px-4 py-3 text-right text-slate-700">
+                              {formatCurrency(row.computed_work_amount, locale)}
+                              {row.stored_work_amount !==
+                                row.computed_work_amount && (
+                                <span className="block text-[10px] text-amber-700">
+                                  {formatCurrency(row.stored_work_amount, locale)}
+                                </span>
+                              )}
+                            </td>
+                            <td className="whitespace-nowrap px-4 py-3 text-right text-slate-700">
+                              {formatCurrency(row.computed_allowance, locale)}
+                            </td>
+                            <td className="whitespace-nowrap px-4 py-3 text-right text-slate-700">
+                              {formatCurrency(
+                                row.manual_earning - row.manual_deduction,
+                                locale,
+                              )}
+                            </td>
+                            <td className="whitespace-nowrap px-4 py-3 text-right font-semibold text-slate-900">
+                              {formatCurrency(row.computed_net, locale)}
+                              {row.stored_net !== row.computed_net && (
+                                <span className="block text-[10px] font-normal text-amber-700">
+                                  {formatCurrency(row.stored_net, locale)}
+                                </span>
+                              )}
+                            </td>
+                            <td
+                              className={`whitespace-nowrap px-4 py-3 text-right font-medium ${
+                                row.delta === 0
+                                  ? "text-slate-400"
+                                  : row.delta > 0
+                                    ? "text-emerald-700"
+                                    : "text-rose-700"
+                              }`}
+                            >
+                              {formatCurrency(row.delta, locale)}
+                            </td>
+                            <td className="px-4 py-3 text-right">
+                              {needsPayrollSync(row) ? (
+                                <button
+                                  type="button"
+                                  onClick={() => handleRowSync(row.employee_id)}
+                                  disabled={busy}
+                                  className="min-h-10 whitespace-nowrap rounded-lg border border-slate-200/80 px-3 text-xs font-medium text-slate-600 hover:bg-surface-muted disabled:opacity-60"
+                                >
+                                  {t("payroll.recon.rowSync")}
+                                </button>
+                              ) : (
+                                <span className="text-xs text-slate-400">—</span>
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </section>
+            </>
+          )}
+        </section>
+      )}
+
+      {tab === "demo" && managesPayroll && (
+        <section className="flex flex-col gap-4">
+          <div className="flex flex-wrap items-start justify-between gap-2">
+            <div>
+              <div className="flex flex-wrap items-center gap-2">
+                <h2 className="text-sm font-semibold text-slate-900">
+                  {t("payroll.tab.demo")}
+                </h2>
+                <span className="rounded-full border border-amber-300 bg-amber-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-800">
+                  {t("payroll.demo.chip")}
+                </span>
+              </div>
+              <p className="mt-1 max-w-3xl text-xs text-slate-500">
+                {t("payroll.demo.subtitle")}
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => openDemo(null)}
+              className="inline-flex min-h-10 items-center gap-2 rounded-xl border border-primary/30 bg-blue-50 px-3 text-sm font-medium text-primary hover:bg-blue-100"
+            >
+              <Plus className="h-4 w-4" />
+              {t("payroll.demo.add")}
+            </button>
+          </div>
+
+          {/* The one sentence that keeps a simulation from being read as a payout. */}
+          <p className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+            {t("payroll.demo.banner")}
+          </p>
+
+          {demoFailure && (
+            <div
+              role="alert"
+              className="flex items-start gap-2 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700"
+            >
+              <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0" />
+              <span>{t("payroll.demo.loadFailed")}</span>
+            </div>
+          )}
+
+          {demoRows === null && !demoFailure && (
+            <div className="flex items-center gap-2 rounded-2xl border border-slate-200/80 bg-surface px-4 py-10 text-sm text-slate-500">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              {t("payroll.loading")}
+            </div>
+          )}
+
+          {demoRows && (
+            <>
+              <div className="grid gap-3 sm:grid-cols-3">
+                <Metric
+                  icon={Receipt}
+                  label={t("payroll.demo.kpi.records")}
+                  value={formatNumber(demoSummary?.active_records ?? 0, locale)}
+                  hint={
+                    demoSummary
+                      ? t("payroll.demo.kpi.recordsHint", {
+                          count: demoSummary.archived_records,
+                        })
+                      : undefined
+                  }
+                />
+                <Metric
+                  icon={CircleDollarSign}
+                  label={t("payroll.demo.kpi.gross")}
+                  value={formatCurrency(demoSummary?.gross_total ?? 0, locale)}
+                />
+                <Metric
+                  icon={Wallet}
+                  label={t("payroll.demo.kpi.net")}
+                  value={formatCurrency(demoSummary?.net_total ?? 0, locale)}
+                  hint={t("payroll.demo.excluded")}
+                />
+              </div>
+
+              <section className="overflow-hidden rounded-2xl border border-slate-200/80 bg-surface">
+                {demoRows.length === 0 ? (
+                  <div className="px-4 py-10 text-center">
+                    <Banknote className="mx-auto h-8 w-8 text-slate-300" />
+                    <p className="mt-2 text-sm font-medium text-slate-700">
+                      {t("payroll.demo.empty")}
+                    </p>
+                    <p className="mt-1 text-sm text-slate-500">
+                      {t("payroll.demo.emptyHint")}
+                    </p>
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="min-w-full text-sm">
+                      <thead className="bg-surface-muted text-left text-xs uppercase tracking-wide text-slate-500">
+                        <tr>
+                          <th className="whitespace-nowrap px-4 py-3 font-medium">
+                            {t("payroll.demo.column.position")}
+                          </th>
+                          <th className="whitespace-nowrap px-4 py-3 text-right font-medium">
+                            {t("payroll.demo.column.hourly")}
+                          </th>
+                          <th className="whitespace-nowrap px-4 py-3 text-right font-medium">
+                            {t("payroll.demo.column.hours")}
+                          </th>
+                          <th className="whitespace-nowrap px-4 py-3 text-right font-medium">
+                            {t("payroll.demo.column.allowance")}
+                          </th>
+                          <th className="whitespace-nowrap px-4 py-3 text-right font-medium">
+                            {t("payroll.demo.column.gross")}
+                          </th>
+                          <th className="whitespace-nowrap px-4 py-3 text-right font-medium">
+                            {t("payroll.demo.column.net")}
+                          </th>
+                          <th className="whitespace-nowrap px-4 py-3 font-medium">
+                            {t("payroll.demo.column.effectiveFrom")}
+                          </th>
+                          <th className="whitespace-nowrap px-4 py-3 font-medium">
+                            {t("payroll.demo.column.status")}
+                          </th>
+                          <th className="whitespace-nowrap px-4 py-3 text-right font-medium">
+                            {t("payroll.demo.column.actions")}
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {demoRows.map((row) => (
+                          <tr key={row.id} className="hover:bg-surface-muted/60">
+                            <td className="px-4 py-3">
+                              <p className="font-medium text-slate-900">
+                                {row.position_title}
+                              </p>
+                              <span className="mt-1 inline-flex rounded-full border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-700">
+                                {t("payroll.demo.chip")}
+                              </span>
+                            </td>
+                            <td className="whitespace-nowrap px-4 py-3 text-right text-slate-700">
+                              {formatCurrency(row.hourly_rate, locale)}
+                            </td>
+                            <td className="whitespace-nowrap px-4 py-3 text-right text-slate-700">
+                              {formatNumber(row.monthly_hours, locale)}
+                            </td>
+                            <td className="whitespace-nowrap px-4 py-3 text-right text-slate-700">
+                              {formatCurrency(row.allowance_amount, locale)}
+                            </td>
+                            <td className="whitespace-nowrap px-4 py-3 text-right text-slate-700">
+                              {formatCurrency(row.gross_amount, locale)}
+                            </td>
+                            <td className="whitespace-nowrap px-4 py-3 text-right font-semibold text-slate-900">
+                              {formatCurrency(row.net_amount, locale)}
+                            </td>
+                            <td className="whitespace-nowrap px-4 py-3 text-slate-600">
+                              {formatDate(row.effective_from, locale)}
+                            </td>
+                            <td className="px-4 py-3">
+                              <span
+                                className={`whitespace-nowrap rounded-full border px-2 py-0.5 text-xs font-medium ${
+                                  row.status === "ACTIVE"
+                                    ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                                    : "border-slate-200 bg-slate-100 text-slate-600"
+                                }`}
+                              >
+                                {DEMO_STATUS_KEYS[row.status]
+                                  ? t(DEMO_STATUS_KEYS[row.status])
+                                  : row.status}
+                              </span>
+                            </td>
+                            <td className="px-4 py-3 text-right">
+                              <button
+                                type="button"
+                                onClick={() => openDemo(row)}
+                                className="min-h-10 whitespace-nowrap rounded-lg border border-slate-200/80 px-3 text-xs font-medium text-slate-600 hover:bg-surface-muted"
+                              >
+                                {t("payroll.demo.rowEdit")}
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </section>
+            </>
+          )}
+        </section>
+      )}
+
       {rateTarget && (
         <PayRateDialog
           target={rateTarget}
@@ -1206,6 +1847,24 @@ export default function PayrollPage() {
           )}
           onClose={() => setRateTarget(null)}
           onSaved={handleRateSaved}
+        />
+      )}
+
+      {syncOpen && (
+        <PayrollSyncDialog
+          month={month}
+          monthLabel={payrollMonthLabel(month)}
+          nameOf={employeeName}
+          onClose={() => setSyncOpen(false)}
+          onApplied={handleSyncApplied}
+        />
+      )}
+
+      {demoTarget !== undefined && (
+        <DemoSalaryDialog
+          target={demoTarget}
+          onClose={() => setDemoTarget(undefined)}
+          onSaved={handleDemoSaved}
         />
       )}
 

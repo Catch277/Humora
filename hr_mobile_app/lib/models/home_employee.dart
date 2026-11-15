@@ -1,10 +1,14 @@
 import 'dart:async';
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:intl/intl.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../core/app_colors.dart';
-import '../services/attendance_api.dart';
+import '../data/services/api_error.dart';
+import '../data/services/attendance_service.dart';
 import '../widgets/bottom_nav_bar.dart';
 import '../widgets/employee_home/home_header.dart';
 import '../widgets/employee_home/checkin_card.dart';
@@ -34,7 +38,7 @@ class _HomeEmployeeScreenState extends State<HomeEmployeeScreen> with WidgetsBin
   Timer? _timer;
   DateTime _currentTime = DateTime.now();
 
-  final AttendanceApi _api = AttendanceApi();
+  final AttendanceService _attendance = AttendanceService();
 
   // Trạng thái chấm công (lấy từ server qua /today)
   bool _isCheckedIn = false;
@@ -42,6 +46,7 @@ class _HomeEmployeeScreenState extends State<HomeEmployeeScreen> with WidgetsBin
   String? _shiftId; // ca đang chờ chấm vào, hoặc ca đang mở
   bool _busy = false;
   bool _completedToday = false; // đã vào và ra hết các ca hôm nay
+  String? _reopenShiftId; // ca đã chấm ra nhưng chưa hết giờ: lần bấm tới là "vào ca lại"
   bool _success = false; // bật vài giây để hiện dấu tích sau khi chấm công thành công
   GpsState _gps = GpsState.checking;
   Timer? _successTimer;
@@ -127,48 +132,85 @@ class _HomeEmployeeScreenState extends State<HomeEmployeeScreen> with WidgetsBin
     return TimeOfDay(hour: h, minute: m);
   }
 
-  String _fmtTime(dynamic iso) =>
-      DateFormat('hh:mm a').format(DateTime.parse(iso as String).toLocal());
+  /// Ca đã hết giờ chưa — cùng mốc với `isShiftStillRunning` của web và `attendance_clock_in`
+  /// (SCRUM-96): chỉ ca chưa tan mới được "vào ca lại". Ca không có giờ (mẫu `Nghỉ`) coi như đã tan.
+  bool _shiftHasEnded(TodayAssignment? assignment) {
+    final start = _parseHm(assignment?.start);
+    final end = _parseHm(assignment?.end);
+    if (end == null) return true;
+
+    final now = DateTime.now();
+    var endAt = DateTime(now.year, now.month, now.day, end.hour, end.minute);
+    // Ca qua đêm: giờ kết thúc nhỏ hơn giờ bắt đầu thì kết thúc nằm ở ngày hôm sau.
+    if (start != null &&
+        end.hour * 60 + end.minute <= start.hour * 60 + start.minute) {
+      endAt = endAt.add(const Duration(days: 1));
+    }
+    return !now.isBefore(endAt);
+  }
+
+  /// Giờ trên thẻ ca, theo giờ máy (ví dụ "08:31 AM") — giữ nguyên định dạng màn hình đang dùng.
+  String _fmtTimeOf(DateTime? at) =>
+      at == null ? '--:--' : DateFormat('hh:mm a').format(at.toLocal());
 
   Future<void> _loadToday() async {
     try {
-      final data = await _api.today();
-      final assignments = (data['assignments'] as List)
-          .map((e) => Map<String, dynamic>.from(e as Map))
-          .toList();
-      final attendance = (data['attendance'] as List)
-          .map((e) => Map<String, dynamic>.from(e as Map))
-          .toList();
+      final snapshot = await _attendance.today();
+      final open = snapshot.attendance.where((a) => a.isOpen).firstOrNull;
 
-      final open = attendance
-          .where((a) => a['check_in_at'] != null && a['check_out_at'] == null)
-          .firstOrNull;
-      final doneIds = attendance.map((a) => a['shift_id']).toSet();
+      // Một ca đã chấm ra vẫn mở lại được ("Vào ca lại", SCRUM-96) chừng nào ca chưa hết giờ,
+      // nên chỉ ca đã tan mới bị loại khỏi danh sách chờ vào ca.
+      final assignmentByShift = {
+        for (final a in snapshot.assignments) a.shiftId: a,
+      };
+      final closedIds = snapshot.attendance
+          .where((a) =>
+              a.checkOutAt != null &&
+              _shiftHasEnded(assignmentByShift[a.shiftId]))
+          .map((a) => a.shiftId)
+          .toSet();
 
-      final Map<String, dynamic>? target = open != null
-          ? assignments.where((a) => a['shift_id'] == open['shift_id']).firstOrNull
-          : assignments.where((a) => !doneIds.contains(a['shift_id'])).firstOrNull;
+      final TodayAssignment? target = open != null
+          ? assignmentByShift[open.shiftId]
+          : snapshot.assignments
+              .where((a) => !closedIds.contains(a.shiftId))
+              .firstOrNull;
+
+      // Ca đang là "ca chờ" mà đã có dòng chấm công đóng lại: lần bấm tới sẽ vào ca lại, giờ vào
+      // cũ được giữ nguyên (hàm SQL chỉ xoá các cột giờ ra).
+      String? reopenShiftId;
+      if (target != null) {
+        final closed = snapshot.attendance
+            .any((a) => a.shiftId == target.shiftId && a.checkOutAt != null);
+        if (closed) reopenShiftId = target.shiftId;
+      }
 
       if (!mounted) return;
       setState(() {
-        _completedToday = open == null && target == null && attendance.isNotEmpty;
+        final completed =
+            open == null && target == null && snapshot.attendance.isNotEmpty;
+        _completedToday = completed;
         _isCheckedIn = open != null;
-        _checkInTime = open != null ? _fmtTime(open['check_in_at']) : '--:--';
-        _shiftId = (open ?? target)?['shift_id'] as String?;
-        final start = _parseHm(target?['start_time'] as String?);
+        _checkInTime = _fmtTimeOf(open?.checkInAt);
+        _shiftId = open?.shiftId ?? target?.shiftId;
+        _reopenShiftId = reopenShiftId;
+
+        final start = _parseHm(target?.start);
         if (start != null) _shiftStart = start;
-        final name = (target?['shift_name'] ?? target?['name'])?.toString();
-        final st = target?['start_time']?.toString();
-        final en = target?['end_time']?.toString();
-        String hm(String? t) => (t != null && t.length >= 5) ? t.substring(0, 5) : '';
-        if (target == null && open == null) {
-          _shiftLabel = _completedToday ? 'Đã hoàn tất các ca hôm nay' : 'Hôm nay không có ca';
-        } else if (name != null && name.isNotEmpty) {
-          _shiftLabel = (st != null && en != null) ? '$name (${hm(st)} - ${hm(en)})' : name;
-        } else if (st != null && en != null) {
-          _shiftLabel = 'Ca ${hm(st)} - ${hm(en)}';
-        } else {
+
+        final name = target?.name ?? '';
+        final st = target?.start;
+        final en = target?.end;
+        if (target != null && name.isNotEmpty) {
+          _shiftLabel = (st != null && en != null) ? '$name ($st - $en)' : name;
+        } else if (target != null && st != null && en != null) {
+          _shiftLabel = 'Ca $st - $en';
+        } else if (target != null || open != null) {
+          // Ca chưa đủ dữ liệu, hoặc dòng công đang mở mà ca đã bị xoá khỏi lịch.
           _shiftLabel = 'Ca làm việc';
+        } else {
+          _shiftLabel =
+              completed ? 'Đã hoàn tất các ca hôm nay' : 'Hôm nay không có ca';
         }
       });
     } catch (e) {
@@ -224,10 +266,13 @@ class _HomeEmployeeScreenState extends State<HomeEmployeeScreen> with WidgetsBin
 
   void _showError(Object e) {
     final String text;
-    if (e is ApiException) {
+    if (e is AppException) {
+      // Lỗi đã được dịch sẵn ở `data/services` (chấm công, bảng công, khiếu nại).
       text = e.message;
     } else if (e is _LocationException) {
       text = e.message;
+    } else if (e is PostgrestException) {
+      text = toAppException(e).message;
     } else {
       text = 'Không kết nối được máy chủ. Kiểm tra mạng rồi thử lại.';
     }
@@ -277,31 +322,50 @@ class _HomeEmployeeScreenState extends State<HomeEmployeeScreen> with WidgetsBin
         builder: (context) => CameraCheckInScreen(isCheckingIn: checkingIn),
       ),
     );
-    if (result == null || result is! Map<String, String>) return;
+    if (result == null || result is! Map<String, dynamic>) return;
     if (!mounted) return;
 
-    final ip = result['ip'] ?? '';
+    final ip = (result['ip'] ?? '').toString();
+    final photo = result['bytes'] is Uint8List ? result['bytes'] as Uint8List : null;
     setState(() => _busy = true);
 
     try {
       final pos = await _getPosition();
-      final Map<String, dynamic> r = checkingIn
-          ? await _api.checkIn(_shiftId!, pos.latitude, pos.longitude)
-          : await _api.checkOut(pos.latitude, pos.longitude);
+      final clock = checkingIn
+          ? await _attendance.checkIn(
+              _shiftId!,
+              pos.latitude,
+              pos.longitude,
+              photoBytes: photo,
+            )
+          : await _attendance.checkOut(
+              pos.latitude,
+              pos.longitude,
+              photoBytes: photo,
+            );
 
-      final status = r['status'] as String?;
+      final status = clock.status;
       if (checkingIn) {
-        final time = _fmtTime(r['check_in_at']);
-        final isLate = status == 'LATE';
-        _showSnack(
-          'Vào ca thành công lúc $time (${isLate ? 'Trễ' : 'Đúng giờ'}) - IP: $ip',
-          color: isLate ? Colors.deepOrange : const Color(0xFF10B981),
-          icon: isLate
-              ? Icons.warning_amber_rounded
-              : Icons.check_circle_outline,
-        );
+        final time = _fmtTimeOf(clock.checkInAt);
+        if (_reopenShiftId != null && _reopenShiftId == clock.shiftId) {
+          // "Vào ca lại": hàm SQL giữ nguyên giờ vào cũ, chỉ mở lại dòng công.
+          _showSnack(
+            'Đã vào ca lại lúc $time (giờ vào giữ nguyên) - IP: $ip',
+            color: Colors.blueAccent,
+            icon: Icons.refresh_rounded,
+          );
+        } else {
+          final isLate = status == 'LATE';
+          _showSnack(
+            'Vào ca thành công lúc $time (${isLate ? 'Trễ' : 'Đúng giờ'}) - IP: $ip',
+            color: isLate ? Colors.deepOrange : const Color(0xFF10B981),
+            icon: isLate
+                ? Icons.warning_amber_rounded
+                : Icons.check_circle_outline,
+          );
+        }
       } else {
-        final time = _fmtTime(r['check_out_at']);
+        final time = _fmtTimeOf(clock.checkOutAt);
         final early = status == 'EARLY_LEAVE';
         _showSnack(
           'Ra ca thành công lúc $time${early ? ' (Về sớm)' : ''}! - IP: $ip',

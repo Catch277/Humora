@@ -14,6 +14,18 @@ export function getBusinessDay(now: Date): string {
   }).format(now);
 }
 
+/**
+ * Today in Asia/Bangkok as `YYYY-MM-DD` — the CRM's "today" (SCRUM-101/102).
+ *
+ * A contract's expiry, a maintenance due date and the reminder queue are all business days, so they must
+ * be compared against the same calendar the SQL functions use (`(now() at time zone 'Asia/Bangkok')::date`).
+ * The server clock in UTC is the previous day between 00:00 and 07:00 local time.
+ */
+export function businessToday(now: Date = new Date()): string {
+  return getBusinessDay(now);
+}
+
+
 export function getBusinessDayRange(now: Date): { start: Date; end: Date } {
   const parts = new Intl.DateTimeFormat("en-US", {
     timeZone: BUSINESS_TIME_ZONE,

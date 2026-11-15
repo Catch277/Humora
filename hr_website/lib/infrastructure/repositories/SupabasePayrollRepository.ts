@@ -8,6 +8,16 @@ import type { PayslipDetail } from "@/lib/domain/entities/PayslipDetail";
 import type { AddPayslipItemInput, PayslipItem } from "@/lib/domain/entities/PayslipItem";
 import type { PayslipWorkLine } from "@/lib/domain/entities/PayslipWorkLine";
 import type {
+  PayrollReconciliationRow,
+  PayrollSyncOptions,
+  PayrollSyncResult,
+} from "@/lib/domain/entities/PayrollReconciliation";
+import {
+  summariseReconciliation,
+  summariseSync,
+  type PayrollReconciliation,
+} from "@/lib/domain/entities/PayrollReconciliation";
+import type {
   Payslip,
   PayslipFilters,
   PayslipStatus,
@@ -120,6 +130,75 @@ type PayEstimateRow = {
   allowance_amount: Numeric;
   gross_estimate: Numeric;
 };
+
+/**
+ * One row of `payroll_reconcile` (SCRUM-99). Every money/counter column is `bigint`/`integer`, so PostgREST
+ * hands it back as a string; `flags` is a `text[]` and arrives as a JSON array (or `null` for no flags).
+ */
+type ReconcileRow = {
+  employee_id: string;
+  full_name: string | null;
+  branch_id: string | null;
+  payslip_id: string | null;
+  status: string | null;
+  stored_work_amount: Numeric;
+  computed_work_amount: Numeric;
+  stored_allowance: Numeric;
+  computed_allowance: Numeric;
+  manual_earning: Numeric;
+  manual_deduction: Numeric;
+  adjustment_amount: Numeric;
+  stored_net: Numeric;
+  computed_net: Numeric;
+  delta: Numeric;
+  shifts_counted: Numeric;
+  shifts_skipped: Numeric;
+  computed_counted: Numeric;
+  computed_skipped: Numeric;
+  regular_minutes: Numeric;
+  overtime_minutes: Numeric;
+  open_shifts: Numeric;
+  flags: string[] | null;
+};
+
+/** One row of `payroll_sync`. */
+type SyncRow = {
+  employee_id: string;
+  action: string;
+  reason: string;
+  before_net: Numeric;
+  after_net: Numeric;
+  delta: Numeric;
+};
+
+function toReconcileRow(row: ReconcileRow): PayrollReconciliationRow {
+  return {
+    employee_id: row.employee_id,
+    full_name: row.full_name,
+    branch_id: row.branch_id,
+    payslip_id: row.payslip_id,
+    status: row.status,
+    stored_work_amount: Number(row.stored_work_amount),
+    computed_work_amount: Number(row.computed_work_amount),
+    stored_allowance: Number(row.stored_allowance),
+    computed_allowance: Number(row.computed_allowance),
+    manual_earning: Number(row.manual_earning),
+    manual_deduction: Number(row.manual_deduction),
+    adjustment_amount: Number(row.adjustment_amount),
+    stored_net: Number(row.stored_net),
+    computed_net: Number(row.computed_net),
+    delta: Number(row.delta),
+    shifts_counted: Number(row.shifts_counted),
+    shifts_skipped: Number(row.shifts_skipped),
+    computed_counted: Number(row.computed_counted),
+    computed_skipped: Number(row.computed_skipped),
+    regular_minutes: Number(row.regular_minutes),
+    overtime_minutes: Number(row.overtime_minutes),
+    open_shifts: Number(row.open_shifts),
+    // A flag this build does not know is kept: the screen renders it verbatim instead of hiding the row.
+    flags: row.flags ?? [],
+  };
+}
 
 function toPayProfile(row: PayProfileRow): PayProfile {
   return {
@@ -514,5 +593,61 @@ export class SupabasePayrollRepository implements IPayrollRepository {
     if (error) {
       throwPayrollError(error, "dispute the payslip");
     }
+  }
+
+  async reconcile(periodStart: string): Promise<PayrollReconciliation> {
+    const supabase = await createSupabaseServerClient();
+    // SCRUM-99: read-only. The RPC recomputes the month with `payroll_work_lines()` and answers it next to
+    // what is stored, so this call writes nothing and cannot change a payslip.
+    const { data, error } = await supabase.rpc("payroll_reconcile", {
+      p_period_start: periodStart,
+    });
+
+    if (error) {
+      throwPayrollError(error, "reconcile the payroll");
+    }
+
+    // A `returns table` function arrives as an array; an empty month answers `[]`, which is a valid answer.
+    const rows = ((data ?? []) as unknown as ReconcileRow[]).map(toReconcileRow);
+
+    return {
+      period_start: periodStart,
+      rows,
+      summary: summariseReconciliation(rows),
+    };
+  }
+
+  async sync(
+    periodStart: string,
+    options: PayrollSyncOptions,
+  ): Promise<PayrollSyncResult> {
+    const supabase = await createSupabaseServerClient();
+    // `p_apply` defaults to false in SQL as well, so a caller that forgets the flag gets the dry run: the
+    // harmless answer is the default on both sides of the wire.
+    const { data, error } = await supabase.rpc("payroll_sync", {
+      p_period_start: periodStart,
+      p_employee_id: options.employeeId ?? null,
+      p_apply: options.apply,
+    });
+
+    if (error) {
+      throwPayrollError(error, "sync the payroll");
+    }
+
+    const rows = ((data ?? []) as unknown as SyncRow[]).map((row) => ({
+      employee_id: row.employee_id,
+      action: row.action,
+      reason: row.reason,
+      before_net: Number(row.before_net),
+      after_net: Number(row.after_net),
+      delta: Number(row.delta),
+    }));
+
+    return {
+      period_start: periodStart,
+      applied: options.apply,
+      rows,
+      ...summariseSync(rows),
+    };
   }
 }

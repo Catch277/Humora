@@ -160,6 +160,23 @@ export function formatPercent(value: number, locale: Locale): string {
   return `${value > 0 ? "+" : ""}${locale === "vi" ? fixed.replace(".", ",") : fixed}%`;
 }
 
+/**
+ * `48,3%` (`vi`) / `48.3%` (`en`) — a **share**, never a signed change.
+ *
+ * `formatPercent` above deliberately prefixes a positive number with `+`, which reads as "up 48%" and
+ * would be wrong on a ratio (tỷ lệ đi làm, phần trăm của tổng). The dashboard (SCRUM-98) prints both
+ * kinds side by side, so the two shapes live next to each other instead of being hand-built in a card.
+ */
+export function formatRatio(
+  value: number,
+  locale: Locale,
+  fractionDigits = 1,
+): string {
+  const fixed = value.toFixed(fractionDigits);
+
+  return `${locale === "vi" ? fixed.replace(".", ",") : fixed}%`;
+}
+
 /** `05/10/2026`. */
 export function formatDate(
   value: string | null | undefined,
