@@ -102,7 +102,7 @@ class _PerformanceCardState extends State<PerformanceCard> {
           children: [
             Row(
               children: [
-                Expanded(child: Text('Tháng ${now.month}/${now.year}', style: AppText.h2)),
+                Expanded(child: Text('Tháng ${now.month}/${now.year}', style: AppText.h2(context))),
                 StatusPill('Kỳ công 01 - $last/${_two(now.month)}', tone: PillTone.info),
               ],
             ),
@@ -112,7 +112,7 @@ class _PerformanceCardState extends State<PerformanceCard> {
             else if (_error != null)
               Row(
                 children: [
-                  Expanded(child: Text(_error!, style: AppText.bodyMuted)),
+                  Expanded(child: Text(_error!, style: AppText.bodyMuted(context))),
                   TextButton(onPressed: _load, child: const Text('Thử lại')),
                 ],
               )
@@ -140,17 +140,17 @@ class _PerformanceCardState extends State<PerformanceCard> {
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: AppColors.surfaceMuted,
+        color: context.pal.surfaceMuted,
         borderRadius: BorderRadius.circular(14),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(title, style: AppText.caption),
+          Text(title, style: AppText.caption(context)),
           const SizedBox(height: 6),
           Text(
             unit.isEmpty ? value : '$value $unit',
-            style: AppText.title.copyWith(fontSize: 14.5),
+            style: AppText.title(context).copyWith(fontSize: 14.5),
             maxLines: 2,
           ),
         ],
@@ -198,14 +198,34 @@ class _PerformanceCardState extends State<PerformanceCard> {
                   Row(
                     children: [
                       Flexible(
-                        child: Text(
-                          amount,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 17,
-                            fontWeight: FontWeight.w800,
-                            fontFeatures: [FontFeature.tabularFigures()],
+                        // Hiện/ẩn thu nhập: chữ mờ chéo + trượt nhẹ thay vì nhảy cái rụp.
+                        child: AnimatedSwitcher(
+                          duration: const Duration(milliseconds: 380),
+                          switchInCurve: Curves.easeOutCubic,
+                          transitionBuilder: (child, anim) => FadeTransition(
+                            opacity: anim,
+                            child: SlideTransition(
+                              position: Tween<Offset>(
+                                begin: const Offset(0, .35),
+                                end: Offset.zero,
+                              ).animate(anim),
+                              child: child,
+                            ),
+                          ),
+                          layoutBuilder: (current, previous) => Stack(
+                            alignment: Alignment.centerLeft,
+                            children: [...previous, if (current != null) current],
+                          ),
+                          child: Text(
+                            amount,
+                            key: ValueKey<String>(amount),
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 17,
+                              fontWeight: FontWeight.w800,
+                              fontFeatures: [FontFeature.tabularFigures()],
+                            ),
                           ),
                         ),
                       ),

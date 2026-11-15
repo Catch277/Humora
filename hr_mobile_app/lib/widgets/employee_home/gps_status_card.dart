@@ -62,19 +62,19 @@ class GpsStatusCard extends StatelessWidget {
     }
 
     final Color fg = tone == PillTone.success
-        ? AppColors.success
+        ? context.pal.success
         : tone == PillTone.warning
-            ? AppColors.warning
+            ? context.pal.warning
             : tone == PillTone.danger
-                ? AppColors.danger
-                : AppColors.textSecondary;
+                ? context.pal.danger
+                : context.pal.textSecondary;
     final Color bg = tone == PillTone.success
-        ? AppColors.successSoft
+        ? context.pal.successSoft
         : tone == PillTone.warning
-            ? AppColors.warningSoft
+            ? context.pal.warningSoft
             : tone == PillTone.danger
-                ? AppColors.dangerSoft
-                : AppColors.neutralSoft;
+                ? context.pal.dangerSoft
+                : context.pal.neutralSoft;
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -85,7 +85,7 @@ class GpsStatusCard extends StatelessWidget {
             Container(
               width: 42,
               height: 42,
-              decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(12)),
+              decoration: BoxDecoration(color: bg, shape: BoxShape.circle, border: Border.all(color: fg.withValues(alpha: .24))),
               child: Icon(icon, color: fg, size: 22),
             ),
             const SizedBox(width: 12),
@@ -93,9 +93,9 @@ class GpsStatusCard extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(title, style: AppText.title),
+                  Text(title, style: AppText.title(context)),
                   const SizedBox(height: 2),
-                  Text(message, style: AppText.caption),
+                  Text(message, style: AppText.caption(context)),
                 ],
               ),
             ),

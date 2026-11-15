@@ -1,8 +1,10 @@
+
 import 'package:flutter/material.dart';
+
 import '../app_colors.dart';
 import '../app_theme.dart';
 
-/// Thẻ nền trắng, viền mảnh, bo góc. Thành phần cơ bản của mọi màn hình.
+/// Thẻ giao diện dùng chung.
 class AppCard extends StatelessWidget {
   const AppCard({
     super.key,
@@ -21,11 +23,17 @@ class AppCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final radius = BorderRadius.circular(18);
+    final radius = BorderRadius.circular(24);
+    final pal = context.pal;
+
+    final cardSurface = color ?? pal.surface;
+
+    final borderColor = pal.border;
+
     return Padding(
       padding: margin ?? EdgeInsets.zero,
       child: Material(
-        color: color ?? AppColors.surface,
+        color: cardSurface,
         borderRadius: radius,
         child: InkWell(
           onTap: onTap,
@@ -34,12 +42,18 @@ class AppCard extends StatelessWidget {
             padding: padding,
             decoration: BoxDecoration(
               borderRadius: radius,
-              border: Border.all(color: AppColors.border),
+              border: Border.all(
+                color: borderColor,
+                width: 1.0,
+              ),
+              color: cardSurface,
               boxShadow: [
                 BoxShadow(
-                  color: const Color(0xFF0C2A5E).withValues(alpha: 0.035),
-                  blurRadius: 14,
-                  offset: const Offset(0, 5),
+                  color: pal.shadow.withValues(
+                    alpha: pal.shadowAlpha,
+                  ),
+                  blurRadius: 20,
+                  offset: const Offset(0, 7),
                 ),
               ],
             ),
@@ -51,11 +65,22 @@ class AppCard extends StatelessWidget {
   }
 }
 
-enum PillTone { success, warning, danger, info, neutral }
+enum PillTone {
+  success,
+  warning,
+  danger,
+  info,
+  neutral,
+}
 
-/// Nhãn trạng thái: màu + chữ (không chỉ dựa vào màu).
+/// Nhãn trạng thái.
 class StatusPill extends StatelessWidget {
-  const StatusPill(this.text, {super.key, this.tone = PillTone.neutral, this.icon});
+  const StatusPill(
+    this.text, {
+    super.key,
+    this.tone = PillTone.neutral,
+    this.icon,
+  });
 
   final String text;
   final PillTone tone;
@@ -65,31 +90,43 @@ class StatusPill extends StatelessWidget {
   Widget build(BuildContext context) {
     late final Color fg;
     late final Color bg;
+
     switch (tone) {
       case PillTone.success:
-        fg = AppColors.success;
-        bg = AppColors.successSoft;
+        fg = context.pal.success;
+        bg = context.pal.successSoft;
         break;
+
       case PillTone.warning:
-        fg = AppColors.warning;
-        bg = AppColors.warningSoft;
+        fg = context.pal.warning;
+        bg = context.pal.warningSoft;
         break;
+
       case PillTone.danger:
-        fg = AppColors.danger;
-        bg = AppColors.dangerSoft;
+        fg = context.pal.danger;
+        bg = context.pal.dangerSoft;
         break;
+
       case PillTone.info:
-        fg = AppColors.primary;
-        bg = AppColors.primarySoft;
+        fg = context.pal.primary;
+        bg = context.pal.primarySoft;
         break;
+
       case PillTone.neutral:
-        fg = AppColors.textSecondary;
-        bg = AppColors.neutralSoft;
+        fg = context.pal.textSecondary;
+        bg = context.pal.neutralSoft;
         break;
     }
+
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
-      decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(20)),
+      padding: const EdgeInsets.symmetric(
+        horizontal: 11,
+        vertical: 6,
+      ),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(999),
+      ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -99,7 +136,11 @@ class StatusPill extends StatelessWidget {
           ],
           Text(
             text,
-            style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700, color: fg),
+            style: TextStyle(
+              fontSize: 11.5,
+              fontWeight: FontWeight.w700,
+              color: fg,
+            ),
           ),
         ],
       ),
@@ -107,9 +148,13 @@ class StatusPill extends StatelessWidget {
   }
 }
 
-/// Tiêu đề của một nhóm nội dung, có thể kèm nút hành động bên phải.
+/// Tiêu đề của một nhóm nội dung.
 class SectionTitle extends StatelessWidget {
-  const SectionTitle(this.text, {super.key, this.trailing});
+  const SectionTitle(
+    this.text, {
+    super.key,
+    this.trailing,
+  });
 
   final String text;
   final Widget? trailing;
@@ -120,7 +165,12 @@ class SectionTitle extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(4, 0, 4, 10),
       child: Row(
         children: [
-          Expanded(child: Text(text, style: AppText.h2)),
+          Expanded(
+            child: Text(
+              text,
+              style: AppText.h2(context),
+            ),
+          ),
           if (trailing != null) trailing!,
         ],
       ),
@@ -128,7 +178,7 @@ class SectionTitle extends StatelessWidget {
   }
 }
 
-/// Khung một trang con: nút quay lại + tiêu đề, nội dung cuộn bên dưới.
+/// Khung một trang con.
 class AppPage extends StatelessWidget {
   const AppPage({
     super.key,
@@ -152,56 +202,91 @@ class AppPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     Widget body = child;
+
     if (onRefresh != null) {
-      body = RefreshIndicator(onRefresh: onRefresh!, child: child);
+      body = RefreshIndicator(
+        onRefresh: onRefresh!,
+        child: child,
+      );
     }
+
+    final fg = context.pal.textPrimary;
+
     return Scaffold(
-      backgroundColor: AppColors.background,
+      backgroundColor: context.pal.background,
       bottomNavigationBar: bottomNavigationBar,
       body: SafeArea(
         bottom: bottomNavigationBar == null,
         child: Column(
           children: [
             Padding(
-              padding: const EdgeInsets.fromLTRB(8, 8, 16, 8),
+              padding: const EdgeInsets.fromLTRB(
+                8, 8, 16, 8,
+              ),
               child: Row(
                 children: [
                   if (showBack)
                     Padding(
-                      padding: const EdgeInsets.only(right: 8),
+                      padding: const EdgeInsets.only(
+                        right: 8,
+                      ),
                       child: Material(
-                        color: AppColors.surface,
-                        shape: const CircleBorder(side: BorderSide(color: AppColors.border)),
+                        color: context.pal.surface,
+                        shape: CircleBorder(
+                          side: BorderSide(
+                            color: context.pal.border,
+                          ),
+                        ),
                         child: InkWell(
                           customBorder: const CircleBorder(),
-                          onTap: () => Navigator.maybePop(context),
-                          child: const SizedBox(
+                          onTap: () =>
+                              Navigator.maybePop(context),
+                          child: SizedBox(
                             width: 40,
                             height: 40,
-                            child: Icon(Icons.arrow_back_ios_new_rounded, size: 17, color: AppColors.textPrimary),
+                            child: Icon(
+                              Icons.arrow_back_ios_new_rounded,
+                              size: 17,
+                              color: fg,
+                            ),
                           ),
                         ),
                       ),
                     )
                   else
                     const SizedBox(width: 12),
+
                   Expanded(
                     child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+                      crossAxisAlignment:
+                          CrossAxisAlignment.start,
                       children: [
-                        Text(title, style: AppText.h1.copyWith(fontSize: 24, letterSpacing: -0.3)),
+                        Text(
+                          title,
+                          style: AppText.h1(context).copyWith(
+                            fontSize: 24,
+                            letterSpacing: -0.3,
+                          ),
+                        ),
                         if (subtitle != null)
                           Padding(
-                            padding: const EdgeInsets.only(top: 2),
-                            child: Text(subtitle!, style: AppText.caption),
+                            padding: const EdgeInsets.only(
+                              top: 2,
+                            ),
+                            child: Text(
+                              subtitle!,
+                              style: AppText.caption(context),
+                            ),
                           ),
                       ],
                     ),
                   ),
+
                   if (trailing != null) trailing!,
                 ],
               ),
             ),
+
             Expanded(child: body),
           ],
         ),
@@ -210,7 +295,7 @@ class AppPage extends StatelessWidget {
   }
 }
 
-/// Trạng thái rỗng: biểu tượng + lời giải thích + (tuỳ chọn) nút.
+/// Trạng thái rỗng.
 class EmptyState extends StatelessWidget {
   const EmptyState({
     super.key,
@@ -230,31 +315,51 @@ class EmptyState extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ListView(
-      // ListView để vẫn kéo-để-làm-mới được khi danh sách rỗng.
       physics: const AlwaysScrollableScrollPhysics(),
-      padding: const EdgeInsets.fromLTRB(32, 56, 32, 32),
+      padding: const EdgeInsets.fromLTRB(
+        32, 56, 32, 32,
+      ),
       children: [
         Center(
           child: Container(
             width: 72,
             height: 72,
-            decoration: const BoxDecoration(
-              color: AppColors.primarySoft,
+            decoration: BoxDecoration(
+              color: context.pal.primarySoft,
               shape: BoxShape.circle,
             ),
-            child: Icon(icon, size: 32, color: AppColors.primary),
+            child: Icon(
+              icon,
+              size: 32,
+              color: context.pal.primary,
+            ),
           ),
         ),
+
         const SizedBox(height: 18),
-        Text(title, textAlign: TextAlign.center, style: AppText.h2),
+
+        Text(
+          title,
+          textAlign: TextAlign.center,
+          style: AppText.h2(context),
+        ),
+
         if (message != null) ...[
           const SizedBox(height: 8),
-          Text(message!, textAlign: TextAlign.center, style: AppText.bodyMuted),
+          Text(
+            message!,
+            textAlign: TextAlign.center,
+            style: AppText.bodyMuted(context),
+          ),
         ],
+
         if (actionLabel != null && onAction != null) ...[
           const SizedBox(height: 20),
           Center(
-            child: OutlinedButton(onPressed: onAction, child: Text(actionLabel!)),
+            child: OutlinedButton(
+              onPressed: onAction,
+              child: Text(actionLabel!),
+            ),
           ),
         ],
       ],
@@ -262,9 +367,13 @@ class EmptyState extends StatelessWidget {
   }
 }
 
-/// Lỗi tải dữ liệu, luôn có nút "Thử lại".
+/// Lỗi tải dữ liệu.
 class ErrorState extends StatelessWidget {
-  const ErrorState({super.key, required this.message, required this.onRetry});
+  const ErrorState({
+    super.key,
+    required this.message,
+    required this.onRetry,
+  });
 
   final String message;
   final VoidCallback onRetry;
@@ -281,7 +390,7 @@ class ErrorState extends StatelessWidget {
   }
 }
 
-/// Gói ba trạng thái tải / lỗi / có dữ liệu để các màn hình không lặp lại.
+/// Gói ba trạng thái tải / lỗi / có dữ liệu.
 class AsyncBody extends StatelessWidget {
   const AsyncBody({
     super.key,
@@ -298,25 +407,39 @@ class AsyncBody extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (loading) return const SkeletonList();
-    if (error != null) return ErrorState(message: error!, onRetry: onRetry);
+    if (loading) {
+      return const SkeletonList();
+    }
+
+    if (error != null) {
+      return ErrorState(
+        message: error!,
+        onRetry: onRetry,
+      );
+    }
+
     return builder(context);
   }
 }
 
 /// Khung xương khi đang tải.
 class SkeletonList extends StatefulWidget {
-  const SkeletonList({super.key, this.count = 4});
+  const SkeletonList({
+    super.key,
+    this.count = 4,
+  });
 
   final int count;
 
   @override
-  State<SkeletonList> createState() => _SkeletonListState();
+  State<SkeletonList> createState() =>
+      _SkeletonListState();
 }
 
 class _SkeletonListState extends State<SkeletonList>
     with SingleTickerProviderStateMixin {
-  late final AnimationController _c = AnimationController(
+  late final AnimationController _c =
+      AnimationController(
     vsync: this,
     duration: const Duration(milliseconds: 1100),
   )..repeat(reverse: true);
@@ -333,17 +456,22 @@ class _SkeletonListState extends State<SkeletonList>
       animation: _c,
       builder: (context, _) {
         final color = Color.lerp(
-          AppColors.surfaceMuted,
-          AppColors.border,
+          context.pal.surfaceMuted,
+          context.pal.border,
           _c.value,
         )!;
+
         return ListView.builder(
           physics: const NeverScrollableScrollPhysics(),
-          padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+          padding: const EdgeInsets.fromLTRB(
+            16, 8, 16, 16,
+          ),
           itemCount: widget.count,
           itemBuilder: (context, i) => Container(
             height: 84,
-            margin: const EdgeInsets.only(bottom: 12),
+            margin: const EdgeInsets.only(
+              bottom: 12,
+            ),
             decoration: BoxDecoration(
               color: color,
               borderRadius: BorderRadius.circular(18),
@@ -355,7 +483,7 @@ class _SkeletonListState extends State<SkeletonList>
   }
 }
 
-/// Nút chính (xanh, đầy chiều ngang).
+/// Nút chính.
 class PrimaryButton extends StatelessWidget {
   const PrimaryButton({
     super.key,
@@ -380,21 +508,35 @@ class PrimaryButton extends StatelessWidget {
       child: FilledButton(
         onPressed: busy ? null : onPressed,
         style: FilledButton.styleFrom(
-          backgroundColor: danger ? AppColors.danger : AppColors.primary,
+          backgroundColor: danger
+              ? context.pal.dangerStrong
+              : context.pal.primary,
           foregroundColor: Colors.white,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-          textStyle: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(14),
+          ),
+          textStyle: const TextStyle(
+            fontSize: 15,
+            fontWeight: FontWeight.w700,
+          ),
         ),
         child: busy
             ? const SizedBox(
                 width: 20,
                 height: 20,
-                child: CircularProgressIndicator(strokeWidth: 2.4, color: Colors.white),
+                child: CircularProgressIndicator(
+                  strokeWidth: 2.4,
+                  color: Colors.white,
+                ),
               )
             : Row(
-                mainAxisAlignment: MainAxisAlignment.center,
+                mainAxisAlignment:
+                    MainAxisAlignment.center,
                 children: [
-                  if (icon != null) ...[Icon(icon, size: 18), const SizedBox(width: 8)],
+                  if (icon != null) ...[
+                    Icon(icon, size: 18),
+                    const SizedBox(width: 8),
+                  ],
                   Text(label),
                 ],
               ),
@@ -418,30 +560,49 @@ class InfoBanner extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    Color fg = AppColors.primary;
-    Color bg = AppColors.primarySoft;
+    Color fg = context.pal.primary;
+    Color bg = context.pal.primarySoft;
+
     if (tone == PillTone.warning) {
-      fg = AppColors.warning;
-      bg = AppColors.warningSoft;
+      fg = context.pal.warning;
+      bg = context.pal.warningSoft;
     } else if (tone == PillTone.danger) {
-      fg = AppColors.danger;
-      bg = AppColors.dangerSoft;
+      fg = context.pal.danger;
+      bg = context.pal.dangerSoft;
     } else if (tone == PillTone.success) {
-      fg = AppColors.success;
-      bg = AppColors.successSoft;
+      fg = context.pal.success;
+      bg = context.pal.successSoft;
+    } else if (tone == PillTone.neutral) {
+      fg = context.pal.textSecondary;
+      bg = context.pal.neutralSoft;
     }
+
     return Container(
       padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(14)),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(14),
+      ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(icon, size: 18, color: fg),
+          Icon(
+            icon,
+            size: 18,
+            color: fg,
+          ),
+
           const SizedBox(width: 10),
+
           Expanded(
             child: Text(
               text,
-              style: TextStyle(fontSize: 13, color: fg, height: 1.4, fontWeight: FontWeight.w500),
+              style: TextStyle(
+                fontSize: 13,
+                color: fg,
+                height: 1.4,
+                fontWeight: FontWeight.w500,
+              ),
             ),
           ),
         ],
@@ -451,15 +612,24 @@ class InfoBanner extends StatelessWidget {
 }
 
 /// Thông báo nhanh dưới đáy màn hình.
-void showAppSnack(BuildContext context, String text, {bool error = false}) {
+void showAppSnack(
+  BuildContext context,
+  String text, {
+  bool error = false,
+}) {
   final messenger = ScaffoldMessenger.of(context);
+
   messenger.hideCurrentSnackBar();
+
   messenger.showSnackBar(
     SnackBar(
       content: Text(text),
       behavior: SnackBarBehavior.floating,
-      backgroundColor: error ? AppColors.danger : AppColors.ink,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      backgroundColor:
+          error ? context.pal.dangerStrong : AppColors.inkSoft,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+      ),
     ),
   );
 }

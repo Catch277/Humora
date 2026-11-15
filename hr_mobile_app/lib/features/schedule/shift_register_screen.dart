@@ -189,12 +189,12 @@ class _ShiftRegisterScreenState extends State<ShiftRegisterScreen> {
             padding: const EdgeInsets.symmetric(vertical: 4),
             child: Row(
               children: [
-                const Icon(Icons.check_circle_outline_rounded, size: 16, color: AppColors.primary),
+                Icon(Icons.check_circle_outline_rounded, size: 16, color: context.pal.primary),
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
                     '${weekdayShort(p.date)} ${formatDayMonth(p.date)} • ${p.t.name} (${p.t.start} - ${p.t.end})',
-                    style: AppText.body,
+                    style: AppText.body(context),
                   ),
                 ),
               ],
@@ -202,7 +202,7 @@ class _ShiftRegisterScreenState extends State<ShiftRegisterScreen> {
           ),
         const Divider(height: 20),
         Text('Tổng: ${picks.length} ca • ${formatMinutes(_totalMinutes)}',
-            style: AppText.title.copyWith(color: AppColors.primary)),
+            style: AppText.title(context).copyWith(color: context.pal.primary)),
       ],
     );
   }
@@ -274,7 +274,7 @@ class _ShiftRegisterScreenState extends State<ShiftRegisterScreen> {
       content: Text(
         '${reg.name} (${reg.start} - ${reg.end}) ngày ${formatDayMonth(reg.workDate)}.\n'
         'Sau khi huỷ bạn có thể đăng ký lại nếu ca còn nhận.',
-        style: AppText.body,
+        style: AppText.body(context),
       ),
       confirmLabel: 'Huỷ đăng ký',
       danger: true,
@@ -298,7 +298,7 @@ class _ShiftRegisterScreenState extends State<ShiftRegisterScreen> {
     final ok = await showConfirmDialog(
       context,
       title: 'Bỏ các ca đã chọn?',
-      content: const Text('Bạn chưa gửi đăng ký. Thoát bây giờ sẽ mất các ca đang chọn.', style: AppText.body),
+      content: Text('Bạn chưa gửi đăng ký. Thoát bây giờ sẽ mất các ca đang chọn.', style: AppText.body(context)),
       confirmLabel: 'Thoát',
       danger: true,
     );
@@ -349,9 +349,9 @@ class _ShiftRegisterScreenState extends State<ShiftRegisterScreen> {
     final m = <DateTime, DayMark>{};
     for (final d in _days) {
       if (_picks.values.any((p) => sameDay(p.date, d))) {
-        m[d] = const DayMark(Icons.check_circle_rounded, AppColors.primary, 'đã chọn ca');
+        m[d] = DayMark(Icons.check_circle_rounded, MarkTone.primary, 'đã chọn ca');
       } else if (_existing.any((e) => sameDay(e.workDate, d) && (countsAsWorkShift(e) || (e.isRegistration && e.status == 'PENDING')))) {
-        m[d] = const DayMark(Icons.event_available_rounded, AppColors.success, 'đã có ca');
+        m[d] = DayMark(Icons.event_available_rounded, MarkTone.success, 'đã có ca');
       }
     }
     return m;
@@ -374,7 +374,7 @@ class _ShiftRegisterScreenState extends State<ShiftRegisterScreen> {
               child: Text(
                 '${formatDayMonth(_monday)} - ${formatDayMonth(sunday)}/${sunday.year}',
                 textAlign: TextAlign.center,
-                style: AppText.title,
+                style: AppText.title(context),
               ),
             ),
             IconButton(
@@ -410,10 +410,10 @@ class _ShiftRegisterScreenState extends State<ShiftRegisterScreen> {
         ],
         SectionTitle('${weekdayName(_selected)}, ${formatDayMonth(_selected)}'),
         if (_templates.isEmpty)
-          const AppCard(
+          AppCard(
             child: Padding(
               padding: EdgeInsets.symmetric(vertical: 12),
-              child: Center(child: Text('Chưa có ca nào để đăng ký.', style: AppText.bodyMuted)),
+              child: Center(child: Text('Chưa có ca nào để đăng ký.', style: AppText.bodyMuted(context))),
             ),
           )
         else
@@ -499,9 +499,9 @@ class _ShiftRegisterScreenState extends State<ShiftRegisterScreen> {
         children: [
           Row(
             children: [
-              const Icon(Icons.playlist_add_check_rounded, color: AppColors.primary, size: 20),
+              Icon(Icons.playlist_add_check_rounded, color: context.pal.primary, size: 20),
               const SizedBox(width: 8),
-              const Expanded(child: Text('Ca đã chọn', style: AppText.title)),
+              Expanded(child: Text('Ca đã chọn', style: AppText.title(context))),
               TextButton(
                 onPressed: _busy ? null : () => setState(() => _picks.clear()),
                 child: const Text('Bỏ hết'),
@@ -516,7 +516,7 @@ class _ShiftRegisterScreenState extends State<ShiftRegisterScreen> {
                   Expanded(
                     child: Text(
                       '${weekdayShort(p.date)} ${formatDayMonth(p.date)} • ${p.t.name} (${p.t.start} - ${p.t.end})',
-                      style: AppText.body,
+                      style: AppText.body(context),
                     ),
                   ),
                   IconButton(
@@ -544,10 +544,10 @@ class _ShiftRegisterScreenState extends State<ShiftRegisterScreen> {
               padding: const EdgeInsets.only(bottom: 8),
               child: Row(
                 children: [
-                  Text('Đã chọn $n ca', style: AppText.title),
+                  Text('Đã chọn $n ca', style: AppText.title(context)),
                   const Spacer(),
                   Text(formatMinutes(_totalMinutes),
-                      style: AppText.title.copyWith(color: AppColors.primary)),
+                      style: AppText.title(context).copyWith(color: context.pal.primary)),
                 ],
               ),
             ),

@@ -107,7 +107,7 @@ class _WeekStatusCardState extends State<WeekStatusCard> {
           children: [
             Row(
               children: [
-                const Expanded(child: Text('Tuần này', style: AppText.h2)),
+                Expanded(child: Text('Tuần này', style: AppText.h2(context))),
                 TextButton(
                   onPressed: () => Navigator.pushNamed(context, AppRoutes.work_schedule_employee),
                   child: const Text('Xem lịch'),
@@ -120,7 +120,7 @@ class _WeekStatusCardState extends State<WeekStatusCard> {
             else if (_error != null)
               Row(
                 children: [
-                  Expanded(child: Text(_error!, style: AppText.bodyMuted)),
+                  Expanded(child: Text(_error!, style: AppText.bodyMuted(context))),
                   TextButton(onPressed: _load, child: const Text('Thử lại')),
                 ],
               )
@@ -128,7 +128,7 @@ class _WeekStatusCardState extends State<WeekStatusCard> {
               Row(
                 children: [
                   for (final d in days)
-                    Expanded(child: _cell(d, today, _marks[d])),
+                    Expanded(child: _cell(context, d, today, _marks[d])),
                 ],
               ),
               const SizedBox(height: 12),
@@ -140,34 +140,43 @@ class _WeekStatusCardState extends State<WeekStatusCard> {
     );
   }
 
-  Widget _cell(DateTime d, DateTime today, DayMark? mark) {
+  Widget _cell(BuildContext context, DateTime d, DateTime today, DayMark? mark) {
     final isToday = sameDay(d, today);
     return Semantics(
+      button: true,
       label: '${weekdayName(d)} ${formatDayMonth(d)}${isToday ? ', hôm nay' : ''}${mark != null ? ', ${mark.label}' : ''}',
-      child: Container(
-        margin: const EdgeInsets.symmetric(horizontal: 2),
-        padding: const EdgeInsets.symmetric(vertical: 8),
-        decoration: BoxDecoration(
-          color: isToday ? AppColors.primary : AppColors.surfaceMuted,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 2),
+        child: Material(
+          color: isToday ? context.pal.primary : context.pal.surfaceMuted,
           borderRadius: BorderRadius.circular(14),
-        ),
-        child: Column(
-          children: [
-            Text(
-              weekdayShort(d),
-              style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: isToday ? Colors.white70 : AppColors.textMuted),
+          child: InkWell(
+            borderRadius: BorderRadius.circular(14),
+            onTap: () => Navigator.pushNamed(context, AppRoutes.work_schedule_employee, arguments: d),
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 180),
+              curve: Curves.easeOutCubic,
+              padding: const EdgeInsets.symmetric(vertical: 8),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(
+                  color: isToday ? AppColors.primaryStrong : context.pal.border.withValues(alpha: .55),
+                  width: isToday ? 1.4 : 1,
+                ),
+              ),
+              child: Column(
+                children: [
+                  Text(weekdayShort(d),
+                    style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: isToday ? Colors.white70 : context.pal.textMuted)),
+                  const SizedBox(height: 3),
+                  Text('${d.day}',
+                    style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: isToday ? Colors.white : context.pal.textPrimary)),
+                  const SizedBox(height: 4),
+                  SizedBox(height: 14, child: mark == null ? null : Icon(mark.icon, size: 14, color: isToday ? Colors.white : mark.colorOf(context))),
+                ],
+              ),
             ),
-            const SizedBox(height: 3),
-            Text(
-              '${d.day}',
-              style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: isToday ? Colors.white : AppColors.textPrimary),
-            ),
-            const SizedBox(height: 4),
-            SizedBox(
-              height: 14,
-              child: mark == null ? null : Icon(mark.icon, size: 14, color: isToday ? Colors.white : mark.color),
-            ),
-          ],
+          ),
         ),
       ),
     );

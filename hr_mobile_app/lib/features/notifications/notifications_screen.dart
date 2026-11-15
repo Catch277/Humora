@@ -157,7 +157,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     return AppCard(
       margin: const EdgeInsets.only(bottom: 10),
       onTap: () => _open(n),
-      color: n.isRead ? AppColors.surface : AppColors.primarySoft,
+      color: n.isRead ? context.pal.surface : context.pal.primarySoft,
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -165,10 +165,10 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
             width: 40,
             height: 40,
             decoration: BoxDecoration(
-              color: n.isRead ? AppColors.surfaceMuted : AppColors.surface,
+              color: n.isRead ? context.pal.surfaceMuted : context.pal.surface,
               shape: BoxShape.circle,
             ),
-            child: Icon(_icon(n.type), size: 20, color: AppColors.primary),
+            child: Icon(_icon(n.type), size: 20, color: context.pal.primary),
           ),
           const SizedBox(width: 12),
           Expanded(
@@ -177,14 +177,14 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
               children: [
                 Text(
                   n.title,
-                  style: AppText.title.copyWith(fontWeight: n.isRead ? FontWeight.w600 : FontWeight.w800),
+                  style: AppText.title(context).copyWith(fontWeight: n.isRead ? FontWeight.w600 : FontWeight.w800),
                 ),
                 if (n.body.isNotEmpty) ...[
                   const SizedBox(height: 3),
-                  Text(n.body, style: AppText.bodyMuted, maxLines: 3, overflow: TextOverflow.ellipsis),
+                  Text(n.body, style: AppText.bodyMuted(context), maxLines: 3, overflow: TextOverflow.ellipsis),
                 ],
                 const SizedBox(height: 6),
-                Text(timeAgo(n.createdAt), style: AppText.caption),
+                Text(timeAgo(n.createdAt), style: AppText.caption(context)),
               ],
             ),
           ),
@@ -193,7 +193,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
               margin: const EdgeInsets.only(top: 6, left: 8),
               width: 9,
               height: 9,
-              decoration: const BoxDecoration(color: AppColors.primary, shape: BoxShape.circle),
+              decoration: BoxDecoration(color: context.pal.primary, shape: BoxShape.circle),
             ),
         ],
       ),

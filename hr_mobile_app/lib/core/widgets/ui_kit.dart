@@ -36,8 +36,8 @@ class SecondaryButton extends StatelessWidget {
       child: OutlinedButton(
         onPressed: busy ? null : onPressed,
         style: OutlinedButton.styleFrom(
-          foregroundColor: AppColors.primary,
-          side: BorderSide(color: onPressed == null || busy ? AppColors.border : AppColors.primary),
+          foregroundColor: context.pal.primary,
+          side: BorderSide(color: onPressed == null || busy ? context.pal.border : context.pal.primary),
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
           textStyle: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
         ),
@@ -63,20 +63,22 @@ class SecondaryButton extends StatelessWidget {
 
 /// Thẻ chỉ số tổng quan: biểu tượng + nhãn + giá trị.
 class StatCard extends StatelessWidget {
-  const StatCard({
+  StatCard({
     super.key,
     required this.label,
     required this.value,
     required this.icon,
-    this.color = AppColors.primary,
-    this.background = AppColors.primarySoft,
+    this.color,
+    this.background,
   });
 
   final String label;
   final String value;
   final IconData icon;
-  final Color color;
-  final Color background;
+
+  /// Mặc định: màu nhấn của theme hiện tại.
+  final Color? color;
+  final Color? background;
 
   @override
   Widget build(BuildContext context) {
@@ -88,17 +90,17 @@ class StatCard extends StatelessWidget {
           Container(
             width: 32,
             height: 32,
-            decoration: BoxDecoration(color: background, borderRadius: BorderRadius.circular(10)),
-            child: Icon(icon, size: 18, color: color),
+            decoration: BoxDecoration(color: background ?? context.pal.primarySoft, borderRadius: BorderRadius.circular(10)),
+            child: Icon(icon, size: 18, color: color ?? context.pal.primary),
           ),
           const SizedBox(height: 10),
           FittedBox(
             fit: BoxFit.scaleDown,
             alignment: Alignment.centerLeft,
-            child: Text(value, style: AppText.h2.copyWith(fontSize: 17)),
+            child: Text(value, style: AppText.h2(context).copyWith(fontSize: 17)),
           ),
           const SizedBox(height: 2),
-          Text(label, style: AppText.caption, maxLines: 2, overflow: TextOverflow.ellipsis),
+          Text(label, style: AppText.caption(context), maxLines: 2, overflow: TextOverflow.ellipsis),
         ],
       ),
     );
@@ -119,21 +121,21 @@ Future<bool> showConfirmDialog(
   final ok = await showDialog<bool>(
     context: context,
     builder: (ctx) => AlertDialog(
-      backgroundColor: AppColors.surface,
+      backgroundColor: context.pal.surface,
       surfaceTintColor: Colors.transparent,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-      title: Text(title, style: AppText.h2),
+      title: Text(title, style: AppText.h2(context)),
       content: content,
       actionsPadding: const EdgeInsets.fromLTRB(16, 0, 16, 14),
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(ctx, false),
-          child: Text(cancelLabel, style: const TextStyle(color: AppColors.textSecondary)),
+          child: Text(cancelLabel, style: TextStyle(color: context.pal.textSecondary)),
         ),
         FilledButton(
           onPressed: () => Navigator.pop(ctx, true),
           style: FilledButton.styleFrom(
-            backgroundColor: danger ? AppColors.danger : AppColors.primary,
+            backgroundColor: danger ? context.pal.dangerStrong : context.pal.primary,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
           ),
           child: Text(confirmLabel),
@@ -147,17 +149,36 @@ Future<bool> showConfirmDialog(
 // ───────────────────────── Dãy ngày cuộn ngang ─────────────────────────
 
 /// Một dấu trạng thái nhỏ dưới ngày. Luôn có icon + nhãn chữ để không chỉ dựa vào màu.
+enum MarkTone { primary, success, warning, danger, muted }
+
 class DayMark {
-  const DayMark(this.icon, this.color, this.label);
+  const DayMark(this.icon, this.tone, this.label);
   final IconData icon;
-  final Color color;
+  final MarkTone tone;
   final String label;
+
+  /// Màu theo chế độ Light/Dark hiện tại (đã kiểm tương phản trên bề mặt thẻ).
+  Color colorOf(BuildContext context) {
+    final p = context.pal;
+    switch (tone) {
+      case MarkTone.primary:
+        return p.primary;
+      case MarkTone.success:
+        return p.success;
+      case MarkTone.warning:
+        return p.warning;
+      case MarkTone.danger:
+        return p.danger;
+      case MarkTone.muted:
+        return p.textSecondary;
+    }
+  }
 }
 
-const DayMark kMarkOnTime = DayMark(Icons.check_circle_rounded, AppColors.success, 'đúng giờ');
-const DayMark kMarkLateEarly = DayMark(Icons.schedule_rounded, AppColors.warning, 'đi trễ / về sớm');
-const DayMark kMarkAbsent = DayMark(Icons.error_rounded, AppColors.danger, 'vắng / thiếu giờ ra');
-const DayMark kMarkScheduled = DayMark(Icons.radio_button_unchecked_rounded, AppColors.primary, 'có ca, chưa có công');
+const DayMark kMarkOnTime = DayMark(Icons.check_circle_rounded, MarkTone.success, 'đúng giờ');
+const DayMark kMarkLateEarly = DayMark(Icons.schedule_rounded, MarkTone.warning, 'đi trễ / về sớm');
+const DayMark kMarkAbsent = DayMark(Icons.error_rounded, MarkTone.danger, 'vắng / thiếu giờ ra');
+const DayMark kMarkScheduled = DayMark(Icons.radio_button_unchecked_rounded, MarkTone.primary, 'có ca, chưa có công');
 
 /// Dấu trạng thái của một ngày dựa trên các bản ghi chấm công của ngày đó (xấu nhất thắng).
 DayMark markForRecords(List<AttendanceRecord> list) {
@@ -242,7 +263,7 @@ class _DayStripState extends State<DayStrip> {
           final disabled = widget.isDisabled?.call(d) ?? false;
           final isToday = sameDay(d, today);
           final mark = widget.marks[dateOnly(d)];
-          final fg = sel ? Colors.white : (disabled ? AppColors.textMuted : AppColors.textPrimary);
+          final fg = sel ? Colors.white : (disabled ? context.pal.textMuted : context.pal.textPrimary);
           return Semantics(
             button: true,
             selected: sel,
@@ -254,10 +275,10 @@ class _DayStripState extends State<DayStrip> {
                 duration: reduceMotion(context) ? Duration.zero : const Duration(milliseconds: 180),
                 width: _itemW,
                 decoration: BoxDecoration(
-                  color: sel ? AppColors.primary : (disabled ? AppColors.surfaceMuted : AppColors.surface),
+                  color: sel ? context.pal.primary : (disabled ? context.pal.surfaceMuted : context.pal.surface),
                   borderRadius: BorderRadius.circular(16),
                   border: Border.all(
-                    color: sel ? AppColors.primary : (isToday ? AppColors.primary : AppColors.border),
+                    color: sel ? context.pal.primary : (isToday ? context.pal.primary : context.pal.border),
                     width: isToday && !sel ? 1.5 : 1,
                   ),
                 ),
@@ -266,7 +287,7 @@ class _DayStripState extends State<DayStrip> {
                   children: [
                     Text(
                       weekdayShort(d),
-                      style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: sel ? Colors.white70 : AppColors.textMuted),
+                      style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: sel ? Colors.white70 : context.pal.textMuted),
                     ),
                     const SizedBox(height: 2),
                     Text('${d.day}', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: fg)),
@@ -275,7 +296,7 @@ class _DayStripState extends State<DayStrip> {
                       height: 12,
                       child: mark == null
                           ? null
-                          : Icon(mark.icon, size: 12, color: sel ? Colors.white : mark.color),
+                          : Icon(mark.icon, size: 12, color: sel ? Colors.white : mark.colorOf(context)),
                     ),
                   ],
                 ),
@@ -323,7 +344,7 @@ class MonthCalendar extends StatelessWidget {
               for (final w in const ['T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN'])
                 Expanded(
                   child: Center(
-                    child: Text(w, style: AppText.caption.copyWith(fontWeight: FontWeight.w700)),
+                    child: Text(w, style: AppText.caption(context).copyWith(fontWeight: FontWeight.w700)),
                   ),
                 ),
             ],
@@ -333,7 +354,7 @@ class MonthCalendar extends StatelessWidget {
             Row(
               children: [
                 for (var c = 0; c < 7; c++)
-                  Expanded(child: _cell(r * 7 + c - lead + 1, daysInMonth, today)),
+                  Expanded(child: _cell(context, r * 7 + c - lead + 1, daysInMonth, today)),
               ],
             ),
         ],
@@ -341,7 +362,7 @@ class MonthCalendar extends StatelessWidget {
     );
   }
 
-  Widget _cell(int dayNum, int daysInMonth, DateTime today) {
+  Widget _cell(BuildContext context, int dayNum, int daysInMonth, DateTime today) {
     if (dayNum < 1 || dayNum > daysInMonth) return const SizedBox(height: 46);
     final d = DateTime(month.year, month.month, dayNum);
     final sel = selected != null && sameDay(d, selected!);
@@ -362,9 +383,9 @@ class MonthCalendar extends StatelessWidget {
               width: 38,
               height: 42,
               decoration: BoxDecoration(
-                color: sel ? AppColors.primary : Colors.transparent,
+                color: sel ? context.pal.primary : Colors.transparent,
                 borderRadius: BorderRadius.circular(12),
-                border: isToday && !sel ? Border.all(color: AppColors.primary, width: 1.5) : null,
+                border: isToday && !sel ? Border.all(color: context.pal.primary, width: 1.5) : null,
               ),
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
@@ -374,13 +395,13 @@ class MonthCalendar extends StatelessWidget {
                     style: TextStyle(
                       fontSize: 14,
                       fontWeight: sel || isToday ? FontWeight.w800 : FontWeight.w600,
-                      color: sel ? Colors.white : AppColors.textPrimary,
+                      color: sel ? Colors.white : context.pal.textPrimary,
                     ),
                   ),
                   const SizedBox(height: 2),
                   SizedBox(
                     height: 11,
-                    child: mark == null ? null : Icon(mark.icon, size: 11, color: sel ? Colors.white : mark.color),
+                    child: mark == null ? null : Icon(mark.icon, size: 11, color: sel ? Colors.white : mark.colorOf(context)),
                   ),
                 ],
               ),
@@ -407,9 +428,9 @@ class CalendarLegend extends StatelessWidget {
           Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(m.icon, size: 13, color: m.color),
+              Icon(m.icon, size: 13, color: m.colorOf(context)),
               const SizedBox(width: 4),
-              Text(m.label, style: AppText.caption),
+              Text(m.label, style: AppText.caption(context)),
             ],
           ),
       ],
@@ -453,7 +474,7 @@ class ShiftCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final mins = shiftMinutes(start, end);
-    final borderColor = selected ? AppColors.primary : AppColors.border;
+    final borderColor = selected ? context.pal.primary : context.pal.border;
     return Semantics(
       checked: selectable ? selected : null,
       enabled: !disabled,
@@ -463,8 +484,8 @@ class ShiftCard extends StatelessWidget {
         margin: const EdgeInsets.only(bottom: 12),
         decoration: BoxDecoration(
           color: disabled
-              ? AppColors.surfaceMuted
-              : (selected ? AppColors.primarySoft : AppColors.surface),
+              ? context.pal.surfaceMuted
+              : (selected ? context.pal.primarySoft : context.pal.surface),
           borderRadius: BorderRadius.circular(16),
           border: Border.all(color: borderColor, width: selected ? 1.6 : 1),
         ),
@@ -491,17 +512,17 @@ class ShiftCard extends StatelessWidget {
                           children: [
                             Text(
                               name,
-                              style: AppText.title.copyWith(color: disabled ? AppColors.textMuted : AppColors.textPrimary),
+                              style: AppText.title(context).copyWith(color: disabled ? context.pal.textMuted : context.pal.textPrimary),
                             ),
                             const SizedBox(height: 6),
                             Row(
                               children: [
-                                Icon(Icons.schedule_rounded, size: 15, color: disabled ? AppColors.textMuted : AppColors.primary),
+                                Icon(Icons.schedule_rounded, size: 15, color: disabled ? context.pal.textMuted : context.pal.primary),
                                 const SizedBox(width: 6),
                                 Flexible(
                                   child: Text(
                                     '$start - $end  •  ${formatMinutes(mins)}',
-                                    style: AppText.bodyMuted,
+                                    style: AppText.bodyMuted(context),
                                   ),
                                 ),
                               ],
@@ -514,7 +535,7 @@ class ShiftCard extends StatelessWidget {
                   ),
                   if (note != null) ...[
                     const SizedBox(height: 8),
-                    Text(note!, style: AppText.caption.copyWith(color: AppColors.textSecondary)),
+                    Text(note!, style: AppText.caption(context).copyWith(color: context.pal.textSecondary)),
                   ],
                   if (footer != null) ...[const SizedBox(height: 10), footer!],
                 ],
@@ -539,10 +560,10 @@ class _Check extends StatelessWidget {
       width: 24,
       height: 24,
       decoration: BoxDecoration(
-        color: checked ? AppColors.primary : Colors.transparent,
+        color: checked ? context.pal.primary : Colors.transparent,
         borderRadius: BorderRadius.circular(7),
         border: Border.all(
-          color: checked ? AppColors.primary : (disabled ? AppColors.border : AppColors.textMuted),
+          color: checked ? context.pal.primary : (disabled ? context.pal.border : context.pal.textMuted),
           width: 1.6,
         ),
       ),
@@ -591,11 +612,11 @@ class FilterChipsRow<T> extends StatelessWidget {
                 labelStyle: TextStyle(
                   fontSize: 13,
                   fontWeight: FontWeight.w700,
-                  color: e.key == value ? Colors.white : AppColors.textSecondary,
+                  color: e.key == value ? Colors.white : context.pal.textSecondary,
                 ),
-                selectedColor: AppColors.primary,
-                backgroundColor: AppColors.surface,
-                side: BorderSide(color: e.key == value ? AppColors.primary : AppColors.border),
+                selectedColor: context.pal.primary,
+                backgroundColor: context.pal.surface,
+                side: BorderSide(color: e.key == value ? context.pal.primary : context.pal.border),
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
               ),
             ),
@@ -636,8 +657,8 @@ class _MonthYearSheetState extends State<_MonthYearSheet> {
   Widget build(BuildContext context) {
     final max = widget.maxMonth;
     return Container(
-      decoration: const BoxDecoration(
-        color: AppColors.surface,
+      decoration: BoxDecoration(
+        color: context.pal.surface,
         borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
       ),
       padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
@@ -653,7 +674,7 @@ class _MonthYearSheetState extends State<_MonthYearSheet> {
                   icon: const Icon(Icons.chevron_left_rounded),
                   tooltip: 'Năm trước',
                 ),
-                Expanded(child: Center(child: Text('$_year', style: AppText.h2))),
+                Expanded(child: Center(child: Text('$_year', style: AppText.h2(context)))),
                 IconButton(
                   onPressed: _year >= max.year ? null : () => setState(() => _year++),
                   icon: const Icon(Icons.chevron_right_rounded),
@@ -688,7 +709,7 @@ class _MonthYearSheetState extends State<_MonthYearSheet> {
       child: Container(
         alignment: Alignment.center,
         decoration: BoxDecoration(
-          color: sel ? AppColors.primary : (enabled ? AppColors.surfaceMuted : Colors.transparent),
+          color: sel ? context.pal.primary : (enabled ? context.pal.surfaceMuted : Colors.transparent),
           borderRadius: BorderRadius.circular(12),
         ),
         child: Text(
@@ -696,7 +717,7 @@ class _MonthYearSheetState extends State<_MonthYearSheet> {
           style: TextStyle(
             fontSize: 13,
             fontWeight: FontWeight.w700,
-            color: sel ? Colors.white : (enabled ? AppColors.textPrimary : AppColors.border),
+            color: sel ? Colors.white : (enabled ? context.pal.textPrimary : context.pal.border),
           ),
         ),
       ),
@@ -715,9 +736,9 @@ class BottomActionBar extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.fromLTRB(16, 10, 16, 12),
-      decoration: const BoxDecoration(
-        color: AppColors.surface,
-        border: Border(top: BorderSide(color: AppColors.border)),
+      decoration: BoxDecoration(
+        color: context.pal.surface,
+        border: Border(top: BorderSide(color: context.pal.border)),
       ),
       child: child,
     );

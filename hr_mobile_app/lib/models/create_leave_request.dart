@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../core/app_colors.dart';
 
 class CreateLeaveRequestScreen extends StatefulWidget {
   const CreateLeaveRequestScreen({super.key});
@@ -181,7 +182,7 @@ class _CreateLeaveRequestScreenState extends State<CreateLeaveRequestScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF4F6FC),
+      backgroundColor: context.pal.background,
       body: SafeArea(
         child: Column(
           children: [
@@ -237,41 +238,41 @@ class _CreateLeaveRequestScreenState extends State<CreateLeaveRequestScreen> {
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           Container(
-            decoration: const BoxDecoration(
-              color: Color(0xFFEFF6FF),
+            decoration: BoxDecoration(
+              color: context.pal.primarySoft,
               shape: BoxShape.circle,
             ),
             child: IconButton(
-              icon: const Icon(Icons.arrow_back_ios_new,
-                  size: 18, color: Colors.black87),
+              icon: Icon(Icons.arrow_back_ios_new,
+                  size: 18, color: context.pal.textPrimary),
               onPressed: () => Navigator.pop(context),
             ),
           ),
           Column(
-            children: const [
+            children: [
               Text(
                 'Tạo đơn xin nghỉ phép',
                 style: TextStyle(
                   fontSize: 18,
                   fontWeight: FontWeight.bold,
-                  color: Colors.black87,
+                  color: context.pal.textPrimary,
                 ),
               ),
               SizedBox(height: 2),
               Text(
                 'Quy trình nhân sự tự động • 2026',
-                style: TextStyle(fontSize: 12, color: Colors.grey),
+                style: TextStyle(fontSize: 12, color: context.pal.textMuted),
               ),
             ],
           ),
           Container(
-            decoration: const BoxDecoration(
-              color: Color(0xFFEFF6FF),
+            decoration: BoxDecoration(
+              color: context.pal.primarySoft,
               shape: BoxShape.circle,
             ),
             child: IconButton(
-              icon: const Icon(Icons.menu_book_outlined,
-                  size: 20, color: Color(0xFF2563EB)),
+              icon: Icon(Icons.menu_book_outlined,
+                  size: 20, color: context.pal.primary),
               onPressed: () {},
             ),
           ),
@@ -285,15 +286,15 @@ class _CreateLeaveRequestScreenState extends State<CreateLeaveRequestScreen> {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [Color(0xFF2563EB), Color(0xFF1D4ED8)],
+        gradient: LinearGradient(
+          colors: [context.pal.primary, context.pal.primary],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFF2563EB).withOpacity(0.3),
+            color: context.pal.primary.withOpacity(0.3),
             blurRadius: 10,
             offset: const Offset(0, 4),
           ),
@@ -328,12 +329,12 @@ class _CreateLeaveRequestScreenState extends State<CreateLeaveRequestScreen> {
                 padding:
                     const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                 decoration: BoxDecoration(
-                  color: const Color(0xFF10B981).withOpacity(0.25),
+                  color: context.pal.success.withOpacity(0.25),
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Row(
-                  children: const [
-                    Icon(Icons.circle, size: 8, color: Color(0xFF34D399)),
+                  children: [
+                    Icon(Icons.circle, size: 8, color: context.pal.success),
                     SizedBox(width: 4),
                     Text(
                       'Hợp lệ',
@@ -391,10 +392,10 @@ class _CreateLeaveRequestScreenState extends State<CreateLeaveRequestScreen> {
           const SizedBox(height: 12),
           ClipRRect(
             borderRadius: BorderRadius.circular(4),
-            child: const LinearProgressIndicator(
+            child: LinearProgressIndicator(
               value: 0.79,
-              backgroundColor: Color(0xFF1E40AF),
-              valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF34D399)),
+              backgroundColor: context.pal.primary,
+              valueColor: AlwaysStoppedAnimation<Color>(context.pal.success),
               minHeight: 6,
             ),
           ),
@@ -418,7 +419,7 @@ class _CreateLeaveRequestScreenState extends State<CreateLeaveRequestScreen> {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: context.pal.surface,
         borderRadius: BorderRadius.circular(20),
       ),
       child: Column(
@@ -428,11 +429,11 @@ class _CreateLeaveRequestScreenState extends State<CreateLeaveRequestScreen> {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               RichText(
-                text: const TextSpan(
+                text: TextSpan(
                   style: TextStyle(
                       fontSize: 14,
                       fontWeight: FontWeight.bold,
-                      color: Colors.black87),
+                      color: context.pal.textPrimary),
                   children: [
                     TextSpan(text: 'Loại hình nghỉ phép '),
                     TextSpan(
@@ -444,12 +445,12 @@ class _CreateLeaveRequestScreenState extends State<CreateLeaveRequestScreen> {
                 padding:
                     const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                 decoration: BoxDecoration(
-                  color: const Color(0xFFEFF6FF),
+                  color: context.pal.primarySoft,
                   borderRadius: BorderRadius.circular(8),
                 ),
-                child: const Text(
+                child: Text(
                   'Có hưởng lương',
-                  style: TextStyle(color: Color(0xFF2563EB), fontSize: 11),
+                  style: TextStyle(color: context.pal.primary, fontSize: 11),
                 ),
               ),
             ],
@@ -464,13 +465,13 @@ class _CreateLeaveRequestScreenState extends State<CreateLeaveRequestScreen> {
             childAspectRatio: 2.1,
             children: [
               _buildLeaveTypeCard(0, 'Nghỉ phép năm', 'Khấu trừ vào quỹ',
-                  Icons.sunny, const Color(0xFF2563EB)),
+                  Icons.sunny, context.pal.primary),
               _buildLeaveTypeCard(1, 'Nghỉ ốm / Khám', 'Hưởng chế độ BHXH',
-                  Icons.local_hospital_outlined, const Color(0xFF10B981)),
+                  Icons.local_hospital_outlined, context.pal.success),
               _buildLeaveTypeCard(2, 'Việc riêng / Ta...', 'Theo luật lao động',
-                  Icons.favorite_border, const Color(0xFFEC4899)),
+                  Icons.favorite_border, context.pal.danger),
               _buildLeaveTypeCard(3, 'Không lương', 'Thỏa thuận quản lý',
-                  Icons.event_busy_outlined, const Color(0xFF6B7280)),
+                  Icons.event_busy_outlined, context.pal.textMuted),
             ],
           ),
         ],
@@ -486,10 +487,10 @@ class _CreateLeaveRequestScreenState extends State<CreateLeaveRequestScreen> {
       child: Container(
         padding: const EdgeInsets.all(10),
         decoration: BoxDecoration(
-          color: isSelected ? const Color(0xFFEFF6FF) : Colors.white,
+          color: isSelected ? context.pal.primarySoft : context.pal.surface,
           borderRadius: BorderRadius.circular(14),
           border: Border.all(
-            color: isSelected ? const Color(0xFF2563EB) : Colors.grey.shade200,
+            color: isSelected ? context.pal.primary : context.pal.border,
             width: isSelected ? 1.5 : 1,
           ),
         ),
@@ -499,7 +500,7 @@ class _CreateLeaveRequestScreenState extends State<CreateLeaveRequestScreen> {
               padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
                 color: isSelected
-                    ? const Color(0xFF2563EB)
+                    ? context.pal.primary
                     : iconColor.withOpacity(0.1),
                 borderRadius: BorderRadius.circular(10),
               ),
@@ -518,8 +519,8 @@ class _CreateLeaveRequestScreenState extends State<CreateLeaveRequestScreen> {
                       fontSize: 12,
                       fontWeight: FontWeight.bold,
                       color: isSelected
-                          ? const Color(0xFF2563EB)
-                          : Colors.black87,
+                          ? context.pal.primary
+                          : context.pal.textPrimary,
                     ),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
@@ -527,7 +528,7 @@ class _CreateLeaveRequestScreenState extends State<CreateLeaveRequestScreen> {
                   const SizedBox(height: 2),
                   Text(
                     subtitle,
-                    style: const TextStyle(fontSize: 10, color: Colors.grey),
+                    style: TextStyle(fontSize: 10, color: context.pal.textMuted),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
@@ -535,8 +536,8 @@ class _CreateLeaveRequestScreenState extends State<CreateLeaveRequestScreen> {
               ),
             ),
             if (isSelected)
-              const Icon(Icons.check_circle,
-                  size: 16, color: Color(0xFF2563EB)),
+              Icon(Icons.check_circle,
+                  size: 16, color: context.pal.primary),
           ],
         ),
       ),
@@ -550,7 +551,7 @@ class _CreateLeaveRequestScreenState extends State<CreateLeaveRequestScreen> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(label,
-              style: const TextStyle(fontSize: 11, color: Colors.grey)),
+              style: TextStyle(fontSize: 11, color: context.pal.textMuted)),
           const SizedBox(height: 6),
           GestureDetector(
             onTap: onTap,
@@ -558,20 +559,20 @@ class _CreateLeaveRequestScreenState extends State<CreateLeaveRequestScreen> {
               padding:
                   const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
               decoration: BoxDecoration(
-                color: const Color(0xFFF9FAFB),
+                color: context.pal.surfaceMuted,
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: Colors.grey.shade200),
+                border: Border.all(color: context.pal.border),
               ),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  const Icon(Icons.calendar_today_outlined,
-                      size: 16, color: Color(0xFF2563EB)),
+                  Icon(Icons.calendar_today_outlined,
+                      size: 16, color: context.pal.primary),
                   Text(_dmy.format(date),
                       style: const TextStyle(
                           fontWeight: FontWeight.bold, fontSize: 13)),
-                  const Icon(Icons.calendar_month,
-                      size: 16, color: Colors.grey),
+                  Icon(Icons.calendar_month,
+                      size: 16, color: context.pal.textMuted),
                 ],
               ),
             ),
@@ -586,18 +587,18 @@ class _CreateLeaveRequestScreenState extends State<CreateLeaveRequestScreen> {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: context.pal.surface,
         borderRadius: BorderRadius.circular(20),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           RichText(
-            text: const TextSpan(
+            text: TextSpan(
               style: TextStyle(
                   fontSize: 14,
                   fontWeight: FontWeight.bold,
-                  color: Colors.black87),
+                  color: context.pal.textPrimary),
               children: [
                 TextSpan(text: 'Ca làm việc áp dụng '),
                 TextSpan(text: '*', style: TextStyle(color: Colors.redAccent)),
@@ -608,7 +609,7 @@ class _CreateLeaveRequestScreenState extends State<CreateLeaveRequestScreen> {
           Container(
             padding: const EdgeInsets.all(4),
             decoration: BoxDecoration(
-              color: const Color(0xFFF3F4F6),
+              color: context.pal.surfaceMuted,
               borderRadius: BorderRadius.circular(14),
             ),
             child: Row(
@@ -633,32 +634,32 @@ class _CreateLeaveRequestScreenState extends State<CreateLeaveRequestScreen> {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
             decoration: BoxDecoration(
-              color: const Color(0xFFEFF6FF),
+              color: context.pal.primarySoft,
               borderRadius: BorderRadius.circular(12),
             ),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Row(
-                  children: const [
+                  children: [
                     Icon(Icons.access_time,
-                        size: 16, color: Color(0xFF2563EB)),
+                        size: 16, color: context.pal.primary),
                     SizedBox(width: 8),
                     Text('Thời gian nghỉ tính toán:',
-                        style: TextStyle(fontSize: 13, color: Colors.black87)),
+                        style: TextStyle(fontSize: 13, color: context.pal.textPrimary)),
                   ],
                 ),
                 Container(
                   padding:
                       const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                   decoration: BoxDecoration(
-                    color: Colors.white,
+                    color: context.pal.surface,
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: Text(
                     '${_days.toStringAsFixed(1)} ngày công',
-                    style: const TextStyle(
-                      color: Color(0xFF2563EB),
+                    style: TextStyle(
+                      color: context.pal.primary,
                       fontWeight: FontWeight.bold,
                       fontSize: 12,
                     ),
@@ -680,7 +681,7 @@ class _CreateLeaveRequestScreenState extends State<CreateLeaveRequestScreen> {
         child: Container(
           padding: const EdgeInsets.symmetric(vertical: 8),
           decoration: BoxDecoration(
-            color: isSelected ? Colors.white : Colors.transparent,
+            color: isSelected ? context.pal.surface : Colors.transparent,
             borderRadius: BorderRadius.circular(10),
             boxShadow: isSelected
                 ? [
@@ -694,14 +695,14 @@ class _CreateLeaveRequestScreenState extends State<CreateLeaveRequestScreen> {
             children: [
               Icon(icon,
                   size: 14,
-                  color: isSelected ? const Color(0xFF2563EB) : Colors.grey),
+                  color: isSelected ? context.pal.primary : context.pal.textMuted),
               const SizedBox(width: 4),
               Text(
                 label,
                 style: TextStyle(
                   fontSize: 12,
                   fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                  color: isSelected ? const Color(0xFF2563EB) : Colors.grey,
+                  color: isSelected ? context.pal.primary : context.pal.textMuted,
                 ),
               ),
             ],
@@ -716,7 +717,7 @@ class _CreateLeaveRequestScreenState extends State<CreateLeaveRequestScreen> {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: context.pal.surface,
         borderRadius: BorderRadius.circular(20),
       ),
       child: Column(
@@ -726,11 +727,11 @@ class _CreateLeaveRequestScreenState extends State<CreateLeaveRequestScreen> {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               RichText(
-                text: const TextSpan(
+                text: TextSpan(
                   style: TextStyle(
                       fontSize: 14,
                       fontWeight: FontWeight.bold,
-                      color: Colors.black87),
+                      color: context.pal.textPrimary),
                   children: [
                     TextSpan(text: 'Lý do xin nghỉ '),
                     TextSpan(
@@ -738,8 +739,8 @@ class _CreateLeaveRequestScreenState extends State<CreateLeaveRequestScreen> {
                   ],
                 ),
               ),
-              const Text('Tối thiểu 10 ký tự',
-                  style: TextStyle(fontSize: 11, color: Colors.grey)),
+              Text('Tối thiểu 10 ký tự',
+                  style: TextStyle(fontSize: 11, color: context.pal.textMuted)),
             ],
           ),
           const SizedBox(height: 10),
@@ -748,23 +749,23 @@ class _CreateLeaveRequestScreenState extends State<CreateLeaveRequestScreen> {
             maxLines: 3,
             decoration: InputDecoration(
               hintText: 'Nhập lý do cụ thể hoặc chọn gợi ý bên dưới...',
-              hintStyle: const TextStyle(fontSize: 13, color: Colors.grey),
+              hintStyle: TextStyle(fontSize: 13, color: context.pal.textMuted),
               filled: true,
-              fillColor: const Color(0xFFF9FAFB),
+              fillColor: context.pal.surfaceMuted,
               contentPadding: const EdgeInsets.all(12),
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(12),
-                borderSide: BorderSide(color: Colors.grey.shade200),
+                borderSide: BorderSide(color: context.pal.border),
               ),
               enabledBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(12),
-                borderSide: BorderSide(color: Colors.grey.shade200),
+                borderSide: BorderSide(color: context.pal.border),
               ),
             ),
           ),
           const SizedBox(height: 12),
-          const Text('Gợi ý nhanh:',
-              style: TextStyle(fontSize: 11, color: Colors.grey)),
+          Text('Gợi ý nhanh:',
+              style: TextStyle(fontSize: 11, color: context.pal.textMuted)),
           const SizedBox(height: 8),
           Wrap(
             spacing: 8,
@@ -780,12 +781,12 @@ class _CreateLeaveRequestScreenState extends State<CreateLeaveRequestScreen> {
                   padding:
                       const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                   decoration: BoxDecoration(
-                    color: const Color(0xFFF3F4F6),
+                    color: context.pal.surfaceMuted,
                     borderRadius: BorderRadius.circular(10),
                   ),
                   child: Text(text,
-                      style: const TextStyle(
-                          fontSize: 11, color: Colors.black87)),
+                      style: TextStyle(
+                          fontSize: 11, color: context.pal.textPrimary)),
                 ),
               );
             }).toList(),
@@ -800,7 +801,7 @@ class _CreateLeaveRequestScreenState extends State<CreateLeaveRequestScreen> {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: context.pal.surface,
         borderRadius: BorderRadius.circular(20),
       ),
       child: Column(
@@ -809,25 +810,25 @@ class _CreateLeaveRequestScreenState extends State<CreateLeaveRequestScreen> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text('Người phê duyệt trực tiếp',
+              Text('Người phê duyệt trực tiếp',
                   style: TextStyle(
                       fontSize: 14,
                       fontWeight: FontWeight.bold,
-                      color: Colors.black87)),
+                      color: context.pal.textPrimary)),
               Container(
                 padding:
                     const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                 decoration: BoxDecoration(
-                  color: const Color(0xFFECFDF5),
+                  color: context.pal.successSoft,
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Row(
-                  children: const [
-                    Icon(Icons.circle, size: 6, color: Color(0xFF10B981)),
+                  children: [
+                    Icon(Icons.circle, size: 6, color: context.pal.success),
                     SizedBox(width: 4),
                     Text('Tự động điều phối',
                         style:
-                            TextStyle(color: Color(0xFF10B981), fontSize: 11)),
+                            TextStyle(color: context.pal.success, fontSize: 11)),
                   ],
                 ),
               ),
@@ -839,7 +840,7 @@ class _CreateLeaveRequestScreenState extends State<CreateLeaveRequestScreen> {
           Container(
             padding: const EdgeInsets.all(10),
             decoration: BoxDecoration(
-              color: const Color(0xFFF9FAFB),
+              color: context.pal.surfaceMuted,
               borderRadius: BorderRadius.circular(14),
             ),
             child: Row(
@@ -856,8 +857,8 @@ class _CreateLeaveRequestScreenState extends State<CreateLeaveRequestScreen> {
                       child: Container(
                         width: 8,
                         height: 8,
-                        decoration: const BoxDecoration(
-                          color: Color(0xFF10B981),
+                        decoration: BoxDecoration(
+                          color: context.pal.success,
                           shape: BoxShape.circle,
                         ),
                       ),
@@ -868,16 +869,16 @@ class _CreateLeaveRequestScreenState extends State<CreateLeaveRequestScreen> {
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
-                    children: const [
+                    children: [
                       Text('Trần Đình Quân',
                           style: TextStyle(
                               fontWeight: FontWeight.bold, fontSize: 13)),
                       Text('Head of Engineering (Quản lý trực tiếp)',
-                          style: TextStyle(fontSize: 11, color: Colors.grey)),
+                          style: TextStyle(fontSize: 11, color: context.pal.textMuted)),
                     ],
                   ),
                 ),
-                const Icon(Icons.verified, size: 18, color: Color(0xFF2563EB)),
+                Icon(Icons.verified, size: 18, color: context.pal.primary),
               ],
             ),
           ),
@@ -885,15 +886,15 @@ class _CreateLeaveRequestScreenState extends State<CreateLeaveRequestScreen> {
 
           // Bàn giao công việc
           RichText(
-            text: const TextSpan(
-              style: TextStyle(fontSize: 13, color: Colors.black87),
+            text: TextSpan(
+              style: TextStyle(fontSize: 13, color: context.pal.textPrimary),
               children: [
                 TextSpan(
                     text: 'Bàn giao công việc ',
                     style: TextStyle(fontWeight: FontWeight.bold)),
                 TextSpan(
                     text: '(Tùy chọn)',
-                    style: TextStyle(color: Colors.grey, fontSize: 11)),
+                    style: TextStyle(color: context.pal.textMuted, fontSize: 11)),
               ],
             ),
           ),
@@ -902,18 +903,18 @@ class _CreateLeaveRequestScreenState extends State<CreateLeaveRequestScreen> {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
             decoration: BoxDecoration(
-              color: const Color(0xFFF9FAFB),
+              color: context.pal.surfaceMuted,
               borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: Colors.grey.shade200),
+              border: Border.all(color: context.pal.border),
             ),
             child: Row(
-              children: const [
+              children: [
                 Icon(Icons.person_search_outlined,
-                    size: 18, color: Colors.grey),
+                    size: 18, color: context.pal.textMuted),
                 SizedBox(width: 8),
                 Expanded(
                   child: Text('Tìm đồng nghiệp theo tên hoặc mã nhân viên...',
-                      style: TextStyle(fontSize: 12, color: Colors.grey),
+                      style: TextStyle(fontSize: 12, color: context.pal.textMuted),
                       overflow: TextOverflow.ellipsis),
                 ),
               ],
@@ -925,7 +926,7 @@ class _CreateLeaveRequestScreenState extends State<CreateLeaveRequestScreen> {
           Container(
             padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(
-              color: const Color(0xFFEFF6FF),
+              color: context.pal.primarySoft,
               borderRadius: BorderRadius.circular(12),
             ),
             child: Row(
@@ -938,16 +939,16 @@ class _CreateLeaveRequestScreenState extends State<CreateLeaveRequestScreen> {
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
-                    children: const [
+                    children: [
                       Text('Lê Phương Thảo',
                           style: TextStyle(
                               fontWeight: FontWeight.bold, fontSize: 12)),
                       Text('Product Designer • #NV-2104',
-                          style: TextStyle(fontSize: 10, color: Colors.grey)),
+                          style: TextStyle(fontSize: 10, color: context.pal.textMuted)),
                     ],
                   ),
                 ),
-                const Icon(Icons.close, size: 16, color: Colors.grey),
+                Icon(Icons.close, size: 16, color: context.pal.textMuted),
               ],
             ),
           ),
@@ -961,22 +962,22 @@ class _CreateLeaveRequestScreenState extends State<CreateLeaveRequestScreen> {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: context.pal.surface,
         borderRadius: BorderRadius.circular(20),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           RichText(
-            text: const TextSpan(
-              style: TextStyle(fontSize: 13, color: Colors.black87),
+            text: TextSpan(
+              style: TextStyle(fontSize: 13, color: context.pal.textPrimary),
               children: [
                 TextSpan(
                     text: 'Tệp đính kèm / Giấy tờ y tế ',
                     style: TextStyle(fontWeight: FontWeight.bold)),
                 TextSpan(
                     text: '(Tùy chọn)',
-                    style: TextStyle(color: Colors.grey, fontSize: 11)),
+                    style: TextStyle(color: context.pal.textMuted, fontSize: 11)),
               ],
             ),
           ),
@@ -985,30 +986,30 @@ class _CreateLeaveRequestScreenState extends State<CreateLeaveRequestScreen> {
             width: double.infinity,
             padding: const EdgeInsets.all(20),
             decoration: BoxDecoration(
-              color: const Color(0xFFF9FAFB),
+              color: context.pal.surfaceMuted,
               borderRadius: BorderRadius.circular(16),
               border: Border.all(
-                  color: const Color(0xFF2563EB).withOpacity(0.3),
+                  color: context.pal.primary.withOpacity(0.3),
                   style: BorderStyle.solid),
             ),
             child: Column(
               children: [
                 Container(
                   padding: const EdgeInsets.all(10),
-                  decoration: const BoxDecoration(
-                    color: Color(0xFFEFF6FF),
+                  decoration: BoxDecoration(
+                    color: context.pal.primarySoft,
                     shape: BoxShape.circle,
                   ),
-                  child: const Icon(Icons.cloud_upload_outlined,
-                      color: Color(0xFF2563EB), size: 24),
+                  child: Icon(Icons.cloud_upload_outlined,
+                      color: context.pal.primary, size: 24),
                 ),
                 const SizedBox(height: 8),
                 const Text('Chạm để chọn tệp hoặc chụp ảnh',
                     style:
                         TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
                 const SizedBox(height: 2),
-                const Text('PNG, JPG, PDF (Dung lượng tối đa 10MB)',
-                    style: TextStyle(fontSize: 11, color: Colors.grey)),
+                Text('PNG, JPG, PDF (Dung lượng tối đa 10MB)',
+                    style: TextStyle(fontSize: 11, color: context.pal.textMuted)),
               ],
             ),
           ),
@@ -1044,8 +1045,8 @@ class _CreateLeaveRequestScreenState extends State<CreateLeaveRequestScreen> {
               ),
             ),
             style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF3B82F6),
-              disabledBackgroundColor: const Color(0xFF93C5FD),
+              backgroundColor: context.pal.primary,
+              disabledBackgroundColor: context.pal.primary,
               elevation: 0,
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(16),
@@ -1059,11 +1060,11 @@ class _CreateLeaveRequestScreenState extends State<CreateLeaveRequestScreen> {
           height: 44,
           child: TextButton.icon(
             onPressed: () {},
-            icon: const Icon(Icons.bookmark_border_rounded,
-                size: 18, color: Colors.black54),
-            label: const Text(
+            icon: Icon(Icons.bookmark_border_rounded,
+                size: 18, color: context.pal.textSecondary),
+            label: Text(
               'Lưu bản nháp',
-              style: TextStyle(color: Colors.black54, fontSize: 14),
+              style: TextStyle(color: context.pal.textSecondary, fontSize: 14),
             ),
           ),
         ),

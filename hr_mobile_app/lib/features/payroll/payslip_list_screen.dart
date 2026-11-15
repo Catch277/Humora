@@ -119,19 +119,19 @@ class _PayslipListScreenState extends State<PayslipListScreen> {
         const SizedBox(height: 22),
         const SectionTitle('Phiếu lương đã chốt'),
         if (_slips.isEmpty)
-          const AppCard(
+          AppCard(
             child: Padding(
               padding: EdgeInsets.symmetric(vertical: 12),
               child: Column(
                 children: [
-                  Icon(Icons.receipt_long_outlined, size: 34, color: AppColors.textMuted),
+                  Icon(Icons.receipt_long_outlined, size: 34, color: context.pal.textMuted),
                   SizedBox(height: 10),
-                  Text('Chưa có phiếu lương nào', style: AppText.title),
+                  Text('Chưa có phiếu lương nào', style: AppText.title(context)),
                   SizedBox(height: 4),
                   Text(
                     'Phiếu lương của tháng sẽ xuất hiện ở đây sau khi quản lý chốt kỳ lương.',
                     textAlign: TextAlign.center,
-                    style: AppText.bodyMuted,
+                    style: AppText.bodyMuted(context),
                   ),
                 ],
               ),
@@ -149,7 +149,7 @@ class _PayslipListScreenState extends State<PayslipListScreen> {
       return AppCard(
         child: Text(
           _estimateError ?? 'Chưa có dữ liệu thu nhập tạm tính.',
-          style: AppText.bodyMuted,
+          style: AppText.bodyMuted(context),
         ),
       );
     }
@@ -211,11 +211,11 @@ class _PayslipListScreenState extends State<PayslipListScreen> {
           ),
         ],
         const SizedBox(height: 10),
-        const Padding(
+        Padding(
           padding: EdgeInsets.symmetric(horizontal: 4),
           child: Text(
             'Số tạm tính có thể thay đổi theo bảng công cuối kỳ. Phiếu lương chính thức chỉ có giá trị sau khi được chốt.',
-            style: AppText.caption,
+            style: AppText.caption(context),
           ),
         ),
       ],
@@ -249,16 +249,16 @@ class _PayslipListScreenState extends State<PayslipListScreen> {
             width: 46,
             height: 46,
             decoration: BoxDecoration(
-              color: AppColors.primarySoft,
+              color: context.pal.primarySoft,
               borderRadius: BorderRadius.circular(14),
             ),
             child: Center(
               child: Text(
                 '${s.periodStart.month}',
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 18,
                   fontWeight: FontWeight.w800,
-                  color: AppColors.primary,
+                  color: context.pal.primary,
                 ),
               ),
             ),
@@ -268,18 +268,18 @@ class _PayslipListScreenState extends State<PayslipListScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('Tháng ${formatMonthYear(s.periodStart)}', style: AppText.title),
+                Text('Tháng ${formatMonthYear(s.periodStart)}', style: AppText.title(context)),
                 const SizedBox(height: 4),
                 Text(
                   'Thực nhận ${formatVnd(s.netAmount)}',
-                  style: AppText.money.copyWith(fontSize: 14, color: AppColors.textSecondary),
+                  style: AppText.money(context).copyWith(fontSize: 14, color: context.pal.textSecondary),
                 ),
                 const SizedBox(height: 8),
                 StatusPill(label, tone: tone, icon: icon),
               ],
             ),
           ),
-          const Icon(Icons.chevron_right_rounded, color: AppColors.textMuted),
+          Icon(Icons.chevron_right_rounded, color: context.pal.textMuted),
         ],
       ),
     );

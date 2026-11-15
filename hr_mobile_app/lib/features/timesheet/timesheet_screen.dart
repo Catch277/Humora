@@ -224,9 +224,9 @@ class _TimesheetScreenState extends State<TimesheetScreen> {
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Text('Tháng ${formatMonthYear(_month)}', style: AppText.title),
+                    Text('Tháng ${formatMonthYear(_month)}', style: AppText.title(context)),
                     const SizedBox(width: 4),
-                    const Icon(Icons.expand_more_rounded, size: 20, color: AppColors.textSecondary),
+                    Icon(Icons.expand_more_rounded, size: 20, color: context.pal.textSecondary),
                   ],
                 ),
               ),
@@ -265,8 +265,8 @@ class _TimesheetScreenState extends State<TimesheetScreen> {
                 label: 'Đi trễ / về sớm',
                 value: '$late / $early',
                 icon: Icons.running_with_errors_outlined,
-                color: AppColors.warning,
-                background: AppColors.warningSoft,
+                color: context.pal.warning,
+                background: context.pal.warningSoft,
               ),
             ),
             const SizedBox(width: 10),
@@ -298,7 +298,7 @@ class _TimesheetScreenState extends State<TimesheetScreen> {
                   label: Text('Ngày ${formatDayMonth(_selectedDay!)}'),
                   avatar: const Icon(Icons.close_rounded, size: 16),
                   onPressed: () => setState(() => _selectedDay = null),
-                  backgroundColor: AppColors.primarySoft,
+                  backgroundColor: context.pal.primarySoft,
                   side: BorderSide.none,
                 ),
         )),
@@ -313,7 +313,7 @@ class _TimesheetScreenState extends State<TimesheetScreen> {
                       : (_selectedDay != null
                           ? 'Ngày ${formatDayMonth(_selectedDay!)} chưa có bản ghi nào phù hợp'
                           : 'Không có bản ghi nào theo bộ lọc này'),
-                  style: AppText.bodyMuted,
+                  style: AppText.bodyMuted(context),
                   textAlign: TextAlign.center,
                 ),
               ),
@@ -341,7 +341,7 @@ class _TimesheetScreenState extends State<TimesheetScreen> {
           Row(
             children: [
               Expanded(
-                child: Text('${weekdayName(r.workDate)}, ${formatDayMonth(r.workDate)}', style: AppText.title),
+                child: Text('${weekdayName(r.workDate)}, ${formatDayMonth(r.workDate)}', style: AppText.title(context)),
               ),
               StatusPill(label, tone: tone, icon: icon),
             ],
@@ -351,12 +351,12 @@ class _TimesheetScreenState extends State<TimesheetScreen> {
             r.shiftName == null
                 ? 'Chưa gắn ca'
                 : '${r.shiftName}${r.shiftStart != null ? ' (${r.shiftStart} - ${r.shiftEnd})' : ''}',
-            style: AppText.bodyMuted,
+            style: AppText.bodyMuted(context),
           ),
           const SizedBox(height: 12),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-            decoration: BoxDecoration(color: AppColors.surfaceMuted, borderRadius: BorderRadius.circular(12)),
+            decoration: BoxDecoration(color: context.pal.surfaceMuted, borderRadius: BorderRadius.circular(12)),
             child: Row(
               children: [
                 Expanded(child: _time('Vào', inT)),
@@ -365,10 +365,10 @@ class _TimesheetScreenState extends State<TimesheetScreen> {
               ],
             ),
           ),
-          if (r.status == 'INCOMPLETE' && outAt == null)
-            const Padding(
+          if (r.status == 'INCOMPLETE')
+            Padding(
               padding: EdgeInsets.only(top: 10),
-              child: Text('Chưa có giờ ra. Hãy gửi đơn để quản lý bổ sung.', style: AppText.caption),
+              child: Text('Chưa có giờ ra. Hãy gửi đơn để quản lý bổ sung.', style: AppText.caption(context)),
             ),
           if (r.hasOpenComplaint)
             const Padding(
@@ -399,9 +399,9 @@ class _TimesheetScreenState extends State<TimesheetScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(label, style: AppText.caption),
+        Text(label, style: AppText.caption(context)),
         const SizedBox(height: 2),
-        Text(value, style: AppText.money.copyWith(fontSize: 14)),
+        Text(value, style: AppText.money(context).copyWith(fontSize: 14)),
       ],
     );
   }
@@ -416,8 +416,8 @@ class _SupplementSheet extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.75),
-      decoration: const BoxDecoration(
-        color: AppColors.surface,
+      decoration: BoxDecoration(
+        color: context.pal.surface,
         borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
       ),
       padding: const EdgeInsets.fromLTRB(20, 20, 20, 16),
@@ -427,19 +427,19 @@ class _SupplementSheet extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text('Gửi đơn bổ sung công', style: AppText.h2),
+            Text('Gửi đơn bổ sung công', style: AppText.h2(context)),
             const SizedBox(height: 6),
-            const Text('Chọn ngày cần bổ sung hoặc điều chỉnh. Quản lý sẽ xem xét đơn của bạn.', style: AppText.bodyMuted),
+            Text('Chọn ngày cần bổ sung hoặc điều chỉnh. Quản lý sẽ xem xét đơn của bạn.', style: AppText.bodyMuted(context)),
             const SizedBox(height: 12),
             const InfoBanner(
               text: 'Hiện chỉ gửi đơn được cho ngày đã có bản ghi chấm công. Bổ sung cho ngày chưa có bản ghi đang chờ máy chủ hỗ trợ.',
             ),
             const SizedBox(height: 12),
             if (records.isEmpty)
-              const Padding(
+              Padding(
                 padding: EdgeInsets.symmetric(vertical: 20),
                 child: Center(
-                  child: Text('Không có ngày nào cần gửi đơn trong tháng này.', style: AppText.bodyMuted, textAlign: TextAlign.center),
+                  child: Text('Không có ngày nào cần gửi đơn trong tháng này.', style: AppText.bodyMuted(context), textAlign: TextAlign.center),
                 ),
               )
             else
@@ -464,13 +464,13 @@ class _SupplementSheet extends StatelessWidget {
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Text('${weekdayName(r.workDate)}, ${formatDayMonth(r.workDate)}', style: AppText.title),
+                                Text('${weekdayName(r.workDate)}, ${formatDayMonth(r.workDate)}', style: AppText.title(context)),
                                 const SizedBox(height: 2),
-                                Text('Vào $inT • Ra $outT', style: AppText.caption),
+                                Text('Vào $inT • Ra $outT', style: AppText.caption(context)),
                               ],
                             ),
                           ),
-                          const Icon(Icons.chevron_right_rounded, color: AppColors.textMuted),
+                          Icon(Icons.chevron_right_rounded, color: context.pal.textMuted),
                         ],
                       ),
                     );
@@ -513,8 +513,8 @@ class _ComplaintSheetState extends State<_ComplaintSheet> {
   @override
   Widget build(BuildContext context) {
     return Container(
-      decoration: const BoxDecoration(
-        color: AppColors.surface,
+      decoration: BoxDecoration(
+        color: context.pal.surface,
         borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
       ),
       padding: EdgeInsets.fromLTRB(24, 20, 24, MediaQuery.of(context).viewInsets.bottom + 24),
@@ -524,9 +524,9 @@ class _ComplaintSheetState extends State<_ComplaintSheet> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text('Gửi đơn / khiếu nại bảng công', style: AppText.h2),
+            Text('Gửi đơn / khiếu nại bảng công', style: AppText.h2(context)),
             const SizedBox(height: 6),
-            const Text('Mô tả giờ vào/ra đúng của bạn. Quản lý sẽ xem xét và sửa nếu cần.', style: AppText.bodyMuted),
+            Text('Mô tả giờ vào/ra đúng của bạn. Quản lý sẽ xem xét và sửa nếu cần.', style: AppText.bodyMuted(context)),
             const SizedBox(height: 14),
             TextField(
               controller: _text,
@@ -536,7 +536,7 @@ class _ComplaintSheetState extends State<_ComplaintSheet> {
               decoration: InputDecoration(
                 errorText: _error,
                 filled: true,
-                fillColor: AppColors.surfaceMuted,
+                fillColor: context.pal.surfaceMuted,
                 border: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide.none),
               ),
             ),

@@ -128,7 +128,7 @@ class _AccountEmployeeScreenState extends State<AccountEmployeeScreen> {
           TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Huỷ')),
           TextButton(
             onPressed: () => Navigator.pop(context, true),
-            child: const Text('Đăng xuất', style: TextStyle(color: AppColors.danger)),
+            child: Text('Đăng xuất', style: TextStyle(color: context.pal.danger)),
           ),
         ],
       ),
@@ -182,9 +182,9 @@ class _AccountEmployeeScreenState extends State<AccountEmployeeScreen> {
               icon: const Icon(Icons.logout_rounded, size: 18),
               label: const Text('Đăng xuất'),
               style: OutlinedButton.styleFrom(
-                foregroundColor: AppColors.danger,
-                side: const BorderSide(color: AppColors.dangerSoft, width: 1.5),
-                backgroundColor: AppColors.dangerSoft,
+                foregroundColor: context.pal.danger,
+                side: BorderSide(color: context.pal.dangerSoft, width: 1.5),
+                backgroundColor: context.pal.dangerSoft,
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
               ),
             ),
@@ -200,10 +200,10 @@ class _AccountEmployeeScreenState extends State<AccountEmployeeScreen> {
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(24),
-        gradient: const LinearGradient(
+        gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [AppColors.primary, AppColors.primaryStrong],
+          colors: [context.pal.primary, AppColors.primaryStrong],
         ),
       ),
       child: _loading
@@ -251,18 +251,18 @@ class _AccountEmployeeScreenState extends State<AccountEmployeeScreen> {
       child: Column(
         children: [
           for (var i = 0; i < items.length; i++) ...[
-            if (i > 0) const Divider(height: 1, indent: 62, color: AppColors.border),
+            if (i > 0) Divider(height: 1, indent: 62, color: context.pal.border),
             ListTile(
               onTap: items[i].onTap,
               leading: Container(
                 width: 38,
                 height: 38,
-                decoration: BoxDecoration(color: AppColors.primarySoft, borderRadius: BorderRadius.circular(12)),
-                child: Icon(items[i].icon, color: AppColors.primary, size: 20),
+                decoration: BoxDecoration(color: context.pal.primarySoft, borderRadius: BorderRadius.circular(12)),
+                child: Icon(items[i].icon, color: context.pal.primary, size: 20),
               ),
-              title: Text(items[i].title, style: AppText.title),
-              subtitle: Text(items[i].subtitle, style: AppText.caption),
-              trailing: const Icon(Icons.chevron_right_rounded, color: AppColors.textMuted),
+              title: Text(items[i].title, style: AppText.title(context)),
+              subtitle: Text(items[i].subtitle, style: AppText.caption(context)),
+              trailing: Icon(Icons.chevron_right_rounded, color: context.pal.textMuted),
             ),
           ],
         ],
@@ -313,15 +313,15 @@ class _PasswordSheetState extends State<_PasswordSheet> {
   InputDecoration _dec(String label) => InputDecoration(
         labelText: label,
         filled: true,
-        fillColor: AppColors.surfaceMuted,
+        fillColor: context.pal.surfaceMuted,
         border: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide.none),
       );
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      decoration: const BoxDecoration(
-        color: AppColors.surface,
+      decoration: BoxDecoration(
+        color: context.pal.surface,
         borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
       ),
       padding: EdgeInsets.fromLTRB(24, 20, 24, MediaQuery.of(context).viewInsets.bottom + 24),
@@ -331,7 +331,7 @@ class _PasswordSheetState extends State<_PasswordSheet> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text('Đổi mật khẩu', style: AppText.h2),
+            Text('Đổi mật khẩu', style: AppText.h2(context)),
             const SizedBox(height: 14),
             TextField(controller: _a, obscureText: true, decoration: _dec('Mật khẩu mới')),
             const SizedBox(height: 10),
@@ -339,7 +339,7 @@ class _PasswordSheetState extends State<_PasswordSheet> {
             if (_error != null)
               Padding(
                 padding: const EdgeInsets.only(top: 8),
-                child: Text(_error!, style: const TextStyle(color: AppColors.danger, fontSize: 13)),
+                child: Text(_error!, style: TextStyle(color: context.pal.danger, fontSize: 13)),
               ),
             const SizedBox(height: 14),
             PrimaryButton(label: 'Cập nhật mật khẩu', onPressed: _submit),
