@@ -5,8 +5,9 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 
-import OrganizationCard from "@/components/OrganizationCard";
 import BrandMark from "@/components/BrandMark";
+import BrandTagline from "@/components/BrandTagline";
+import OrganizationCard from "@/components/OrganizationCard";
 import { visibleNavigation } from "@/components/navigation";
 import { useLocale } from "@/components/LocaleProvider";
 import { useProfile } from "@/components/ProfileProvider";
@@ -133,9 +134,7 @@ export default function MobileNav() {
               <BrandMark />
               <div className="leading-tight">
                 <p className="text-sm font-bold text-slate-900">Humora</p>
-                <p className="mt-0.5 text-[10px] font-medium text-slate-500">
-                  HR &amp; Shift Intelligence
-                </p>
+                <BrandTagline className="mt-1" />
               </div>
               <button
                 ref={closeRef}

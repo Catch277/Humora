@@ -16,7 +16,7 @@ const beVietnamPro = Be_Vietnam_Pro({
 });
 
 export const metadata: Metadata = {
-  title: "Humora | HR & Shift Intelligence",
+  title: "Humora | CONNECTING PEOPLE & GROWTH",
   description: "Hệ thống quản lý nhân sự và vận hành Humora",
   // The tab icon is the same logo file the shell shows (`components/BrandMark.tsx`), wired here rather
   // than through the `app/icon.png` convention so the build does not depend on the asset existing.

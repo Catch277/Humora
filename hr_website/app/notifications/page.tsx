@@ -456,12 +456,19 @@ export default function NotificationsPage() {
             {t("notifications.subtitle")}
           </p>
         </div>
-        <div className="flex flex-wrap gap-2">
+        {/*
+          One row of three buttons from `lg` up. The primary label changes with the chip ("Đánh dấu tất cả
+          đã đọc" → "Đánh dấu nhóm Doanh thu đã đọc"), and inside a wrapping container that longer label
+          pushed the button onto a second line — the action bar visibly rearranged itself on every chip
+          click. `lg:flex-nowrap` + `shrink-0 whitespace-nowrap` keeps the row fixed and lets the prose on
+          the left absorb the difference; below `lg` the section stacks and the buttons may wrap as usual.
+        */}
+        <div className="flex flex-wrap gap-2 lg:flex-nowrap">
           <button
             type="button"
             onClick={refresh}
             disabled={loading}
-            className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-surface px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+            className="inline-flex shrink-0 items-center gap-2 whitespace-nowrap rounded-lg border border-slate-200 bg-surface px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
           >
             <RefreshCw size={14} className={loading ? "animate-spin" : ""} />
             {t("common.reload")}
@@ -469,7 +476,7 @@ export default function NotificationsPage() {
           <button
             type="button"
             onClick={openSettings}
-            className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-surface px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50"
+            className="inline-flex shrink-0 items-center gap-2 whitespace-nowrap rounded-lg border border-slate-200 bg-surface px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50"
           >
             <Settings2 size={14} /> {t("notifications.settingsButton")}
           </button>
@@ -477,7 +484,7 @@ export default function NotificationsPage() {
             type="button"
             onClick={() => void markAllRead()}
             disabled={markingAll}
-            className="inline-flex items-center gap-2 rounded-lg bg-primary px-3 py-2 text-xs font-semibold text-white hover:bg-primary-strong disabled:cursor-not-allowed disabled:opacity-50"
+            className="inline-flex shrink-0 items-center gap-2 whitespace-nowrap rounded-lg bg-primary px-3 py-2 text-xs font-semibold text-white hover:bg-primary-strong disabled:cursor-not-allowed disabled:opacity-50"
           >
             {markingAll ? (
               <Loader2 size={14} className="animate-spin" />

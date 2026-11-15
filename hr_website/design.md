@@ -153,7 +153,7 @@ is the workhorse for labels and buttons.
   the keyboard without resizing the layout viewport, so a field at the bottom of a modal would otherwise
   stay hidden behind it. See §4.4.
 - Content is capped at `max-w-[1440px]` and centred; gutters `p-4` → `md:p-6`.
-- Sidebar `w-56`, hidden below `md` (the phone gets the drawer of §4.4 instead). It collapses to an
+- Sidebar `w-64`, hidden below `md` (the phone gets the drawer of §4.4 instead). It collapses to an
   icon-only rail (`w-16`) from an icon-only `ChevronLeft` / `ChevronRight` button centred on its **right**
   border (`absolute right-0 top-1/2 translate-x-1/2`, `h-7 w-7 rounded-full border bg-surface`) — not a
   nav entry and no text, so the panel stays entirely navigation; the choice is the `humora-sidebar` cookie,
@@ -171,6 +171,11 @@ is the workhorse for labels and buttons.
   `flex flex-col ... lg:flex-row lg:items-end` sibling.
 - Card interiors: `p-4` (compact) or `p-5`/`p-6` (comfortable); table heads `px-4 py-3` / `px-5 py-4`.
 - Field groups inside dialogs: `grid gap-4 sm:grid-cols-2`.
+- An action row whose labels change with a filter keeps **one row** from `lg` up (`lg:flex-nowrap` on the
+  container, `shrink-0 whitespace-nowrap` on each button) and lets the prose beside it absorb the difference.
+  `/notifications` is the reference: its primary button reads "Đánh dấu tất cả đã đọc" on one chip and
+  "Đánh dấu nhóm Doanh thu đã đọc" on another, and inside a wrapping container that longer label pushed the
+  button onto a second line — the bar visibly rearranged itself on every chip click.
 
 ### 4.3 Grid recipes
 
@@ -196,7 +201,7 @@ the header gets its room back. Everything below it has to be usable with one thu
 | Touch | No hover-only affordance: the schedule cell's `+ Thêm` is `opacity-100` below `md` and revealed on hover/focus from `md` up. Anything that only exists on `group-hover` is invisible *and* tappable on a phone. |
 | Forms | Safari zooms the page when a focused field is below 16px, so `app/globals.css` forces `16px` on `input/select/textarea` under `max-width: 767px`. The rule sits **outside** every `@layer` so it outranks Tailwind's `text-xs`/`text-sm` utilities. |
 | Modals | `max-h-[85dvh]` (not `92vh`: the iOS toolbar eats into `vh`), `p-4 sm:p-6`, and the wrapper is `items-end sm:items-center`, so a dialog rises from the bottom like a sheet on a phone and stays centred on a desktop. |
-| Tables | Unchanged in shape: `overflow-x-auto` + `min-w-[…]`, so a phone swipes sideways. A cell whose content must not break carries `whitespace-nowrap` — the `/organization` invites table is the reference: without it the `Chờ vào tổ chức` pill wraps over three lines at 393px and stretches every row (header cells wrap too, so they need it as well). The first column is the row's identity (employee, ca, mã) — the place a sticky column would go if a screen needs it. |
+| Tables | Unchanged in shape: `overflow-x-auto` + `min-w-[…]`, so a phone swipes sideways. A cell whose content must not break carries `whitespace-nowrap` — the `/organization` invites table is the reference: without it the `Chờ vào tổ chức` pill wraps over three lines at 393px and stretches every row (header cells wrap too, so they need it as well). A badge pill additionally needs `inline-flex`: `whitespace-nowrap` alone does not stop an inline `span` from breaking, which is how `/staff`'s `Đang làm việc` pill rendered as "Đang làm / việc" and its "Cho nghỉ việc" action as "Cho nghỉ / việc" whenever the two prose columns beside it squeezed the status column. The first column is the row's identity (employee, ca, mã) — the place a sticky column would go if a screen needs it. |
 | Map | `LocationPickerMap` keeps Leaflet's defaults: `h-64 w-full`, wheel zoom on a desktop, and on a phone one-finger drag pans the *map* and pinch zooms it — so a swipe over the map does not scroll the page (the fields and the modal around it do). That is the normal trade-off for a picker; the pin is placed by tapping, not by dragging it. |
 
 ---
@@ -474,7 +479,11 @@ Initials-based, no photos anywhere in the admin UI:
 ```
 
 Section label above the list: `mb-2 px-2 text-[10px] font-semibold uppercase tracking-wider
-text-slate-400`. The brand block is the accent square + two-line name; the footer card is
+text-slate-400`. The brand block is the accent square + the wordmark + the tagline
+(`components/BrandTagline.tsx`: `CONNECTING` in `text-brand-navy`, `PEOPLE & GROWTH` in `text-brand-green`,
+`tracking-[0.15em]`, the two colours of the logo lockup kept as tokens so the dark theme can re-point them —
+one size down (`compact`, `text-[9px]`) in the 256px rail so the line keeps the lockup's single-line
+alignment with the wordmark instead of wrapping); the footer card is
 `m-3 rounded-xl border border-blue-100 bg-surface-accent p-3`. **Every new screen must be added here**
 (lucide icon + Vietnamese label) so navigation stays complete — and to the one heading its work belongs
 to. The list is grouped in `components/navigation.ts` (`NAV_GROUPS`, one `NavigationGroup` per heading)

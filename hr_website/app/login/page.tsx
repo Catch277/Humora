@@ -13,6 +13,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
 import BrandMark from "@/components/BrandMark";
+import BrandTagline from "@/components/BrandTagline";
 import LanguageToggle from "@/components/LanguageToggle";
 import PasswordInput from "@/components/PasswordInput";
 import { useLocale } from "@/components/LocaleProvider";
@@ -305,9 +306,7 @@ export default function LoginPage() {
             <BrandMark className="h-9 w-9" />
             <div className="leading-tight">
               <p className="text-sm font-bold text-slate-900">Humora</p>
-              <p className="mt-0.5 text-[10px] font-medium text-slate-500">
-                HR &amp; Shift Intelligence
-              </p>
+              <BrandTagline className="mt-1" />
             </div>
           </div>
           {/* `/login` renders outside the shell (`Header` returns null for a public path), so the switch

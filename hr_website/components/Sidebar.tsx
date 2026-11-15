@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
 
+import BrandTagline from "@/components/BrandTagline";
 import OrganizationCard from "@/components/OrganizationCard";
 import BrandMark from "@/components/BrandMark";
 import { visibleNavigation } from "@/components/navigation";
@@ -70,7 +71,7 @@ export default function Sidebar({ initialCollapsed = false }: SidebarProps) {
   return (
     <aside
       className={`relative z-20 hidden h-dvh shrink-0 flex-col border-r border-slate-200/80 bg-surface shadow-sm transition-[width] duration-200 ease-out motion-reduce:transition-none md:flex ${
-        collapsed ? "w-16" : "w-56"
+        collapsed ? "w-16" : "w-64"
       }`}
     >
       <div
@@ -82,9 +83,7 @@ export default function Sidebar({ initialCollapsed = false }: SidebarProps) {
         {!collapsed && (
           <div className="min-w-0 leading-tight">
             <p className="text-sm font-bold text-slate-900">Humora</p>
-            <p className="mt-0.5 text-[10px] font-medium text-slate-500">
-              HR &amp; Shift Intelligence
-            </p>
+            <BrandTagline compact className="mt-1" />
           </div>
         )}
       </div>

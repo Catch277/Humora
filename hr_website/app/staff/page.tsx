@@ -574,9 +574,15 @@ export default function StaffPage() {
             <table className="w-full min-w-[1080px] text-left text-sm">
               <thead className="bg-slate-50 text-[11px] uppercase tracking-wider text-slate-500">
                 <tr>
-                  <th className="px-4 py-3 font-semibold">Nhân viên</th>
-                  <th className="px-4 py-3 font-semibold">Vai trò</th>
-                  <th className="px-4 py-3 font-semibold">Chi nhánh làm việc</th>
+                  <th className="whitespace-nowrap px-4 py-3 font-semibold">
+                    Nhân viên
+                  </th>
+                  <th className="whitespace-nowrap px-4 py-3 font-semibold">
+                    Vai trò
+                  </th>
+                  <th className="whitespace-nowrap px-4 py-3 font-semibold">
+                    Chi nhánh làm việc
+                  </th>
                   {managesPayroll && (
                     <th className="whitespace-nowrap px-4 py-3 font-semibold">
                       {t("payroll.rates.column")}
@@ -587,9 +593,15 @@ export default function StaffPage() {
                       {t("payroll.final.column")}
                     </th>
                   )}
-                  <th className="px-4 py-3 font-semibold">Trạng thái</th>
-                  <th className="px-4 py-3 font-semibold">Ngày tạo</th>
-                  <th className="px-4 py-3 font-semibold">Hành động</th>
+                  <th className="whitespace-nowrap px-4 py-3 font-semibold">
+                    Trạng thái
+                  </th>
+                  <th className="whitespace-nowrap px-4 py-3 font-semibold">
+                    Ngày tạo
+                  </th>
+                  <th className="whitespace-nowrap px-4 py-3 font-semibold">
+                    Hành động
+                  </th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
@@ -698,8 +710,15 @@ export default function StaffPage() {
                         </td>
                       )}
                       <td className="px-4 py-3">
+                        {/*
+                          `inline-flex` + `whitespace-nowrap`: as a plain inline `span` the pill broke across
+                          lines ("Đang làm / việc") whenever the long branch column squeezed this one, and a
+                          status badge that wraps reads as a layout bug. The table is `min-w-[1080px]` inside
+                          `overflow-x-auto`, so refusing to wrap widens the table instead — which is the
+                          documented trade-off for this screen.
+                        */}
                         <span
-                          className={`rounded-full px-2.5 py-1 text-[10px] font-semibold ${
+                          className={`inline-flex items-center whitespace-nowrap rounded-full px-2.5 py-1 text-[10px] font-semibold ${
                             draft.isActive
                               ? "bg-emerald-50 text-emerald-700"
                               : "bg-slate-100 text-slate-500"
@@ -712,7 +731,7 @@ export default function StaffPage() {
                           onClick={() =>
                             updateDraft(member.id, { isActive: !draft.isActive })
                           }
-                          className="mt-2 flex items-center gap-1.5 text-[11px] font-semibold text-primary hover:underline"
+                          className="mt-2 flex items-center gap-1.5 whitespace-nowrap text-[11px] font-semibold text-primary hover:underline"
                         >
                           <RotateCcw size={12} />
                           {draft.isActive ? "Cho nghỉ việc" : "Kích hoạt lại"}
