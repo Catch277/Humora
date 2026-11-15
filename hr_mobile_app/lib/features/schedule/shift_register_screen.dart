@@ -274,7 +274,7 @@ class _ShiftRegisterScreenState extends State<ShiftRegisterScreen> {
       content: Text(
         '${reg.name} (${reg.start} - ${reg.end}) ngày ${formatDayMonth(reg.workDate)}.\n'
         'Sau khi huỷ bạn có thể đăng ký lại nếu ca còn nhận.',
-        style: AppText.body,
+        style: AppText.body(context),
       ),
       confirmLabel: 'Huỷ đăng ký',
       danger: true,

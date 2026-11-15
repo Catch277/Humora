@@ -1,23 +1,16 @@
 import 'dart:async';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
-import 'package:geolocator/geolocator.dart';
 import 'package:intl/intl.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../core/app_colors.dart';
+import '../core/theme_controller.dart'; // themeNotifier (đổi Light/Dark)
 import '../core/widgets/fx.dart';
-import '../services/attendance_api.dart';
 import '../widgets/bottom_nav_bar.dart';
-import '../widgets/employee_home/home_header.dart';
-import '../widgets/employee_home/checkin_card.dart';
 import '../widgets/employee_home/performance_card.dart';
 import '../widgets/employee_home/hr_services_grid.dart';
-import '../widgets/employee_home/gps_status_card.dart';
 import '../widgets/employee_home/week_status_card.dart';
 import 'camera_checkin.dart'; // Import màn hình camera
-
-import '../core/theme_controller.dart'; // themeNotifier (đổi Light/Dark)
 
 /// Trang chủ nhân viên. Dữ liệu nghiệp vụ vẫn được lấy từ các service hiện có.
 class HomeEmployeeScreen extends StatefulWidget {
