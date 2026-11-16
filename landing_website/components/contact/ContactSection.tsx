@@ -217,7 +217,7 @@ function ContactBody({
         className="pointer-events-none absolute inset-0 -z-10 bg-[radial-gradient(55%_45%_at_85%_20%,rgba(37,99,235,0.10),transparent_70%)]"
       />
 
-      <div className="mx-auto grid max-w-6xl items-start gap-12 px-6 pb-24 pt-28 sm:pt-32 lg:grid-cols-[1fr_1.15fr] lg:gap-16">
+      <div className="mx-auto grid max-w-7xl items-start gap-12 px-6 pb-24 pt-28 sm:pt-32 lg:grid-cols-[minmax(0,1fr)_minmax(38rem,1.5fr)] lg:gap-8 xl:gap-12">
         {/* ── Cột trái: nội dung theo chủ đề ── */}
         <div className="lg:sticky lg:top-28">
           <h1 className="font-heading text-4xl font-extrabold leading-[1.1] tracking-tight text-ink sm:text-5xl">
@@ -249,7 +249,7 @@ function ContactBody({
                 q &&
                 planInfo && (
                   <p className="mt-1 text-ink">
-                    Gói <strong>{planInfo.name}</strong>, {empCount} nhân viên:{" "}
+                    <strong>{planInfo.name}</strong>, {empCount} nhân viên:{" "}
                     <strong className="tabular-nums">khoảng {formatVnd(q.total)} ₫/tháng</strong>
                   </p>
                 )
@@ -327,7 +327,7 @@ function ContactBody({
               {/* Chọn chủ đề */}
               <fieldset>
                 <legend className="mb-2 text-sm font-semibold text-ink">Bạn cần gì?</legend>
-                <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                <div className="grid auto-rows-fr grid-cols-2 gap-2 sm:grid-cols-4">
                   {TOPICS.map((t) => (
                     <label key={t.id} className="cursor-pointer">
                       <input
@@ -338,7 +338,7 @@ function ContactBody({
                         onChange={() => setTopic(t.id)}
                         className="peer sr-only"
                       />
-                      <span className="block rounded-xl border border-slate-300 px-2 py-2.5 text-center text-sm font-semibold text-body transition-colors hover:border-blue-600 peer-checked:border-blue-600 peer-checked:bg-blue-600 peer-checked:text-white peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-blue-600">
+                      <span className="flex h-full items-center justify-center whitespace-nowrap rounded-xl border border-slate-300 px-2 py-2.5 text-center text-sm font-semibold text-body transition-colors hover:border-blue-600 peer-checked:border-blue-600 peer-checked:bg-blue-600 peer-checked:text-white peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-blue-600">
                         {t.label}
                       </span>
                     </label>

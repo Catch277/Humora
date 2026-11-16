@@ -20,7 +20,7 @@ export default function Hero() {
   return (
     <section
       id="hero"
-      className="relative isolate flex min-h-svh items-center overflow-hidden bg-white pb-12 pt-24 lg:pt-20"
+      className="relative isolate flex items-center overflow-hidden bg-white pb-12 pt-24 lg:pb-16 lg:pt-28"
     >
       {/* Vệt xanh mờ phía sau mockup – để lớp kính có thứ để làm mờ */}
       <div

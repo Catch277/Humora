@@ -9,29 +9,32 @@ export const MAX_STANDARD = 500;
 
 export type PlanId = "basic" | "advanced" | "premium";
 
-export const PLANS: { id: PlanId; name: string; tagline: string; web: boolean }[] = [
+/*
+ * Ba gói chỉ khác nhau về thời hạn đăng ký, nên phạm vi chức năng là như nhau.
+ * Danh sách chức năng vì vậy nằm ngoài `PLANS` và dùng chung cho cả ba thẻ giá.
+ */
+export const PLANS: { id: PlanId; name: string; short: string; tagline: string }[] = [
   {
     id: "basic",
-    name: "Cơ bản",
-    tagline: "Ứng dụng di động cho nhân viên và quản lý",
-    web: false,
+    name: "Gói 1 tháng",
+    short: "1 tháng",
+    tagline: "Ứng dụng di động và web quản trị, thanh toán theo tháng",
   },
   {
     id: "advanced",
-    name: "Nâng cao",
-    tagline: "Thêm web quản trị cho Ban Giám đốc và Phòng HR",
-    web: true,
+    name: "Gói 3 tháng",
+    short: "3 tháng",
+    tagline: "Ứng dụng di động và web quản trị, thanh toán mỗi 3 tháng",
   },
   {
     id: "premium",
-    name: "Cao cấp",
-    // TODO: báo giá chưa nêu Cao cấp khác Nâng cao ở điểm nào – bổ sung tại đây khi có
-    tagline: "Web quản trị và ứng dụng di động",
-    web: true,
+    name: "Gói 1 năm",
+    short: "1 năm",
+    tagline: "Ứng dụng di động và web quản trị, thanh toán mỗi năm",
   },
 ];
 
-/* Phạm vi hệ thống (mục I trong báo giá) */
+/* Phạm vi hệ thống (mục I trong báo giá) – áp dụng cho cả ba gói */
 export const APP_FEATURES = [
   "Xếp lịch và đăng ký ca",
   "Chấm công",
