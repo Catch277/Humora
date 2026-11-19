@@ -1,26 +1,22 @@
 import PricingCalculator from "./pricing/PricingCalculator";
-import { MIN_FEE, PLANS, TIERS, formatVnd } from "./pricing/data";
+import { PLANS, TIERS, formatVnd } from "./pricing/data";
 
 export default function Pricing() {
   return (
-    <section id="pricing" className="bg-surface py-20 sm:py-28">
+    <section id="pricing" className="bg-surface py-10 sm:py-8">
       <div className="mx-auto max-w-6xl px-6">
         <div className="text-center">
           <h2 className="mx-auto max-w-3xl font-heading text-3xl font-extrabold leading-tight tracking-tight text-ink sm:text-4xl">
             Bảng giá rõ ràng, tính theo số nhân viên
           </h2>
-          <p className="mx-auto mt-5 max-w-2xl text-lg leading-relaxed text-body">
-            Công ty càng đông, giá mỗi người càng giảm. Phí tối thiểu cho mọi công ty là{" "}
-            <strong className="font-semibold text-ink">{formatVnd(MIN_FEE)} ₫/tháng</strong>.
-          </p>
         </div>
 
-        <div className="mt-12">
+        <div className="mt-6">
           <PricingCalculator />
         </div>
 
         {/* Bảng đầy đủ theo quy mô */}
-        <details className="group mx-auto mt-10 max-w-3xl rounded-2xl border border-slate-200 bg-white shadow-soft">
+        <details className="group mx-auto mt-5 max-w-3xl rounded-2xl border border-slate-200 bg-white shadow-soft">
           <summary className="flex cursor-pointer list-none items-center justify-between gap-4 rounded-2xl px-6 py-4 font-heading font-bold text-ink focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-blue-600 [&::-webkit-details-marker]:hidden">
             Xem bảng giá đầy đủ theo quy mô
             <svg viewBox="0 0 20 20" className="size-5 shrink-0 text-blue-600 transition-transform duration-300 group-open:rotate-180" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">

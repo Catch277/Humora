@@ -36,13 +36,9 @@ export default function Solution() {
     <section id="solution" className="bg-white py-20 sm:py-28">
       <div className="mx-auto max-w-5xl px-6">
         <div className="text-center">
-          <h2 className="mx-auto max-w-3xl font-heading text-3xl font-extrabold leading-tight tracking-tight text-ink sm:text-4xl">
+          <h2 className="font-heading text-3xl font-extrabold leading-tight tracking-tight text-ink sm:text-4xl lg:whitespace-nowrap">
             Humora: một nền tảng, trọn vòng đời ca làm việc
           </h2>
-          <p className="mx-auto mt-5 max-w-2xl text-lg leading-relaxed text-body">
-            Từ lúc xếp ca đến khi chốt lương, mọi bước nối liền nhau. Không còn
-            phải chạy qua lại giữa giấy, Zalo và Excel.
-          </p>
         </div>
 
         {/* Luồng: Xếp ca → Chấm công → Duyệt → Tính lương */}

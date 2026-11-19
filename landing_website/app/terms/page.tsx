@@ -54,8 +54,8 @@ const sections: LegalSection[] = [
       <>
         <P>
           Humora cung cấp các chức năng chấm công bằng nhận diện khuôn mặt và định vị GPS/WiFi, xếp và duyệt ca làm
-          việc, tính lương và trợ lý AI. Phạm vi chức năng phụ thuộc vào gói Khách hàng đăng ký (Cơ bản, Nâng cao hoặc
-          Cao cấp); web quản trị có trong gói Nâng cao và Cao cấp.
+          việc, tính lương và trợ lý AI trên ứng dụng di động và web quản trị. Các gói 1 tháng, 3 tháng và 1 năm
+          có cùng phạm vi chức năng, chỉ khác nhau về thời hạn đăng ký và cách thanh toán.
         </P>
         <P>
           Chúng tôi có thể cải tiến, bổ sung hoặc điều chỉnh tính năng để nâng cao chất lượng dịch vụ. Nếu thay đổi làm

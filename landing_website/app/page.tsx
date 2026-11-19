@@ -15,13 +15,13 @@ export default function Home() {
     <>
       <Hero />
       <TrustBar />
+      <Pricing />
       <PainPoints />
       <Solution />
       <FeatureBento />
       <HowItWorks />
       <Audience />
       <SocialProof />
-      <Pricing />
       <Faq />
       <FinalCta />
     </>
