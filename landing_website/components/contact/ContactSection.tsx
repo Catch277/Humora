@@ -250,7 +250,9 @@ function ContactBody({
                 planInfo && (
                   <p className="mt-1 text-ink">
                     <strong>{planInfo.name}</strong>, {empCount} nhân viên:{" "}
-                    <strong className="tabular-nums">khoảng {formatVnd(q.total)} ₫/tháng</strong>
+                    <strong className="tabular-nums">
+                      khoảng {formatVnd(q.total)} ₫{planInfo.periodSuffix}
+                    </strong>
                   </p>
                 )
               )}

@@ -26,14 +26,17 @@ export default function Pricing() {
 
           <div className="overflow-x-auto px-4 pb-5 sm:px-6">
             <table className="w-full min-w-[34rem] border-collapse text-sm">
-              <caption className="pb-3 text-left text-sm text-body">Đơn vị: đồng / người / tháng</caption>
+              <caption className="pb-3 text-left text-sm text-body">
+                Đơn vị: đồng / người theo thời hạn từng gói
+              </caption>
               <thead>
                 <tr className="bg-surface text-left text-ink">
                   <th scope="col" className="rounded-l-lg px-4 py-3 font-semibold">Quy mô</th>
                   <th scope="col" className="px-4 py-3 font-semibold">Số nhân viên</th>
                   {PLANS.map((p, i) => (
                     <th key={p.id} scope="col" className={`px-4 py-3 text-right font-semibold ${i === PLANS.length - 1 ? "rounded-r-lg" : ""}`}>
-                      {p.name}
+                      <span className="block">{p.name}</span>
+                      <span className="block text-xs font-normal text-body">{p.unitLabel}</span>
                     </th>
                   ))}
                 </tr>

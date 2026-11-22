@@ -146,8 +146,8 @@ const sections: LegalSection[] = [
     content: (
       <>
         <P>
-          Phí được tính theo số nhân viên nhân với mức giá mỗi người mỗi tháng của bậc quy mô và gói Khách hàng chọn,
-          với mức phí tối thiểu là 400.000 đồng mỗi tháng cho mỗi công ty. Chi tiết xem tại mục{" "}
+          Phí được tính theo số nhân viên nhân với đơn giá của bậc quy mô và thời hạn gói Khách hàng chọn (1 tháng,
+          3 tháng hoặc 1 năm), với mức phí tối thiểu là 400.000 đồng cho mỗi kỳ thanh toán. Chi tiết xem tại mục{" "}
           <Link href="/#pricing" className="font-semibold text-blue-600 underline-offset-2 hover:underline">
             Bảng giá
           </Link>

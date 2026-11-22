@@ -34,7 +34,7 @@ export default function PricingCalculator() {
 
   const summary = valid && !enterprise
     ? `Với ${count} nhân viên: ` +
-      PLANS.map((p) => `${p.name} ${formatVnd(quote(count, p.id)!.total)} đồng mỗi tháng`).join(", ") +
+      PLANS.map((p) => `${p.name} ${formatVnd(quote(count, p.id)!.total)} đồng (${p.short})`).join(", ") +
       "."
     : "";
 
@@ -83,24 +83,36 @@ export default function PricingCalculator() {
                 key={plan.id}
                 className="flex flex-col rounded-3xl border border-slate-200 bg-white p-5 shadow-soft transition-all duration-300 ease-out hover:-translate-y-1 hover:border-blue-600/30 hover:shadow-[0_24px_48px_-20px_rgba(37,99,235,0.35)] motion-reduce:hover:translate-y-0 sm:p-6"
               >
-                <h3 className="font-heading text-xl font-bold text-ink">{plan.name}</h3>
+                <div className="flex items-center justify-between gap-2">
+                  <h3 className="font-heading text-xl font-bold text-ink">{plan.name}</h3>
+                  {q && q.savingsPercent > 0 && (
+                    <span className="rounded-full bg-emerald-50 px-2.5 py-0.5 text-xs font-semibold tabular-nums text-emerald-700">
+                      Tiết kiệm {q.savingsPercent}%
+                    </span>
+                  )}
+                </div>
                 <p className="mt-1 min-h-10 text-sm leading-snug text-body">{plan.tagline}</p>
 
                 <p className="mt-3 flex flex-wrap items-baseline gap-1.5">
                   <span className="font-heading text-4xl font-extrabold tabular-nums tracking-tight text-ink">
                     {q ? formatVnd(q.perPerson) : "—"}
                   </span>
-                  <span className="text-sm text-body">₫ / người / tháng</span>
+                  <span className="text-sm text-body">{plan.unitLabel}</span>
                 </p>
 
-                <div className="mt-3 rounded-xl bg-brand-mist/70 px-4 py-2">
-                  <p className="text-sm text-body">Tổng mỗi tháng</p>
+                <div className="mt-3 rounded-xl bg-brand-mist/70 px-4 py-2.5">
+                  <p className="text-sm text-body">{plan.totalLabel}</p>
                   <p className="font-heading text-2xl font-extrabold tabular-nums text-blue-700">
                     {q ? `${formatVnd(q.total)} ₫` : "—"}
                   </p>
+                  {q && q.savings > 0 && (
+                    <p className="mt-1 text-xs font-medium text-emerald-700">
+                      Tương đương {formatVnd(q.monthlyTotal)} ₫/tháng · tiết kiệm {formatVnd(q.savings)} ₫
+                    </p>
+                  )}
                   {q?.minApplied && (
                     <p className="mt-1 text-xs font-medium text-amber-700">
-                      Đã áp dụng phí tối thiểu {formatVnd(MIN_FEE)} ₫/tháng
+                      Đã áp dụng phí tối thiểu {formatVnd(MIN_FEE)} ₫{plan.periodSuffix}
                     </p>
                   )}
                 </div>

@@ -16,8 +16,8 @@ import { MAX_STANDARD, MIN_FEE, PLANS, formatVnd, quote, type PlanId } from "@/c
    thiếu tham số thì mặc định Gói 1 tháng và ô nhân viên để trống, trang
    không bao giờ tự chuyển sang màn báo lỗi.
 
-   Số tiền thu = tổng 1 tháng của bảng giá (`quote().total`), đúng con số
-   đang hiện trên thẻ giá. Không tự thêm chiết khấu hay nhân theo kỳ hạn.
+   Số tiền thu = tổng trọn gói theo kỳ hạn đã chọn (`quote().total`),
+   khớp đúng con số đang hiện trên thẻ giá.
    ───────────────────────────────────────────────────────────── */
 
 type Step = "review" | "confirm" | "processing" | "success";
@@ -324,13 +324,15 @@ export default function PaymentFlow() {
                     : enterprise
                       ? `Trên ${MAX_STANDARD} nhân viên cần báo giá riêng.`
                       : order
-                        ? `Quy mô ${order.tier.name.toLowerCase()} · ${formatVnd(order.perPerson)} ₫/người/tháng`
+                        ? `Quy mô ${order.tier.name.toLowerCase()} · ${formatVnd(order.perPerson)} ${order.plan.unitLabel}`
                         : "Nhập số nhân viên để xem giá."}
                 </p>
               </div>
 
               <div className="mt-5 flex items-baseline justify-between gap-4 rounded-2xl bg-brand-mist/70 px-4 py-3">
-                <span className="text-sm font-semibold text-body">Số tiền thanh toán</span>
+                <span className="text-sm font-semibold text-body">
+                  Số tiền thanh toán ({planInfo.short})
+                </span>
                 <span className="font-heading text-2xl font-extrabold tabular-nums text-blue-700">
                   {order ? `${formatVnd(order.total)} ₫` : "—"}
                 </span>
@@ -338,11 +340,15 @@ export default function PaymentFlow() {
 
               {order?.minApplied && (
                 <p className="mt-2 text-xs font-medium text-amber-700">
-                  Đã áp dụng phí tối thiểu {formatVnd(MIN_FEE)} ₫/tháng
+                  Đã áp dụng phí tối thiểu {formatVnd(MIN_FEE)} ₫{order.plan.periodSuffix}
                 </p>
               )}
               <p className="mt-2 text-xs leading-relaxed text-body">
-                Phí của 1 tháng sử dụng. Bản mô phỏng thu đúng 1 tháng cho mọi gói để khớp bảng giá.
+                Phí trọn gói cho {planInfo.short} sử dụng
+                {order && order.savings > 0
+                  ? ` (tương đương ${formatVnd(order.monthlyTotal)} ₫/tháng, tiết kiệm ${order.savingsPercent}% so với gói 1 tháng)`
+                  : ""}
+                .
               </p>
 
               {enterprise && (
